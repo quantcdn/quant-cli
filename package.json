@@ -1,0 +1,29 @@
+{
+  "name": "quant-cli",
+  "version": "1.0.0",
+  "description": "Deploy tools for QuanCDN",
+  "main": "cli.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/quantcdn/node-cli.git"
+  },
+  "author": "",
+  "license": "ISC",
+  "bugs": {
+    "url": "https://github.com/quantcdn/node-cli/issues"
+  },
+  "homepage": "https://github.com/quantcdn/node-cli#readme",
+  "bin": {
+    "quant": "./cli.js"
+  },
+  "dependencies": {
+    "chalk": "^4.0.0",
+    "cli-progress": "^3.7.0",
+    "node-fetch": "^2.6.0",
+    "prompt": "^1.0.0",
+    "yargs": "^15.3.1"
+  }
+}
