@@ -31,9 +31,29 @@ const argv = yargs
           type: 'string',
       }
     })
+    .command('info', 'Give info based on current folder')
     .help()
     .alias('help', 'h')
     .argv;
+
+
+
+if (argv._.includes('info')) {
+    const dir = argv.dir;
+
+    log(chalk.bold.green("*** Quant info ***"));
+
+    const fs = require('fs');
+
+    fs.readFile(config_file, (err, data) => {
+      if (err) throw err;
+      let config = JSON.parse(data);
+      log(config);
+
+      // Attept connection to API.
+      ping(config)
+    });
+}
 
 
 if (argv._.includes('deploy')) {
@@ -180,6 +200,7 @@ if (argv._.includes('init')) {
     else {
       init(clientid, token);
     }
+
 }
 
 
@@ -191,19 +212,43 @@ function init(clientid, token, endpoint, dir) {
   let config = {
     clientid: clientid,
     token: token,
-    endpoint: "http://localhost:8081/",
+    endpoint: endpoint,
     dir: dir
   };
 
   let data = JSON.stringify(config, null, 2);
 
-  // @todo: Validate token
   // @todo: Read existing config/update
-  // @todo: Return machine name from API
   fs.writeFile(config_file, data, (err) => {
       if (err) throw err;
       console.log('Wrote quant.json config');
   });
-  
-  log(chalk.bold.green("✅✅✅ Done"));
+
+  // Test API connectivity
+  ping(config)
 }
+
+
+function ping(config) {
+
+  fetch(config.endpoint+'/ping', {
+    method: 'get',
+    headers: {
+      'Content-Type': 'application/json',
+      'Quant-Customer': config.clientid,
+      'Quant-Token': config.token
+    }
+  })
+  .then(res => res.json())
+  .then(json => {
+    console.log(json);
+    if (!json.error) {
+      log(chalk.bold.green(`✅✅✅ Successfully connected to API using project: ${json.project}`));
+    }
+    else {
+      log(chalk.bold.red("Unable to connect to API"));
+    }
+  });
+
+}
+
