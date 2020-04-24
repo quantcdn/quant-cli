@@ -5,41 +5,41 @@ const log = console.log;
 const yargs = require('yargs');
 const prompt = require('prompt');
 const fs = require('fs');
-const config_file = 'quant.json';
+const configFile = 'quant.json';
 const cliProgress = require('cli-progress');
 const _colors = require('colors');
-const fetch = require('node-fetch');
+const request = require('request');
 
 const argv = yargs
     .usage('usage: $0 <command>')
     .command('init', 'Initialise QuantCDN in current working directory', {
-        token: {
-            description: 'Optionally provide token',
-            alias: 't',
-            type: 'string',
-        },
-        clientid: {
-            description: 'Optionally provide client id',
-            alias: 'c',
-            type: 'string',
-        },
-        endpoint: {
-            description: 'Optionally provide QuantCDN API endpoint',
-            alias: 'e',
-            type: 'string',
-        },
-        dir: {
-            description: 'Optionally provide static asset directory',
-            alias: 'd',
-            type: 'string',
-        },
+      token: {
+        description: 'Optionally provide token',
+        alias: 't',
+        type: 'string',
+      },
+      clientid: {
+        description: 'Optionally provide client id',
+        alias: 'c',
+        type: 'string',
+      },
+      endpoint: {
+        description: 'Optionally provide QuantCDN API endpoint',
+        alias: 'e',
+        type: 'string',
+      },
+      dir: {
+        description: 'Optionally provide static asset directory',
+        alias: 'd',
+        type: 'string',
+      },
     })
     .command('deploy', 'Deploy a static folder to QuantCDN', {
       dir: {
-          description: 'Directory containing static assets',
-          alias: 'd',
-          type: 'string',
-      }
+        description: 'Directory containing static assets',
+        alias: 'd',
+        type: 'string',
+      },
     })
     .command('info', 'Give info based on current folder')
     .help()
@@ -47,218 +47,246 @@ const argv = yargs
     .argv;
 
 
-
 if (argv._.includes('info')) {
-    log(chalk.bold.green("*** Quant info ***"));
+  log(chalk.bold.green('*** Quant info ***'));
 
-    const fs = require('fs');
+  const fs = require('fs');
 
-    fs.readFile(config_file, (err, data) => {
-      if (err) throw err;
-      let config = JSON.parse(data);
-      log(config);
+  fs.readFile(configFile, (err, data) => {
+    if (err) throw err;
+    const config = JSON.parse(data);
+    log(config);
 
-      // Attept connection to API.
-      ping(config)
-    });
+    // Attept connection to API.
+    ping(config);
+  });
 }
 
 
 if (argv._.includes('deploy')) {
+  log(chalk.bold.green('*** Quant deploy ***'));
 
-    log(chalk.bold.green("*** Quant deploy ***"));
+  const fs = require('fs');
 
+  fs.readFile(configFile, (err, data) => {
+    if (err) throw err;
+    const config = JSON.parse(data);
+
+    const {promisify} = require('util');
+    const {resolve} = require('path');
     const fs = require('fs');
+    const readdir = promisify(fs.readdir);
+    const stat = promisify(fs.stat);
+    const dir = argv.dir || config.dir;
 
-    fs.readFile(config_file, (err, data) => {
-      if (err) throw err;
-      let config = JSON.parse(data);
+    /**
+     * Get files from a directory.
+     *
+     * @param {string} dir
+     *   The directory from which to get files.
+     *
+     * @return {array}
+     *   An array of files.
+     */
+    async function getFiles(dir) {
+      const subdirs = await readdir(dir);
+      const files = await Promise.all(subdirs.map(async (subdir) => {
+        const res = resolve(dir, subdir);
+        return (await stat(res)).isDirectory() ? getFiles(res) : res;
+      }));
+      return files.reduce((a, f) => a.concat(f), []);
+    }
 
-      const { promisify } = require('util');
-      const { resolve } = require('path');
-      const fs = require('fs');
-      const readdir = promisify(fs.readdir);
-      const stat = promisify(fs.stat);
-      const dir = argv.dir || config.dir
+    const path = require('path');
+    const p = path.resolve(process.cwd(), dir);
 
-      async function getFiles(dir) {
-        const subdirs = await readdir(dir);
-        const files = await Promise.all(subdirs.map(async (subdir) => {
-          const res = resolve(dir, subdir);
-          return (await stat(res)).isDirectory() ? getFiles(res) : res;
-        }));
-        return files.reduce((a, f) => a.concat(f), []);
-      }
-
-      let path = require('path');
-      var p = path.resolve(process.cwd(), dir);
-
-      getFiles(p)
-        .then(files => {
+    getFiles(p)
+        .then((files) => {
           // create new progress bar
           const b1 = new cliProgress.SingleBar({
-            format: 'Progress |' + _colors.green('{bar}') + '| {percentage}% || {value}/{total} assets || Speed: {speed}',
+            format: 'Progress |' + _colors.green('{bar}') + '| {percentage}% || {value}/{total} assets || Speed: {speed}', // eslint-disable-line max-len
             barCompleteChar: '\u2588',
             barIncompleteChar: '\u2591',
-            hideCursor: true
+            hideCursor: true,
           });
- 
+
           b1.start(files.length, 0, {
-            speed: "N/A"
+            speed: 'N/A',
           });
 
+          /* eslint-disable guard-for-in */
           for (file in files) {
-            let filepath = path.relative(p, files[file])
-            
-            // Treat index.html files as route.
-            if (filepath.endsWith("index.html")) {
+            const filepath = path.relative(p, files[file]);
 
+            // Treat index.html files as route.
+            if (filepath.endsWith('index.html')) {
               fs.readFile(files[file], {encoding: 'utf-8'}, (err, data) => {
                 if (err) throw err;
 
-                let payload = {
-                  "url": "/"+filepath,
-                  "content": data,
-                  "published": true
+                const payload = {
+                  'url': '/'+filepath,
+                  'content': data,
+                  'published': true,
                 };
 
-                fetch(config.endpoint, {
-                  method: 'post',
+                const options = {
+                  url: config.endpoint,
+                  method: 'POST',
                   body: JSON.stringify(payload),
                   headers: {
                     'Content-Type': 'application/json',
                     'Quant-Customer': config.clientid,
-                    'Quant-Token': config.token
+                    'Quant-Token': config.token,
+                  },
+                };
+
+                request(options, (err, res, body) => {
+                  body = JSON.parse(body);
+                  if (body.error) {
+                    return console.error(chalk.yellow(body.errorMsg));
                   }
-                })
-                .then(res => res.json());
-                //.then(json => console.log(json));
+                  console.log(chalk.bold.green('✅') + ` ${files[file]}`);
+                });
               });
-            }
-            else {
+            } else {
+              const formData = {
+                data: fs.createReadStream(files[file]),
+              };
 
-              // @todo: Properly subit files, obviously.
-              var util = require('util');
-              var exec = require('child_process').exec;
+              const options = {
+                url: config.endpoint,
+                method: 'POST',
+                headers: {
+                  'Content-Type': 'multipart/form-data',
+                  'User-Agent': 'Quant (+http://quantcdn.io)',
+                  'Quant-File-Url': `/${filepath}`,
+                  'Quant-Token': config.token,
+                  'Quant-Customer': config.clientid,
+                },
+                formData,
+              };
 
-              var command = 'curl -H "Quant-Customer: '+config.clientid+'" -H "Quant-Token: '+config.token+'" -H "Quant-File-Url: /'+filepath+'" -F "filename=@'+files[file]+'" '+config.endpoint
-
-              child = exec(command, function(error, stdout, stderr){
-                if(error !== null)
-                {
-                  console.log('exec error: ' + error);
+              request(options, function(err, response, body) {
+                body = JSON.parse(body);
+                if (body.error) {
+                  return console.error(chalk.yellow(body.errorMsg));
                 }
-              });                
-
+                console.log(chalk.bold.green('✅') + ` ${files[file]}`);
+              });
             }
 
             b1.increment();
           }
+          /* eslint-enable guard-for-in */
 
           b1.stop();
         })
-        .catch(e => console.error(e));
-
-
-    });
-
-
-
+        .catch((e) => console.error(e));
+  });
 }
 
 if (argv._.includes('init')) {
-    const token    = argv.token;
-    const clientid = argv.clientid;
-    const endpoint = argv.endpoint;
-    const dir      = argv.dir;
+  const token = argv.token;
+  const clientid = argv.clientid;
+  const endpoint = argv.endpoint;
+  const dir = argv.dir;
 
-    log(chalk.bold.green("*** Initialise Quant ***"));
+  log(chalk.bold.green('*** Initialise Quant ***'));
 
-    if (!token || !clientid) {
-
-      var schema = {
-        properties: {
-          endpoint: {
-            required: true,
-            description: 'Enter QuantCDN endpoint',
-            default: "https://uploads.quantcdn.io"
-          },
-          clientid: {
-            pattern: /^[a-zA-Z0-9\-]+$/,
-            message: 'Client id must be only letters, numbers or dashes',
-            required: true,
-            description: 'Enter QuantCDN client id'
-          },
-          token: {
-            hidden: true,
-            replace: '*',
-            required: true,
-            description: 'Enter QuantCDN token'
-          },
-          dir: {
-            required: true,
-            description: 'Directory containing static assets',
-            default: 'build'
-          }
-        }
-      };
-      prompt.start();
-      prompt.get(schema, function (err, result) {
-        init(result.clientid, result.token, result.endpoint, result.dir);
-      });
-    }
-    else {
-      init(clientid, token, endpoint, dir);
-    }
-
+  if (!token || !clientid) {
+    const schema = {
+      properties: {
+        endpoint: {
+          required: true,
+          description: 'Enter QuantCDN endpoint',
+          default: 'https://uploads.quantcdn.io',
+        },
+        clientid: {
+          pattern: /^[a-zA-Z0-9\-]+$/,
+          message: 'Client id must be only letters, numbers or dashes',
+          required: true,
+          description: 'Enter QuantCDN client id',
+        },
+        token: {
+          hidden: true,
+          replace: '*',
+          required: true,
+          description: 'Enter QuantCDN token',
+        },
+        dir: {
+          required: true,
+          description: 'Directory containing static assets',
+          default: 'build',
+        },
+      },
+    };
+    prompt.start();
+    prompt.get(schema, function(err, result) {
+      init(result.clientid, result.token, result.endpoint, result.dir);
+    });
+  } else {
+    init(clientid, token, endpoint, dir);
+  }
 }
 
-
+/**
+ * Create a quant configuration file and test the connection.
+ *
+ * @param {string} clientid
+ *   The client ID.
+ * @param {string} token
+ *   The client token.
+ * @param {string} endpoint
+ *   The Quant upload API endpoint.
+ * @param {string} dir
+ *   The source directory.
+ */
 function init(clientid, token, endpoint, dir) {
+  endpoint = endpoint || 'https://uploads.quantcdn.io';
+  dir = dir || 'build';
 
-  endpoint = endpoint || "https://uploads.quantcdn.io"
-  dir = dir || "build"
-
-  let config = {
+  const config = {
     clientid: clientid,
     token: token,
     endpoint: endpoint,
-    dir: dir
+    dir: dir,
   };
 
-  let data = JSON.stringify(config, null, 2);
+  const data = JSON.stringify(config, null, 2);
 
   // @todo: Read existing config/update
-  fs.writeFile(config_file, data, (err) => {
-      if (err) throw err;
-      console.log('Wrote quant.json config');
+  fs.writeFile(configFile, data, (err) => {
+    if (err) throw err;
+    console.log('Wrote quant.json config');
   });
 
   // Test API connectivity
-  ping(config)
+  ping(config);
 }
 
-
+/**
+ * Test the API connection.
+ *
+ * @param {object} config
+ *   The quant configuration object.
+ */
 function ping(config) {
-
-  fetch(config.endpoint+'/ping', {
-    method: 'get',
+  const options = {
+    url: `${config.endpoint}/ping`,
     headers: {
       'Content-Type': 'application/json',
       'Quant-Customer': config.clientid,
-      'Quant-Token': config.token
-    }
-  })
-  .then(res => res.json())
-  .then(json => {
-    console.log(json);
-    if (!json.error) {
-      log(chalk.bold.green(`✅✅✅ Successfully connected to API using project: ${json.project}`));
-    }
-    else {
-      log(chalk.bold.red("Unable to connect to API"));
-    }
-  });
+      'Quant-Token': config.token,
+    },
+  };
 
+  request(options, (err, res, body) => {
+    body = JSON.parse(body);
+    if (body.error) {
+      // @TODO: Catch specific API errors.
+      return log(chalk.bold.red('Unable to connect to API'));
+    }
+    log(chalk.bold.green(`✅✅✅ Successfully connected to API using project: ${body.project}`)); // eslint-disable-line max-len
+  });
 }
 
