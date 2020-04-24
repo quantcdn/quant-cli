@@ -23,6 +23,16 @@ const argv = yargs
             alias: 'c',
             type: 'string',
         },
+        endpoint: {
+            description: 'Optionally provide QuantCDN API endpoint',
+            alias: 'e',
+            type: 'string',
+        },
+        dir: {
+            description: 'Optionally provide static asset directory',
+            alias: 'd',
+            type: 'string',
+        },
     })
     .command('deploy', 'Deploy a static folder to QuantCDN', {
       dir: {
@@ -39,8 +49,6 @@ const argv = yargs
 
 
 if (argv._.includes('info')) {
-    const dir = argv.dir;
-
     log(chalk.bold.green("*** Quant info ***"));
 
     const fs = require('fs');
@@ -57,7 +65,6 @@ if (argv._.includes('info')) {
 
 
 if (argv._.includes('deploy')) {
-    const dir = argv.dir;
 
     log(chalk.bold.green("*** Quant deploy ***"));
 
@@ -72,7 +79,8 @@ if (argv._.includes('deploy')) {
       const fs = require('fs');
       const readdir = promisify(fs.readdir);
       const stat = promisify(fs.stat);
-      
+      const dir = argv.dir || config.dir
+
       async function getFiles(dir) {
         const subdirs = await readdir(dir);
         const files = await Promise.all(subdirs.map(async (subdir) => {
@@ -83,7 +91,7 @@ if (argv._.includes('deploy')) {
       }
 
       let path = require('path');
-      var p = path.resolve(process.cwd(), config.dir);
+      var p = path.resolve(process.cwd(), dir);
 
       getFiles(p)
         .then(files => {
@@ -161,6 +169,8 @@ if (argv._.includes('deploy')) {
 if (argv._.includes('init')) {
     const token    = argv.token;
     const clientid = argv.clientid;
+    const endpoint = argv.endpoint;
+    const dir      = argv.dir;
 
     log(chalk.bold.green("*** Initialise Quant ***"));
 
@@ -198,7 +208,7 @@ if (argv._.includes('init')) {
       });
     }
     else {
-      init(clientid, token);
+      init(clientid, token, endpoint, dir);
     }
 
 }
