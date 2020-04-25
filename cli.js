@@ -199,7 +199,7 @@ if (argv._.includes('init')) {
         endpoint: {
           required: true,
           description: 'Enter QuantCDN endpoint',
-          default: 'https://uploads.quantcdn.io',
+          default: 'https://api.quantcdn.io',
         },
         clientid: {
           pattern: /^[a-zA-Z0-9\-]+$/,
@@ -242,7 +242,7 @@ if (argv._.includes('init')) {
  *   The source directory.
  */
 function init(clientid, token, endpoint, dir) {
-  endpoint = endpoint || 'https://uploads.quantcdn.io';
+  endpoint = endpoint || 'https://api.quantcdn.io';
   dir = dir || 'build';
 
   const config = {
