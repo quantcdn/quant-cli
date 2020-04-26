@@ -1,7 +1,7 @@
 {
-  "name": "quant-cli",
-  "version": "1.0.0",
-  "description": "Deploy tools for QuanCDN",
+  "name": "@quantcdn/quant-cli",
+  "version": "0.1.1",
+  "description": "Deploy tools for QuantCDN",
   "main": "cli.js",
   "scripts": {
     "test": "echo \"Error: no test specified\" && exit 1"
@@ -10,14 +10,17 @@
     "type": "git",
     "url": "git+https://github.com/quantcdn/node-cli.git"
   },
-  "author": "",
+  "author": "Stuart Rowlands <stuart@quantcdn.io>",
+  "contributors": [
+    "Steven Worley <steve@quantcdn.io>"
+  ],
   "license": "ISC",
   "bugs": {
     "url": "https://github.com/quantcdn/node-cli/issues"
   },
   "homepage": "https://github.com/quantcdn/node-cli#readme",
   "bin": {
-    "quant": "./cli.js"
+    "quant": "cli.js"
   },
   "dependencies": {
     "chalk": "^4.0.0",
