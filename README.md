@@ -6,7 +6,7 @@ Provides `quant` cli tool for interfacing with QuantCDN.
 
 ### Installation
 
-`npm install -g quant-cli`
+`npm i -g @quantcdn/quant-cli`
 
 ### Usage
 
