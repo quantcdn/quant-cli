@@ -4,11 +4,12 @@ const chalk = require('chalk');
 const log = console.log;
 const yargs = require('yargs');
 const prompt = require('prompt');
-const fs = require('fs');
-const configFile = 'quant.json';
+
 const cliProgress = require('cli-progress');
 const _colors = require('colors');
 const request = require('request');
+
+const config = require('./src/config');
 
 const argv = yargs
     .usage('usage: $0 <command>')
@@ -49,97 +50,92 @@ const argv = yargs
 
 if (argv._.includes('info')) {
   log(chalk.bold.green('*** Quant info ***'));
+  if (!config.load()) {
+    return console.error(chalk.yellow('Quant is not configured, run init.'));
+  }
 
-  const fs = require('fs');
+  log(`Endpoint: ${config.get("endpoint")}`);
+  log(`Customer: ${config.get("clientid")}`);
+  log(`Token: ****`);
 
-  fs.readFile(configFile, (err, data) => {
-    if (err) throw err;
-    const config = JSON.parse(data);
-    log(config);
-
-    // Attept connection to API.
-    ping(config);
-  });
+  ping(config);
 }
 
 
 if (argv._.includes('deploy')) {
   log(chalk.bold.green('*** Quant deploy ***'));
 
+  // Make sure configuration is loaded.
+  config.load();
+
+  const {promisify} = require('util');
+  const {resolve} = require('path');
   const fs = require('fs');
+  const readdir = promisify(fs.readdir);
+  const stat = promisify(fs.stat);
+  const dir = argv.dir || config.get('dir');
 
-  fs.readFile(configFile, (err, data) => {
-    if (err) throw err;
-    const config = JSON.parse(data);
+  /**
+   * Get files from a directory.
+   *
+   * @param {string} dir
+   *   The directory from which to get files.
+   *
+   * @return {array}
+   *   An array of files.
+   */
+  async function getFiles(dir) {
+    const subdirs = await readdir(dir);
+    const files = await Promise.all(subdirs.map(async (subdir) => {
+      const res = resolve(dir, subdir);
+      return (await stat(res)).isDirectory() ? getFiles(res) : res;
+    }));
+    return files.reduce((a, f) => a.concat(f), []);
+  }
 
-    const {promisify} = require('util');
-    const {resolve} = require('path');
-    const fs = require('fs');
-    const readdir = promisify(fs.readdir);
-    const stat = promisify(fs.stat);
-    const dir = argv.dir || config.dir;
+  const path = require('path');
+  const p = path.resolve(process.cwd(), dir);
 
-    /**
-     * Get files from a directory.
-     *
-     * @param {string} dir
-     *   The directory from which to get files.
-     *
-     * @return {array}
-     *   An array of files.
-     */
-    async function getFiles(dir) {
-      const subdirs = await readdir(dir);
-      const files = await Promise.all(subdirs.map(async (subdir) => {
-        const res = resolve(dir, subdir);
-        return (await stat(res)).isDirectory() ? getFiles(res) : res;
-      }));
-      return files.reduce((a, f) => a.concat(f), []);
-    }
+  getFiles(p)
+      .then((files) => {
+        // create new progress bar
+        const b1 = new cliProgress.SingleBar({
+          format: 'Progress |' + _colors.green('{bar}') + '| {percentage}% || {value}/{total} assets || Speed: {speed}', // eslint-disable-line max-len
+          barCompleteChar: '\u2588',
+          barIncompleteChar: '\u2591',
+          hideCursor: true,
+        });
 
-    const path = require('path');
-    const p = path.resolve(process.cwd(), dir);
+        b1.start(files.length, 0, {
+          speed: 'N/A',
+        });
 
-    getFiles(p)
-        .then((files) => {
-          // create new progress bar
-          const b1 = new cliProgress.SingleBar({
-            format: 'Progress |' + _colors.green('{bar}') + '| {percentage}% || {value}/{total} assets || Speed: {speed}', // eslint-disable-line max-len
-            barCompleteChar: '\u2588',
-            barIncompleteChar: '\u2591',
-            hideCursor: true,
-          });
+        /* eslint-disable guard-for-in */
+        for (file in files) {
+          const filepath = path.relative(p, files[file]);
 
-          b1.start(files.length, 0, {
-            speed: 'N/A',
-          });
+          // Treat index.html files as route.
+          if (filepath.endsWith('index.html')) {
+            fs.readFile(files[file], {encoding: 'utf-8'}, (err, data) => {
+              if (err) throw err;
 
-          /* eslint-disable guard-for-in */
-          for (file in files) {
-            const filepath = path.relative(p, files[file]);
+              const payload = {
+                'url': '/'+filepath,
+                'content': data,
+                'published': true,
+              };
 
-            // Treat index.html files as route.
-            if (filepath.endsWith('index.html')) {
-              fs.readFile(files[file], {encoding: 'utf-8'}, (err, data) => {
-                if (err) throw err;
-
-                const payload = {
-                  'url': '/'+filepath,
-                  'content': data,
-                  'published': true,
-                };
-
-                const options = {
-                  url: config.endpoint,
-                  method: 'POST',
-                  body: JSON.stringify(payload),
-                  headers: {
-                    'Content-Type': 'application/json',
-                    'Quant-Customer': config.clientid,
-                    'Quant-Token': config.token,
-                  },
-                };
-
+              const options = {
+                url: config.get('endpoint'),
+                method: 'POST',
+                body: JSON.stringify(payload),
+                headers: {
+                  'Content-Type': 'application/json',
+                  'Quant-Customer': config.get('clientid'),
+                  'Quant-Token': config.get('token'),
+                },
+              };
+              try {
                 request(options, (err, res, body) => {
                   body = JSON.parse(body);
                   if (body.error) {
@@ -147,25 +143,28 @@ if (argv._.includes('deploy')) {
                   }
                   console.log(chalk.bold.green('✅') + ` ${files[file]}`);
                 });
-              });
-            } else {
-              const formData = {
-                data: fs.createReadStream(files[file]),
-              };
+              } catch (err) {
+                log(chalk.bold.red('Error: Unable to upload file.'));
+              }
+            });
+          } else {
+            const formData = {
+              data: fs.createReadStream(files[file]),
+            };
 
-              const options = {
-                url: config.endpoint,
-                method: 'POST',
-                headers: {
-                  'Content-Type': 'multipart/form-data',
-                  'User-Agent': 'Quant (+http://quantcdn.io)',
-                  'Quant-File-Url': `/${filepath}`,
-                  'Quant-Token': config.token,
-                  'Quant-Customer': config.clientid,
-                },
-                formData,
-              };
-
+            const options = {
+              url: config.get('endpoint'),
+              method: 'POST',
+              headers: {
+                'Content-Type': 'multipart/form-data',
+                'User-Agent': 'Quant (+http://quantcdn.io)',
+                'Quant-File-Url': `/${filepath}`,
+                'Quant-Token': config.get('token'),
+                'Quant-Customer': config.get('clientid'),
+              },
+              formData,
+            };
+            try {
               request(options, function(err, response, body) {
                 body = JSON.parse(body);
                 if (body.error) {
@@ -173,16 +172,16 @@ if (argv._.includes('deploy')) {
                 }
                 console.log(chalk.bold.green('✅') + ` ${files[file]}`);
               });
-            }
-
-            b1.increment();
+            } catch (err) {}
           }
-          /* eslint-enable guard-for-in */
 
-          b1.stop();
-        })
-        .catch((e) => console.error(e));
-  });
+          b1.increment();
+        }
+        /* eslint-enable guard-for-in */
+
+        b1.stop();
+      })
+      .catch((e) => console.error(e));
 }
 
 if (argv._.includes('init')) {
@@ -222,46 +221,15 @@ if (argv._.includes('init')) {
     };
     prompt.start();
     prompt.get(schema, function(err, result) {
-      init(result.clientid, result.token, result.endpoint, result.dir);
+      config.set(result);
+      config.save();
+      ping(config);
     });
   } else {
-    init(clientid, token, endpoint, dir);
+    config.set({clientid, token, endpoint, dir});
+    config.save();
+    ping(config);
   }
-}
-
-/**
- * Create a quant configuration file and test the connection.
- *
- * @param {string} clientid
- *   The client ID.
- * @param {string} token
- *   The client token.
- * @param {string} endpoint
- *   The Quant upload API endpoint.
- * @param {string} dir
- *   The source directory.
- */
-function init(clientid, token, endpoint, dir) {
-  endpoint = endpoint || 'https://api.quantcdn.io';
-  dir = dir || 'build';
-
-  const config = {
-    clientid: clientid,
-    token: token,
-    endpoint: endpoint,
-    dir: dir,
-  };
-
-  const data = JSON.stringify(config, null, 2);
-
-  // @todo: Read existing config/update
-  fs.writeFile(configFile, data, (err) => {
-    if (err) throw err;
-    console.log('Wrote quant.json config');
-  });
-
-  // Test API connectivity
-  ping(config);
 }
 
 /**
@@ -272,14 +240,13 @@ function init(clientid, token, endpoint, dir) {
  */
 function ping(config) {
   const options = {
-    url: `${config.endpoint}/ping`,
+    url: `${config.get('endpoint')}/ping`,
     headers: {
       'Content-Type': 'application/json',
-      'Quant-Customer': config.clientid,
-      'Quant-Token': config.token,
+      'Quant-Customer': config.get('clientid'),
+      'Quant-Token': config.get('token'),
     },
   };
-
   request(options, (err, res, body) => {
     body = JSON.parse(body);
     if (body.error) {
