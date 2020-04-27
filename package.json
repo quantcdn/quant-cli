@@ -4,7 +4,10 @@
   "description": "Deploy tools for QuantCDN",
   "main": "cli.js",
   "scripts": {
-    "test": "mocha"
+    "test": "mocha",
+    "lint:cli": "eslint cli.js",
+    "lint:src": "eslint src",
+    "lint": "npm run lint:cli && npm run lint:src"
   },
   "repository": {
     "type": "git",
