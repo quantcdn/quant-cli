@@ -54,8 +54,8 @@ if (argv._.includes('info')) {
     return console.error(chalk.yellow('Quant is not configured, run init.'));
   }
 
-  log(`Endpoint: ${config.get("endpoint")}`);
-  log(`Customer: ${config.get("clientid")}`);
+  log(`Endpoint: ${config.get('endpoint')}`);
+  log(`Customer: ${config.get('clientid')}`);
   log(`Token: ****`);
 
   ping(config);

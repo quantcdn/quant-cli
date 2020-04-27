@@ -66,8 +66,7 @@ const load = function(dir = '.') {
   let data;
   try {
     data = fs.readFileSync(`${dir}/${filename}`);
-  }
-  catch (err) {
+  } catch (err) {
     return false;
   }
   data = JSON.parse(data);
