@@ -80,14 +80,30 @@ describe('Config', function() {
     });
   });
   describe('load()', function() {
+    let readFileSync;
+
+    afterEach(function() {
+      readFileSync.restore();
+    });
     it('should load from a given directory', function() {
-      const status = config.load(`${__dirname}/fixtures`);
+      readFileSync = sinon.stub(fs, 'readFileSync').returns(
+          JSON.stringify({
+            dir: '.',
+            endpoint: 'http://api.quantcdn.io',
+            clientid: 'test',
+            token: 'test',
+          }),
+      );
+      const status = config.load(`/tmp`);
+      expect(readFileSync.calledOnceWith(`/tmp/quant.json`)).to.be.true;
       assert.equal(status, true);
       assert.equal(config.get('clientid'), 'test');
       assert.equal(config.get('token'), 'test');
     });
     it('should return FALSE if file is not found', function() {
-      const status = config.load(`${__dirname}`);
+      readFileSync = sinon.stub(fs, 'readFileSync').throwsException();
+      const status = config.load('/tmp');
+      expect(readFileSync.calledOnceWith('/tmp/quant.json')).to.be.true;
       assert.equal(status, false);
     });
   });
