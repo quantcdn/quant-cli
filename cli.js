@@ -4,9 +4,6 @@ const chalk = require('chalk');
 const log = console.log;
 const yargs = require('yargs');
 const prompt = require('prompt');
-
-const cliProgress = require('cli-progress');
-const _colors = require('colors');
 const request = require('request');
 
 const config = require('./src/config');
@@ -129,10 +126,10 @@ if (argv._.includes('deploy')) {
                   if (body.error) {
                     return console.error(chalk.yellow(body.errorMsg));
                   }
-                  console.log(chalk.bold.green("✅") + ` ${filepath}`);
+                  console.log(chalk.bold.green('✅') + ` ${filepath}`);
                 });
               } catch (err) {
-                log(chalk.bold.red('Error: Unable to upload html file.'));
+                log(chalk.bold.red(`Error: Unable to upload ${filepath}.`));
               }
             });
           } else {
@@ -158,10 +155,10 @@ if (argv._.includes('deploy')) {
                 if (body.error) {
                   return console.error(chalk.yellow(body.errorMsg));
                 }
-                console.log(chalk.bold.green("✅") + ` ${filepath}`);
+                console.log(chalk.bold.green('✅') + ` ${filepath}`);
               });
             } catch (err) {
-              log(chalk.bold.red("Error: Unable to upload asset file."));
+              log(chalk.bold.red(`Error: Unable to upload ${filepath}.`));
             }
           }
         }
