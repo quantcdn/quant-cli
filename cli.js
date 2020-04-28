@@ -124,7 +124,7 @@ if (argv._.includes('deploy')) {
                 request(options, (err, res, body) => {
                   body = JSON.parse(body);
                   if (body.error) {
-                    return console.error(chalk.yellow(body.errorMsg));
+                    return console.error(chalk.yellow(body.errorMsg + ` (${filepath})`)); // eslint-disable-line max-len
                   }
                   console.log(chalk.bold.green('✅') + ` ${filepath}`);
                 });
@@ -153,7 +153,7 @@ if (argv._.includes('deploy')) {
               request(options, function(err, response, body) {
                 body = JSON.parse(body);
                 if (body.error) {
-                  return console.error(chalk.yellow(body.errorMsg));
+                  return console.error(chalk.yellow(body.errorMsg + ` (${filepath})`)); // eslint-disable-line max-len
                 }
                 console.log(chalk.bold.green('✅') + ` ${filepath}`);
               });
