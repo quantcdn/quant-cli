@@ -98,18 +98,6 @@ if (argv._.includes('deploy')) {
 
   getFiles(p)
       .then((files) => {
-        // create new progress bar
-        const b1 = new cliProgress.SingleBar({
-          format: 'Progress |' + _colors.green('{bar}') + '| {percentage}% || {value}/{total} assets || Speed: {speed}', // eslint-disable-line max-len
-          barCompleteChar: '\u2588',
-          barIncompleteChar: '\u2591',
-          hideCursor: true,
-        });
-
-        b1.start(files.length, 0, {
-          speed: 'N/A',
-        });
-
         /* eslint-disable guard-for-in */
         for (file in files) {
           const filepath = path.relative(p, files[file]);
@@ -120,7 +108,7 @@ if (argv._.includes('deploy')) {
               if (err) throw err;
 
               const payload = {
-                'url': '/'+filepath,
+                'url': `/${filepath}`,
                 'content': data,
                 'published': true,
               };
@@ -141,10 +129,10 @@ if (argv._.includes('deploy')) {
                   if (body.error) {
                     return console.error(chalk.yellow(body.errorMsg));
                   }
-                  console.log(chalk.bold.green('✅') + ` ${files[file]}`);
+                  console.log(chalk.bold.green("✅") + ` ${filepath}`);
                 });
               } catch (err) {
-                log(chalk.bold.red('Error: Unable to upload file.'));
+                log(chalk.bold.red('Error: Unable to upload html file.'));
               }
             });
           } else {
@@ -170,16 +158,14 @@ if (argv._.includes('deploy')) {
                 if (body.error) {
                   return console.error(chalk.yellow(body.errorMsg));
                 }
-                console.log(chalk.bold.green('✅') + ` ${files[file]}`);
+                console.log(chalk.bold.green("✅") + ` ${filepath}`);
               });
-            } catch (err) {}
+            } catch (err) {
+              log(chalk.bold.red("Error: Unable to upload asset file."));
+            }
           }
-
-          b1.increment();
         }
         /* eslint-enable guard-for-in */
-
-        b1.stop();
       })
       .catch((e) => console.error(e));
 }
