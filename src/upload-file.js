@@ -27,14 +27,14 @@ module.exports = async function(filepath, location) {
   config.load();
 
   const options = {
-    url: config.get("endpoint"),
-    method: "POST",
+    url: config.get('endpoint'),
+    method: 'POST',
     headers: {
-      "Content-Type": "multipart/form-data",
-      "User-Agent": "Quant (+http://quantcdn.io)",
-      "Quant-File-Url": `/${location}/${filepath.split('/').pop()}`,
-      "Quant-Token": config.get("token"),
-      "Quant-Customer": config.get("clientid"),
+      'Content-Type': 'multipart/form-data',
+      'User-Agent': 'Quant (+http://quantcdn.io)',
+      'Quant-File-Url': `/${location}/${filepath.split('/').pop()}`,
+      'Quant-Token': config.get('token'),
+      'Quant-Customer': config.get('clientid'),
     },
     formData,
   };
@@ -42,7 +42,7 @@ module.exports = async function(filepath, location) {
   const res = await post(options);
 
   if (res.statusCode > 400) {
-    throw 'Critical error...';
+    throw new Error('Critical error...');
   }
 
   const body = JSON.parse(res.body);

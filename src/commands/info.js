@@ -30,6 +30,6 @@ module.exports = function(argv) { // eslint-disable-line
   console.log(`Token: ****`);
 
   ping(config)
-    .then(message => console.log(chalk.bold.green(`✅✅✅ Successfully connected to ${message}`))) // eslint-disable-line max-len
-    .catch(message => console.log(chalk.bold.red(`Unable to connect to quant ${message}`))); // eslint-disable-line max-len
+      .then((message) => console.log(chalk.bold.green(`✅✅✅ Successfully connected to ${message}`))) // eslint-disable-line max-len
+      .catch((message) => console.log(chalk.bold.red(`Unable to connect to quant ${message}`))); // eslint-disable-line max-len
 };

@@ -12,7 +12,7 @@ module.exports = function(argv) {
   const filepath = argv.filepath;
   let content;
 
-  console.log(chalk.bold.green("*** Quant page ***"));
+  console.log(chalk.bold.green('*** Quant page ***'));
 
   config.load();
 
@@ -28,7 +28,7 @@ module.exports = function(argv) {
   }
 
   try {
-    content = fs.readFileSync(p, { encoding: "utf-8" });
+    content = fs.readFileSync(p, {encoding: 'utf-8'});
   } catch (err) {
     return console.error(chalk.red.bold(`QuantAPI: ${err.message}`));
   }
