@@ -43,11 +43,15 @@ module.exports = function(argv) {
     prompt.get(schema, function(err, result) {
       config.set(result);
       config.save();
-      ping(config);
+      ping(config)
+        .then(message => console.log(chalk.bold.green(`✅✅✅ Successfully connected to ${message}`))) // eslint-disable-line max-len
+        .catch(message => console.log(chalk.bold.red(`Unable to connect to quant ${message}`))); // eslint-disable-line max-len
     });
   } else {
     config.set({clientid, token, endpoint, dir});
     config.save();
-    ping(config);
+    ping(config)
+      .then(message => console.log(chalk.bold.green(`✅✅✅ Successfully connected to ${message}`))) // eslint-disable-line max-len
+      .catch(message => console.log(chalk.bold.red(`Unable to connect to quant ${message}`))); // eslint-disable-line max-len
   }
 };

@@ -27,7 +27,6 @@
   },
   "dependencies": {
     "chalk": "^4.0.0",
-    "cli-progress": "^3.7.0",
     "prompt": "^1.0.0",
     "request": "^2.88.2",
     "yargs": "^15.3.1"

@@ -29,5 +29,7 @@ module.exports = function(argv) { // eslint-disable-line
   console.log(`Customer: ${config.get('clientid')}`);
   console.log(`Token: ****`);
 
-  ping(config);
+  ping(config)
+    .then(message => console.log(chalk.bold.green(`✅✅✅ Successfully connected to ${message}`))) // eslint-disable-line max-len
+    .catch(message => console.log(chalk.bold.red(`Unable to connect to quant ${message}`))); // eslint-disable-line max-len
 };

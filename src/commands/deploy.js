@@ -99,6 +99,9 @@ module.exports = function(argv) {
               },
               formData,
             };
+
+            console.log(options);
+
             try {
               request(options, function(err, response, body) {
                 body = JSON.parse(body);

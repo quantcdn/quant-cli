@@ -36,13 +36,71 @@ const argv = yargs
     .command('info', 'Give info based on current folder')
     .command('page', 'Deploy a single page to QuantCDN', {
       filepath: {
-        description: 'Path to the file to send to Quant.',
+        description: 'Path to the index.html file to send to Quant.',
         alias: 'f',
         type: 'string',
       },
       location: {
-        description: 'Location the file will be accessible from',
+        description: 'Relative location the file will be accessible from',
         alias: 'l',
+        type: 'string',
+      },
+      timestamp: {
+        description: 'Timestamp to publish the transition',
+        alias: 't',
+        type: 'string',
+      },
+    })
+    .command('file', 'Deploy a single asset to QuantCDN', {
+      filepath: {
+        description: 'Path to the asset to send to Quant.',
+        alias: 'f',
+        type: 'string',
+      },
+      location: {
+        description: 'Relative location the file will be accessible from',
+        alias: 'l',
+        type: 'string',
+      },
+    })
+    .command('redirect', 'Create a redirect in Quant', {
+      to: {
+        description: 'Path to redirect to',
+        alias: 't',
+        type: 'string',
+      },
+      from: {
+        description: 'Path to redirect from',
+        alias: 'f',
+        type: 'string',
+      },
+    })
+    .command('proxy', 'Create a proxy in Quant', {
+      path: {
+        description: 'Path to proxy',
+        alias: 'p',
+        type: 'string',
+      },
+      origin: {
+        description: 'Origin location',
+        alias: 'o',
+        type: 'string',
+      },
+    })
+    .command('transition', 'Transition a page betwee published and unpublished', { // eslint-disable-line max-len
+      status: {
+        description: 'Status to transition to',
+        alias: 's',
+        type: 'string',
+      },
+      path: {
+        description: 'Path to transition',
+        alias: 'f',
+        type: 'string',
+      },
+      timestamp: {
+        description: 'Time to transition',
+        alias: 't',
         type: 'string',
       },
     })
@@ -50,7 +108,7 @@ const argv = yargs
     .alias('help', 'h').argv;
 
 // Command loader...
-const commands = ['init', 'info', 'deploy', 'page'];
+const commands = ['init', 'info', 'deploy', 'page', 'file', 'proxy', 'redirect', 'transition']; // eslint-disable-line max-len
 
 for (let i = 0; i < commands.length; i++) {
   if (!argv._.includes(commands[i])) {

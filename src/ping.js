@@ -1,16 +1,22 @@
 /**
  * Ping the Quant API.
  */
+
 const request = require('request');
-const chalk = require('chalk');
+const util = require('util');
 
 /**
  * Ping the quant API.
  *
  * @param {object} config
  *   A quant config object.
+ *
+ * @return {array}
+ *   The status of the request.
  */
-module.exports = function(config) {
+module.exports = async function(config) {
+  const req = util.promisify(request.get);
+
   const options = {
     url: `${config.get('endpoint')}/ping`,
     headers: {
@@ -20,12 +26,12 @@ module.exports = function(config) {
     },
   };
 
-  request(options, (err, res, body) => {
-    body = JSON.parse(body);
-    if (body.error) {
-      // @TODO: Catch specific API errors.
-      return console.log(chalk.bold.red('Unable to connect to API'));
-    }
-    console.log(chalk.bold.green(`✅✅✅ Successfully connected to API using project: ${body.project}`)); // eslint-disable-line max-len
-  });
+  const res = await req(options);
+  const body = JSON.parse(res.body);
+
+  if (body.error) {
+    throw (body.errorMsg);
+  }
+
+  return body.project;
 };
