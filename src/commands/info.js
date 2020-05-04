@@ -6,7 +6,7 @@
  */
 
 const chalk = require('chalk');
-const ping = require('../ping');
+const client = require('../quant-client');
 const config = require('../config');
 
 /**
@@ -29,7 +29,7 @@ module.exports = function(argv) { // eslint-disable-line
   console.log(`Customer: ${config.get('clientid')}`);
   console.log(`Token: ****`);
 
-  ping(config)
+  client(config).ping()
       .then((message) => console.log(chalk.bold.green(`✅✅✅ Successfully connected to ${message}`))) // eslint-disable-line max-len
       .catch((message) => console.log(chalk.bold.red(`Unable to connect to quant ${message}`))); // eslint-disable-line max-len
 };

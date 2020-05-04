@@ -74,6 +74,11 @@ const argv = yargs
         alias: 'f',
         type: 'string',
       },
+      status: {
+        description: 'If the proxy is enabled.',
+        alias: 's',
+        type: 'int',
+      },
     })
     .command('proxy', 'Create a proxy in Quant', {
       path: {
@@ -84,6 +89,21 @@ const argv = yargs
       origin: {
         description: 'Origin location',
         alias: 'o',
+        type: 'string',
+      },
+      status: {
+        description: 'If the proxy is enabled.',
+        alias: 's',
+        type: 'int',
+      },
+      basicAuthUser: {
+        description: 'Username to use for basic auth',
+        alias: 'u',
+        type: 'string',
+      },
+      basicAuthPass: {
+        description: 'Password for basic auth',
+        alias: 'u',
         type: 'string',
       },
     })

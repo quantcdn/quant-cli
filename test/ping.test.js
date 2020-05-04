@@ -11,10 +11,10 @@ const sinon = require('sinon');
 const config = require('../src/config');
 const request = require('request');
 
-const ping = require('../src/ping');
+const client = require('../src/quant-client');
 
 describe('Ping', function() {
-  describe('Valid configuratioin', function() {
+  describe('Valid configuration', function() {
     let configGet;
     let requestGet;
 
@@ -35,7 +35,7 @@ describe('Ping', function() {
           .stub(request, 'get')
           .resolves({body: '{data: {project: \'test\'}'});
 
-      ping(config).then((project) => {
+      client(config).ping().then((project) => {
         const headers = {
           'Content-Type': 'application/json',
           'Quant-Customer': 'dev',
@@ -57,7 +57,7 @@ describe('Ping', function() {
           .stub(request, 'get')
           .resolves({body: '{data: {project: \'sample-project\'}'});
 
-      ping(config).then((project) => {
+      client(config).ping().then((project) => {
         const headers = {
           'Content-Type': 'application/json',
           'Quant-Customer': 'dev',
