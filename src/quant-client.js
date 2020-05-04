@@ -29,7 +29,8 @@ module.exports = function(config) {
    *   The API response.
    */
   const handleResponse = function(response) {
-    if (response.statusCode > 400) {
+    // console.log(response);
+    if (response.statusCode == 400) {
       // @TODO: this is generally if the content is
       // streamed to the endpoint 4xx and 5xx are thrown
       // similarly, the API should respond with errors
@@ -58,17 +59,12 @@ module.exports = function(config) {
     ping: async function() {
       const options = {
         url: `${config.get('endpoint')}/ping`,
+        json: true,
         headers,
       };
 
       const res = await get(options);
-      const body = JSON.parse(res.body);
-
-      if (body.error) {
-        throw new Error(body.errorMsg);
-      }
-
-      return body.project;
+      return handleResponse(res);
     },
 
     /**
@@ -130,6 +126,9 @@ module.exports = function(config) {
         const p = path.resolve(process.cwd(), config.get('dir'));
         // If a location isn't given, calculate it.
         location = path.relative(p, local);
+        location.replace(path.basename(location), '');
+      } else {
+        location = `${location}/${path.basename(local)}`;
       }
 
       if (!fs.existsSync(local)) {
@@ -140,12 +139,15 @@ module.exports = function(config) {
         data: fs.createReadStream(local),
       };
 
+      location = location.startsWith('/') ? location : `/${location}`;
+
       const options = {
         url: config.get('endpoint'),
+        json: true,
         headers: {
           ...headers,
           'Content-Type': 'multipart/form-data',
-          'Quant-File-Url': `/${location}/${path.basename(local)}`,
+          'Quant-File-Url': location,
         },
         formData,
       };
@@ -203,8 +205,12 @@ module.exports = function(config) {
         },
       };
 
+      if (status < 300 || status > 400) {
+        throw new Error('A valid redirect status code is required');
+      }
+
       if (author) {
-        options.body.author = author;
+        options.body.info = {author};
       }
 
       const res = await post(options);
