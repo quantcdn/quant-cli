@@ -35,6 +35,9 @@ module.exports = function(config) {
       // streamed to the endpoint 4xx and 5xx are thrown
       // similarly, the API should respond with errors
       // otherwise.
+      if (typeof response.body.errorMsg != 'undefined') {
+        throw new Error(response.body.errorMsg);
+      }
       throw new Error('Critical error...');
     }
 
