@@ -1,3 +1,10 @@
+/**
+ * Deploy the configured build directory to QuantCDN.
+ *
+ * @usage
+ *  quant deploy
+ *  quant deploy -d /path/to/dir
+ */
 
 const chalk = require('chalk');
 const config = require('../config');
@@ -5,12 +12,6 @@ const client = require('../quant-client');
 const getFiles = require('../helper/getFiles');
 const path = require('path');
 
-/**
- * Deploy a directory to a configured quant account.
- *
- * @param {object} argv
- *   The CLI arguments.
- */
 module.exports = async function(argv) {
   console.log(chalk.bold.green('*** Quant deploy ***'));
   let files;

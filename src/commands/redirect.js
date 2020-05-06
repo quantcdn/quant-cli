@@ -1,13 +1,15 @@
+/**
+ * Redirect a QuantCDN path to another.
+ *
+ * @usage
+ *   quant redirect -f /path/from -t /path/to
+ *   quant redirect -f /path/from -t /path/to -s false
+ */
+
 const chalk = require('chalk');
 const config = require('../config');
 const client = require('../quant-client');
 
-/**
- * Add a redirect.
- *
- * @param {object} argv
- *   CLI parameters.
- */
 module.exports = function(argv) {
   console.log(chalk.bold.green('*** Quant redirect ***'));
 

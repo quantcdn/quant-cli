@@ -1,3 +1,10 @@
+/**
+ * Proxy a route in QuantCDN to an origin.
+ *
+ * @usage
+ *   quant proxy -p /path -o http://origin-domain.com
+ */
+
 const chalk = require('chalk');
 const config = require('../config');
 const client = require('../quant-client');

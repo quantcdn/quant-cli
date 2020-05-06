@@ -1,3 +1,10 @@
+/**
+ * Unpublish a QuantCDN url.
+ *
+ * @usage
+ *   quant unpublish -u /path/to/upublish
+ */
+
 const chalk = require('chalk');
 const client = require('../quant-client');
 const config = require('../config');

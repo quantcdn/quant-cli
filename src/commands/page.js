@@ -1,5 +1,12 @@
 /**
- * Send a single index file to Quant.
+ * Deploy a single index.html file to QuantCDN.
+ *
+ * This allows an optional paramter to define where the asset
+ * will be accessible by QuantCDN.
+ *
+ * @usage
+ *   quant page -f /path/to/index.html
+ *   quant page -f /path/to/index.html-l /path/in/quant
  */
 
 const config = require('../config');

@@ -2,22 +2,13 @@
  * Provide info for the current configuration.
  *
  * @usage
- *    quant-cli info
+ *    quant info
  */
 
 const chalk = require('chalk');
 const client = require('../quant-client');
 const config = require('../config');
 
-/**
- * Print quant info.
- *
- * @param {object} argv
- *   CLI parameters.
- *
- * @return {boolean}
- *   The success status.
- */
 module.exports = function(argv) { // eslint-disable-line
   console.log(chalk.bold.green('*** Quant info ***'));
 

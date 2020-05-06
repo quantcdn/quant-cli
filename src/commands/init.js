@@ -1,3 +1,15 @@
+/**
+ * Prepare the QuantCDN configuration file.
+ *
+ * This uses a wizard or allows you to pass in with options.
+ *
+ * @TODO: allow partial options/wizard.
+ *
+ * @usage
+ *   quant init
+ *   quant init -t <token> -c <client> -e <url> -d <build dir>
+ */
+
 const chalk = require('chalk');
 const prompt = require('prompt');
 
