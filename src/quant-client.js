@@ -11,6 +11,7 @@ module.exports = function(config) {
   const req = util.promisify(request); // eslint-disable-line
   const get = util.promisify(request.get);
   const post = util.promisify(request.post);
+  const patch = util.promisify(request.patch);
 
   const headers = {
     'User-Agent': 'Quant (+http://api.quantcdn.io)',
@@ -54,14 +55,33 @@ module.exports = function(config) {
     /**
      * Ping the quant API.
      *
-     * @return {string}
-     *   The project name that was connected to.
+     * @return {object}
+     *   The response object.
      *
-     * @throws Error
+     * @throws Error.
      */
     ping: async function() {
       const options = {
         url: `${config.get('endpoint')}/ping`,
+        json: true,
+        headers,
+      };
+
+      const res = await get(options);
+      return handleResponse(res);
+    },
+
+    /**
+     * Access the global meta for the project.
+     *
+     * @return {object}
+     *   The global meta response object.
+     *
+     * @throws Error.
+     */
+    meta: async function() {
+      const options = {
+        url: `${config.get('endpoint')}/global-meta`,
         json: true,
         headers,
       };
@@ -175,6 +195,34 @@ module.exports = function(config) {
     publish: async function(location, status = true) {
       // @TODO: this is likely handled by markup().
       throw new Error('Not implemented yet.');
+    },
+
+    /**
+     * Unpublish a URL.
+     *
+     * @param {string} url
+     *   The URL to unpublish.
+     *
+     * @return {object}
+     *
+     * @throws Error.
+     */
+    unpublish: async function(url) {
+      // Ensure that we don't have index.html in the URL as Quant
+      // expects to obfuscate this.
+      url = url.replace('/index.html', '');
+
+      const options = {
+        url: `${config.get('endpoint')}/unpublish`,
+        headers: {
+          ...headers,
+          'Quant-Url': url,
+        },
+        json: true,
+      };
+
+      const res = await patch(options);
+      return handleResponse(res);
     },
 
     /**

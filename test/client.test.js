@@ -26,6 +26,7 @@ describe('Quant Client', function() {
   let cget;
   let requestGet;
   let requestPost;
+  let requestPatch;
 
   beforeEach(function() {
     cget = sinon.stub(config, 'get');
@@ -356,6 +357,32 @@ describe('Quant Client', function() {
         ).to.be.true;
         assert.equal(data, response.body);
       });
+    });
+  });
+
+  describe('PATCH /unpublish', function() {
+    this.afterEach(function() {
+      requestPatch.restore();
+    });
+
+    it('should remove index.html', async function() {
+      const response = {
+        statusCode: 200,
+        body: {project: 'test'},
+      };
+      requestPatch = sinon.stub(request, 'patch').yields(null, response, response.body); // eslint-disable-line max-len
+
+      await client(config).unpublish('/path/to/index.html');
+      expect(
+          requestPatch.calledOnceWith({
+            url: 'http://localhost:8081/unpublish',
+            headers: {
+              ...headers,
+              'Quant-Url': '/path/to',
+            },
+            json: true,
+          }),
+      ).to.be.true;
     });
   });
 

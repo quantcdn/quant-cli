@@ -2,12 +2,8 @@
 const chalk = require('chalk');
 const config = require('../config');
 const client = require('../quant-client');
-
-const fs = require('fs');
-const {promisify} = require('util');
-const {resolve} = require('path');
-const readdir = promisify(fs.readdir);
-const stat = promisify(fs.stat);
+const getFiles = require('../helper/getFiles');
+const path = require('path');
 
 /**
  * Deploy a directory to a configured quant account.
@@ -15,65 +11,70 @@ const stat = promisify(fs.stat);
  * @param {object} argv
  *   The CLI arguments.
  */
-module.exports = function(argv) {
+module.exports = async function(argv) {
   console.log(chalk.bold.green('*** Quant deploy ***'));
+  let files;
+  let data;
 
   // Make sure configuration is loaded.
   config.load();
   const dir = argv.dir || config.get('dir');
 
-  /**
-   * Get files from a directory.
-   *
-   * @param {string} dir
-   *   The directory from which to get files.
-   *
-   * @return {array}
-   *   An array of files.
-   */
-  async function getFiles(dir) {
-    const subdirs = await readdir(dir);
-    const files = await Promise.all(
-        subdirs.map(async (subdir) => {
-          const res = resolve(dir, subdir);
-          return (await stat(res)).isDirectory() ? getFiles(res) : res;
-        }),
-    );
-    return files.reduce((a, f) => a.concat(f), []);
+  const p = path.resolve(process.cwd(), dir);
+  const quant = client(config);
+
+  try {
+    files = await getFiles(p);
+  } catch (err) {
+    return console.log(err);
   }
 
-  const path = require('path');
-  const p = path.resolve(process.cwd(), dir);
+  /* eslint-disable guard-for-in */
+  for (const file in files) {
+    const filepath = path.relative(p, files[file]);
+    const method = filepath.endsWith('index.html') ? 'markup' : 'file';
 
-  getFiles(p)
-      .then((files) => {
-      /* eslint-disable guard-for-in */
-        for (file in files) {
-          const filepath = path.relative(p, files[file]);
-          // Treat index.html files as route.
-          if (filepath.endsWith('index.html')) {
-            client(config)
-                .markup(files[file])
-                .then((data) => {
-                  console.log(chalk.bold.green('✅') + ` ${filepath}`);
-                })
-                .catch((err) => {
-                  console.error(
-                      chalk.yellow(err.message + ` (${filepath})`),
-                  );
-                });
-          } else {
-            client(config)
-                .file(files[file])
-                .then((data) => {
-                  console.log(chalk.bold.green('✅') + ` ${filepath}`);
-                })
-                .catch((err) => {
-                  console.error(chalk.yellow(err.message + ` (${filepath})`));
-                });
-          }
-        }
-      /* eslint-enable guard-for-in */
-      })
-      .catch((e) => console.error(e));
+    try {
+      await quant[method](files[file]);
+    } catch (err) {
+      console.log(chalk.yellow(err.message + ` (${filepath})`));
+      continue;
+    }
+    console.log(chalk.bold.green('✅') + ` ${filepath}`);
+  }
+
+  try {
+    data = await quant.meta();
+  } catch (err) {
+    console.log(chalk.yellow(err.message));
+  }
+
+  const relativeFiles = files.map((item) => `/${path.relative(p, item)}`);
+
+  for (const key in data.meta) {
+    if (!data.meta[key].published || relativeFiles.includes(key)) {
+      continue;
+    }
+
+    // Check the non-index.html meta.
+    const bare = key.replace('/index.html', '');
+
+    // @TODO: Quant API unpublishes the bare route but the
+    // global meta doesn't update the index.html file so if we
+    // don't do this it will attempt to unpublish paths every
+    // time. We can't unpublish /path/to/index.html either
+    // as this is invalid within the API.
+    if (typeof data.meta[bare] == 'undefined' || !data.meta[bare].published) {
+      continue;
+    }
+
+    try {
+      await quant.unpublish(key);
+    } catch (err) {
+      console.log(chalk.yellow(err.message + ` (${key})`));
+      continue;
+    }
+    console.log(chalk.bold.green('✅') + ` ${key} unpublished.`);
+  }
+  /* eslint-enable guard-for-in */
 };

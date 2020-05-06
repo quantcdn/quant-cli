@@ -107,20 +107,10 @@ const argv = yargs
         type: 'string',
       },
     })
-    .command('transition', 'Transition a page betwee published and unpublished', { // eslint-disable-line max-len
-      status: {
-        description: 'Status to transition to',
-        alias: 's',
-        type: 'string',
-      },
-      path: {
-        description: 'Path to transition',
-        alias: 'f',
-        type: 'string',
-      },
-      timestamp: {
-        description: 'Time to transition',
-        alias: 't',
+    .command('unpublish', 'Unpublish a published route.', { // eslint-disable-line max-len
+      url: {
+        description: 'The published URL to transition',
+        alias: 'u',
         type: 'string',
       },
     })
@@ -128,7 +118,16 @@ const argv = yargs
     .alias('help', 'h').argv;
 
 // Command loader...
-const commands = ['init', 'info', 'deploy', 'page', 'file', 'proxy', 'redirect', 'transition']; // eslint-disable-line max-len
+const commands = [
+  'init',
+  'info',
+  'deploy',
+  'page',
+  'file',
+  'proxy',
+  'redirect',
+  'unpublish',
+];
 
 for (let i = 0; i < commands.length; i++) {
   if (!argv._.includes(commands[i])) {
