@@ -63,7 +63,7 @@ const argv = yargs
         type: 'string',
       },
     })
-    .command('redirect', 'Create a redirect in Quant', {
+    .command('redirect', 'Create a redirect in QuantCDN', {
       to: {
         description: 'Path to redirect to',
         alias: 't',
@@ -80,7 +80,7 @@ const argv = yargs
         type: 'int',
       },
     })
-    .command('proxy', 'Create a proxy in Quant', {
+    .command('proxy', 'Create a proxy in QuantCDN', {
       path: {
         description: 'Path to proxy',
         alias: 'p',
@@ -107,7 +107,7 @@ const argv = yargs
         type: 'string',
       },
     })
-    .command('unpublish', 'Unpublish a published route.', { // eslint-disable-line max-len
+    .command('unpublish', 'Unpublish a published route in QuantCDN', { // eslint-disable-line max-len
       url: {
         description: 'The published URL to transition',
         alias: 'u',
