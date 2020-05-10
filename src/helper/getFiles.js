@@ -28,4 +28,7 @@ const getFiles = async function(dir) {
   return files.reduce((a, f) => a.concat(f), []);
 };
 
-module.exports = getFiles;
+module.exports = function() {
+  return module.exports.getFiles.apply(this, arguments); // eslint-disable-line
+};
+module.exports.getFiles = getFiles;

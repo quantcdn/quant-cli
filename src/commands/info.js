@@ -30,7 +30,13 @@ module.exports = function(argv) { // eslint-disable-line
               console.log(chalk.yellow('\nPublished to your Quant:'));
               /* eslint-disable guard-for-in */
               for (const path in data.meta) {
-                console.log(` - ${path}`);
+                let pub;
+                if (data.meta[path].published) {
+                  pub = chalk.green('published');
+                } else {
+                  pub = chalk.yellow('unpublished');
+                }
+                console.log(` - ${path} (${pub})`);
               }
               /* eslint-enable guard-for-in */
             })

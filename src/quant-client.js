@@ -7,7 +7,7 @@ const util = require('util');
 const fs = require('fs');
 const path = require('path');
 
-module.exports = function(config) {
+const client = function(config) {
   const req = util.promisify(request); // eslint-disable-line
   const get = util.promisify(request.get);
   const post = util.promisify(request.post);
@@ -311,3 +311,8 @@ module.exports = function(config) {
     },
   };
 };
+
+module.exports = function() {
+  return module.exports.client.apply(this, arguments); // eslint-disable-line
+};
+module.exports.client = client;

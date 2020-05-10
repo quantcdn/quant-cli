@@ -65,7 +65,7 @@ module.exports = async function(argv) {
     // don't do this it will attempt to unpublish paths every
     // time. We can't unpublish /path/to/index.html either
     // as this is invalid within the API.
-    if (typeof data.meta[bare] == 'undefined' || !data.meta[bare].published) {
+    if (typeof data.meta[bare] != 'undefined' && !data.meta[bare].published) {
       continue;
     }
 
