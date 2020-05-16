@@ -18,13 +18,14 @@ module.exports = function(argv) { // eslint-disable-line
 
   console.log(`Endpoint: ${config.get('endpoint')}`);
   console.log(`Customer: ${config.get('clientid')}`);
+  console.log(`Project: ${config.get('project')}`);
   console.log(`Token: ****`);
 
   const quant = client(config);
 
   quant.ping()
       .then((data) => {
-        console.log(chalk.bold.green(`✅✅✅ Successfully connected to ${data.project}`)); // eslint-disable-line max-len
+        console.log(chalk.bold.green(`✅✅✅ Successfully connected to ${config.get('project')}`)); // eslint-disable-line max-len
         quant.meta()
             .then((data) => {
               console.log(chalk.yellow('\nPublished to your Quant:'));

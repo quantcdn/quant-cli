@@ -20,11 +20,12 @@ module.exports = function(argv) {
   const token = argv.token;
   const clientid = argv.clientid;
   const endpoint = argv.endpoint;
+  const project = argv.project;
   const dir = argv.dir;
 
   console.log(chalk.bold.green('*** Initialise Quant ***'));
 
-  if (!token || !clientid) {
+  if (!token || !clientid || !project) {
     const schema = {
       properties: {
         endpoint: {
@@ -37,6 +38,12 @@ module.exports = function(argv) {
           message: 'Client id must be only letters, numbers or dashes',
           required: true,
           description: 'Enter QuantCDN client id',
+        },
+        project: {
+          pattern: /^[a-zA-Z0-9\-]+$/,
+          message: 'Project must be only letters, numbers or dashes',
+          required: true,
+          description: 'Enter QuantCDN project',
         },
         token: {
           hidden: true,
@@ -60,7 +67,7 @@ module.exports = function(argv) {
           .catch((message) => console.log(chalk.bold.red(`Unable to connect to quant ${message}`))); // eslint-disable-line max-len
     });
   } else {
-    config.set({clientid, token, endpoint, dir});
+    config.set({clientid, project, token, endpoint, dir});
     config.save();
     client(config).ping(config)
         .then((message) => console.log(chalk.bold.green(`✅✅✅ Successfully connected to ${message}`))) // eslint-disable-line max-len
