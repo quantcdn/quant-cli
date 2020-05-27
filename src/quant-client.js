@@ -17,6 +17,7 @@ const client = function(config) {
     'User-Agent': 'Quant (+http://api.quantcdn.io)',
     'Quant-Token': config.get('token'),
     'Quant-Customer': config.get('clientid'),
+    'Quant-Project': config.get('project'),
     'Content-Type': 'application/json',
   };
 

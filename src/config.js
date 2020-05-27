@@ -5,6 +5,7 @@ const config = {
   dir: 'build',
   endpoint: 'http://quantcdn.io',
   clientid: null,
+  project: null,
   token: null,
 };
 
