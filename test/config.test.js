@@ -41,6 +41,7 @@ describe('Config', function() {
         endpoint: 'http://quantcdn.io',
         clientid: null,
         token: null,
+        project: null,
       });
     });
     afterEach(function() {
@@ -52,6 +53,7 @@ describe('Config', function() {
         dir: 'build',
         endpoint: 'http://quantcdn.io',
         clientid: null,
+        project: null,
         token: null,
       }, null, 2);
       expect(writeFileSync.calledOnceWith('./quant.json', data)).to.be.true;
@@ -64,6 +66,7 @@ describe('Config', function() {
         dir: 'build',
         endpoint: 'http://quantcdn.io',
         clientid: 'test',
+        project: null,
         token: null,
       }, null, 2);
       expect(writeFileSync.calledOnceWith('./quant.json', data)).to.be.true;
@@ -74,6 +77,7 @@ describe('Config', function() {
         dir: 'build',
         endpoint: 'http://quantcdn.io',
         clientid: null,
+        project: null,
         token: null,
       }, null, 2);
       expect(writeFileSync.calledOnceWith('/tmp/quant.json', data)).to.be.true;
@@ -92,6 +96,7 @@ describe('Config', function() {
             endpoint: 'http://api.quantcdn.io',
             clientid: 'test',
             token: 'test',
+            project: 'test',
           }),
       );
       const status = config.load(`/tmp`);
@@ -99,6 +104,7 @@ describe('Config', function() {
       assert.equal(status, true);
       assert.equal(config.get('clientid'), 'test');
       assert.equal(config.get('token'), 'test');
+      assert.equal(config.get('project'), 'test');
     });
     it('should return FALSE if file is not found', function() {
       readFileSync = sinon.stub(fs, 'readFileSync').throwsException();
