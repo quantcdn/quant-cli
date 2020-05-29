@@ -105,15 +105,8 @@ module.exports = async function(argv) {
   crawl.maxConcurrency = 3;
   crawl.decodeResponses = true;
   crawl.maxResourceSize = 268435456; // 256MB
-  crawl.sortQueryParameters = false;
 
   const quant = client(config);
-
-  // ABS redirect testing..
-  //crawl.queueURL('https://www.abs.gov.au/AUSSTATS/abs@.nsf/DetailsPage/6291.0.55.001Feb%202020?OpenDocument');
-  crawl.queueURL('https://www.abs.gov.au/AUSSTATS/ABS@Archive.nsf/log?openagent&6291001.xls&6291.0.55.001&Time%20Series%20Spreadsheet&7A8851CFD452D91BCA2585360017E1B7&0&Feb%202020&26.03.2020&Latest');
-  crawl.maxDepth = 1;
-
 
   // Get the domain host.
   var hostname = domain;
