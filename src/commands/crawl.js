@@ -137,11 +137,6 @@ module.exports = async function(argv) {
     crawl.domainWhitelist.push(hostname.slice(4));
   }
 
-  // Replace "+" with "%20".
-  crawl.on("queueadd", function(queueItem, referrerQueueItem) {
-    queueItem.url = queueItem.url.replace(/\+/g, "%20");
-  });
-
   crawl.on("complete", function() {
     console.log(chalk.bold.green('✅ All done! ') + ` ${count} total items.`);
     console.log(chalk.bold.green('Failed items:'));
@@ -150,10 +145,6 @@ module.exports = async function(argv) {
   });
 
   crawl.on("fetchredirect", function(queueItem, redirectQueueItem, response) {
-
-    queueItem.url = queueItem.url.replace(/\+/g, "%20");
-    redirectQueueItem.url = redirectQueueItem.url.replace(/\+/g, "%20");
-    console.log(queueItem);
 
     // Add internal redirects to the expected domain to the queue.
     if (redirectQueueItem.host == hostname) {
