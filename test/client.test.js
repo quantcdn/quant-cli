@@ -169,6 +169,8 @@ describe('Quant Client', function() {
 
         await client(config).send('test/fixtures/some-file-path.html');
 
+        console.log(requestPost.getCalls(0));
+
         // Expect the post for the redirect.
         expect(
             requestPost.calledWith({
@@ -182,8 +184,8 @@ describe('Quant Client', function() {
               },
               json: true,
               body: {
-                url: 'test/fixtures/some-file-path.html',
-                redirect_url: 'some-file-path/index.html',
+                url: '/some-file-path.html',
+                redirect_url: '/some-file-path',
                 redirect_http_code: 302,
                 published: true,
               },

@@ -122,9 +122,11 @@ const client = function(config) {
           // in the way that Quant is expecting to handle them
           // this forces the location to a quant valid path
           // and creates a redirect form the file location.
+          from = location.startsWith('/') ? location : `/${location}`;
           location = location.replace('.html', '/index.html');
+          to = location.startsWith('/') ? location : `/${location}`;
           try {
-            await this.redirect(file, location);
+            await this.redirect(from, to.replace('/index.html', ''));
           } catch (err) {
             // Fail silently if this has been created already.
           };
