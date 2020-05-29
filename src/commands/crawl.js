@@ -14,7 +14,7 @@ const request = require('request');
 const post = util.promisify(request.post);
 const fs = require('fs');
 const matchAll = require('string.prototype.matchall');
-const resumeFile = "./crawler-queue"
+const resumeFile = "./crawler-queue-tmp"
 
 var crawl;
 var count=0;
@@ -105,8 +105,15 @@ module.exports = async function(argv) {
   crawl.maxConcurrency = 3;
   crawl.decodeResponses = true;
   crawl.maxResourceSize = 268435456; // 256MB
+  crawl.sortQueryParameters = false;
 
   const quant = client(config);
+
+  // ABS redirect testing..
+  //crawl.queueURL('https://www.abs.gov.au/AUSSTATS/abs@.nsf/DetailsPage/6291.0.55.001Feb%202020?OpenDocument');
+  crawl.queueURL('https://www.abs.gov.au/AUSSTATS/ABS@Archive.nsf/log?openagent&6291001.xls&6291.0.55.001&Time%20Series%20Spreadsheet&7A8851CFD452D91BCA2585360017E1B7&0&Feb%202020&26.03.2020&Latest');
+  crawl.maxDepth = 1;
+
 
   // Get the domain host.
   var hostname = domain;
@@ -130,6 +137,11 @@ module.exports = async function(argv) {
     crawl.domainWhitelist.push(hostname.slice(4));
   }
 
+  // Replace "+" with "%20".
+  crawl.on("queueadd", function(queueItem, referrerQueueItem) {
+    queueItem.url = queueItem.url.replace(/\+/g, "%20");
+  });
+
   crawl.on("complete", function() {
     console.log(chalk.bold.green('✅ All done! ') + ` ${count} total items.`);
     console.log(chalk.bold.green('Failed items:'));
@@ -138,6 +150,10 @@ module.exports = async function(argv) {
   });
 
   crawl.on("fetchredirect", function(queueItem, redirectQueueItem, response) {
+
+    queueItem.url = queueItem.url.replace(/\+/g, "%20");
+    redirectQueueItem.url = redirectQueueItem.url.replace(/\+/g, "%20");
+    console.log(queueItem);
 
     // Add internal redirects to the expected domain to the queue.
     if (redirectQueueItem.host == hostname) {
@@ -303,6 +319,7 @@ module.exports = async function(argv) {
 
   // Resume from state file if exists.
   // @todo: Prompt/optional.
+  /*
   if (fs.existsSync(resumeFile)) {
     crawl.queue.defrost(resumeFile, function(err) {
         if (err) throw err;
@@ -312,6 +329,8 @@ module.exports = async function(argv) {
     });
   } else {
     crawl.start();
-  }
+  }*/
+
+  crawl.start();
     
 };
