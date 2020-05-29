@@ -14,7 +14,7 @@ const request = require('request');
 const post = util.promisify(request.post);
 const fs = require('fs');
 const matchAll = require('string.prototype.matchall');
-const resumeFile = "./crawler-queue-tmp"
+const resumeFile = "./crawler-queue"
 
 var crawl;
 var count=0;
@@ -303,7 +303,6 @@ module.exports = async function(argv) {
 
   // Resume from state file if exists.
   // @todo: Prompt/optional.
-  /*
   if (fs.existsSync(resumeFile)) {
     crawl.queue.defrost(resumeFile, function(err) {
         if (err) throw err;
@@ -313,8 +312,6 @@ module.exports = async function(argv) {
     });
   } else {
     crawl.start();
-  }*/
+  }
 
-  crawl.start();
-    
 };
