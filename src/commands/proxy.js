@@ -5,7 +5,7 @@
  *   quant proxy -p /path -o http://origin-domain.com
  */
 
-const chalk = require('chalk');
+const logger = require('../service/logger')();
 const config = require('../config');
 const client = require('../quant-client');
 
@@ -19,9 +19,9 @@ module.exports = function(argv) {
   // @TODO: Accept argv.dir.
   config.load();
 
-  console.log(chalk.bold.green('*** Quant proxy ***'));
+  logger.title('Proxy');
 
   client(config).proxy(url, dest, status, user, pass)
-    .then((body) => console.log(chalk.green('Success: ') + ` Added proxy for ${url} to ${dest}`)) // eslint-disable-line
-      .catch((err) => console.log(chalk.red.bold('Error:') + ` ${err}`));
+      .then((body) => logger.success(`Added proxy for ${url} to ${dest}`))
+      .catch((err) => logger.fatal(` ${err}`));
 };

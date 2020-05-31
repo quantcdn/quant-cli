@@ -5,30 +5,38 @@
  *    quant info
  */
 
-const chalk = require('chalk');
+const {title, success, info, log, table, fatal, warn} = require('../service/logger');
 const client = require('../quant-client');
 const config = require('../config');
 
 module.exports = function(argv) { // eslint-disable-line
-  console.log(chalk.bold.green('*** Quant info ***'));
+
+  title('Info');
 
   if (!config.load()) {
-    return console.error(chalk.yellow('Quant is not configured, run init.'));
+    return info('Quant is not configured, run init.');
   }
 
-  console.log(`Endpoint: ${config.get('endpoint')}`);
-  console.log(`Customer: ${config.get('clientid')}`);
-  console.log(`Project: ${config.get('project')}`);
-  console.log(`Token: ****`);
+  table(
+      ['Endpoint', 'Customer', 'Project', 'Token'],
+      [
+        config.get('endpoint'),
+        config.get('clientid'),
+        config.get('project'),
+        '****',
+      ],
+  );
 
   const quant = client(config);
 
   quant.ping()
       .then((data) => {
-        console.log(chalk.bold.green(`✅✅✅ Successfully connected to ${config.get('project')}`)); // eslint-disable-line max-len
+        success(
+            `Successfully connected to ${config.get('project')}`,
+        ); // eslint-disable-line max-len
         quant.meta()
             .then((data) => {
-              console.log(chalk.yellow('\nPublished to your Quant:'));
+              info('Published to your Quant:');
               /* eslint-disable guard-for-in */
               for (const path in data.meta) {
                 let pub;
@@ -37,13 +45,16 @@ module.exports = function(argv) { // eslint-disable-line
                 } else {
                   pub = chalk.yellow('unpublished');
                 }
-                console.log(` - ${path} (${pub})`);
+                log(` - ${path} (${pub})`);
               }
               /* eslint-enable guard-for-in */
             })
             .catch((err) => {
-              console.log('No content has been deployed to Quant.');
+              if (err.message == 'Global meta not found!') {
+                return warn('Unable to gather Quant metadata.');
+              }
+              info('No content has been deployed to Quant.');
             });
       })
-      .catch((err) => console.log(chalk.bold.red(`Unable to connect to quant ${err.message}`))); // eslint-disable-line max-len
+      .catch((err) => fatal(`Unable to connect to quant ${err.message}`)); // eslint-disable-line max-len
 };

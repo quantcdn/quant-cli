@@ -5,24 +5,25 @@
  *   quant unpublish -u /path/to/upublish
  */
 
-const chalk = require('chalk');
+const logger = require('../service/logger')();
 const client = require('../quant-client');
 const config = require('../config');
 
 module.exports = function(argv) {
-  console.log(chalk.bold.green('*** Quant unpublish ***'));
+  const url = argv.url;
 
   // @TODO: Accept argv.dir.
   config.load();
 
-  const url = argv.url;
+  logger.title('Unpublish');
+
 
   if (!url) {
-    return console.log(chalk.red.bold('Error:') + ` Missing parameter [url].`);
+    return logger.fatal('Missing parameter [url].');
   }
 
   client(config)
       .unpublish(url)
-      .then(response => console.log(chalk.green('Success:') + ` Unpublished ${url}`)) // eslint-disable-line
-      .catch((err) => console.log(chalk.red.bold('Error:') + ` ${err}`));
+      .then((response) => logger.success(`Unpublished ${url}`))
+      .catch((err) => logger.error(err.message));
 };

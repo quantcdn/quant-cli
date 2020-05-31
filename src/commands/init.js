@@ -10,9 +10,8 @@
  *   quant init -t <token> -c <client> -e <url> -d <build dir>
  */
 
-const chalk = require('chalk');
 const prompt = require('prompt');
-
+const logger = require('../service/logger')();
 const config = require('../config');
 const client = require('../quant-client');
 
@@ -23,7 +22,7 @@ module.exports = function(argv) {
   const project = argv.project;
   const dir = argv.dir;
 
-  console.log(chalk.bold.green('*** Initialise Quant ***'));
+  logger.title('Setup');
 
   if (!token || !clientid || !project) {
     const schema = {
@@ -63,14 +62,14 @@ module.exports = function(argv) {
       config.set(result);
       config.save();
       client(config).ping(config)
-          .then((message) => console.log(chalk.bold.green(`✅✅✅ Successfully connected to ${message}`))) // eslint-disable-line max-len
-          .catch((message) => console.log(chalk.bold.red(`Unable to connect to quant ${message}`))); // eslint-disable-line max-len
+          .then((message) => logger.success(`Successfully connected to ${message}`)) // eslint-disable-line max-len
+          .catch((message) => logger.error(`Unable to connect to quant ${message}`)); // eslint-disable-line max-len
     });
   } else {
     config.set({clientid, project, token, endpoint, dir});
     config.save();
     client(config).ping(config)
-        .then((message) => console.log(chalk.bold.green(`✅✅✅ Successfully connected to ${message}`))) // eslint-disable-line max-len
-        .catch((message) => console.log(chalk.bold.red(`Unable to connect to quant ${message}`))); // eslint-disable-line max-len
+        .then((message) => logger.success(`Successfully connected to ${message}`)) // eslint-disable-line max-len
+        .catch((message) => logger.error(`Unable to connect to quant ${message}`)); // eslint-disable-line max-len
   }
 };

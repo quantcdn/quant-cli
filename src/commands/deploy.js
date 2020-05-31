@@ -6,16 +6,17 @@
  *  quant deploy -d /path/to/dir
  */
 
-const chalk = require('chalk');
+const logger = require('../service/logger');
 const config = require('../config');
 const client = require('../quant-client');
 const getFiles = require('../helper/getFiles');
 const path = require('path');
 
 module.exports = async function(argv) {
-  console.log(chalk.bold.green('*** Quant deploy ***'));
   let files;
   let data;
+
+  logger.title('Deploy');
 
   // Make sure configuration is loaded.
   config.load();
@@ -27,7 +28,7 @@ module.exports = async function(argv) {
   try {
     files = await getFiles(p);
   } catch (err) {
-    return console.log(err);
+    return logger.fatal(err.message);
   }
 
   /* eslint-disable guard-for-in */
@@ -38,16 +39,18 @@ module.exports = async function(argv) {
     try {
       await quant[method](files[file]);
     } catch (err) {
-      console.log(chalk.yellow(err.message + ` (${filepath})`));
+      logger.error(`${err.message} ${filepath}`);
       continue;
     }
-    console.log(chalk.bold.green('✅') + ` ${filepath}`);
+    logger.success(filepath);
   }
 
   try {
     data = await quant.meta();
   } catch (err) {
-    console.log(chalk.yellow(err.message));
+    // If we don't get the meta data back from quant
+    // we should return.
+    return logger.info('Meta data is unavailable, we cannot automatically unpublish data.'); // eslint-disable-line
   }
 
   const relativeFiles = files.map((item) => `/${path.relative(p, item)}`);
@@ -72,10 +75,11 @@ module.exports = async function(argv) {
     try {
       await quant.unpublish(key);
     } catch (err) {
-      console.log(chalk.yellow(err.message + ` (${key})`));
+      logger.error(`${err.message} (${key})`);
       continue;
     }
-    console.log(chalk.bold.green('✅') + ` ${key} unpublished.`);
+
+    logger.success(`${key} unpublished`);
   }
   /* eslint-enable guard-for-in */
 };

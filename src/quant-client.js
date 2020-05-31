@@ -38,7 +38,9 @@ const client = function(config) {
       // similarly, the API should respond with errors
       // otherwise.
       if (typeof response.body.errorMsg != 'undefined') {
-        throw new Error(response.body.errorMsg);
+        const e = new Error(response.body.errorMsg);
+        e.code = response.statusCode;
+        throw e;
       }
       throw new Error('Critical error...');
     }

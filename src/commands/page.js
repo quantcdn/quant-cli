@@ -11,19 +11,18 @@
 
 const config = require('../config');
 const client = require('../quant-client');
-
-const chalk = require('chalk');
+const logger = require('../service/logger')();
 
 module.exports = function(argv) {
   const filepath = argv.filepath;
   const location = argv.location;
 
-  console.log(chalk.bold.green('*** Quant page ***'));
+  logger.title('Page');
 
   // @TODO: add dir support.
   config.load();
 
   client(config).markup(filepath, location)
-    .then((body) => console.log(chalk.green('Success: ') + ` Added [${filepath}]`)) // eslint-disable-line
-      .catch((err) => console.log(chalk.red.bold('Error:') + ` ${err}`));
+      .then((body) => logger.success(`Added (${filepath})`))
+      .catch((err) => logger.fatal(err.message));
 };

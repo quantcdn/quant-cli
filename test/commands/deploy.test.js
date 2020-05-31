@@ -13,6 +13,8 @@ const expect = chai.expect;
 const getFiles = require('../../src/helper/getFiles');
 const config = require('../../src/config');
 const client = require('../../src/quant-client');
+const logger = require('../../src/service/logger');
+
 
 describe('Deploy', function() {
   let getFilesStub;
@@ -22,6 +24,16 @@ describe('Deploy', function() {
   let file;
   let meta;
   let unpublish;
+
+  // Logger stubs.
+  let titleStub;
+  let infoStub;
+  let logStub;
+  let successStub;
+  let tableStub;
+  let warnStub;
+  let errorStub;
+  let fatalStub;
 
   beforeEach(function() {
     markup = sinon.stub();
@@ -34,12 +46,51 @@ describe('Deploy', function() {
     configGetStub.withArgs('token').returns('test');
 
     getFilesStub = sinon.stub(getFiles, 'getFiles');
+
+    // Logger stubs.
+    titleStub = sinon.stub(logger, 'title').returns(true);
+    infoStub = sinon.stub(logger, 'info').returns(true);
+    successStub = sinon.stub(logger, 'success').returns(true);
+    fatalStub = sinon.stub(logger, 'fatal').returns(true);
+    errorStub = sinon.stub(logger, 'error').returns(true);
   });
 
   afterEach(function() {
     configGetStub.restore();
     getFilesStub.restore();
     clientStub.restore();
+
+    // Logger stubs.
+    titleStub.restore();
+    infoStub.restore();
+    successStub.restore();
+    fatalStub.restore();
+    errorStub.restore();
+  });
+
+  describe('Static output', function() {
+    beforeEach(function() {
+      meta = sinon.stub().returns({});
+      clientStub = sinon.stub(client, 'client').returns({
+        markup,
+        file,
+        meta,
+        unpublish,
+      });
+    });
+
+    it('should have a title of Deploy', async function() {
+      const dir = process.cwd() + 'test/fixtures';
+      const f = `${dir}/test/index.html`;
+
+      getFilesStub
+          .withArgs(dir)
+          .returns([f]);
+
+      await deploy({dir});
+
+      expect(titleStub.calledOnceWith('Deploy')).to.be.true;
+    });
   });
 
   describe('Publish', function() {
@@ -63,6 +114,9 @@ describe('Deploy', function() {
 
       await deploy({dir});
 
+      expect(errorStub.called).to.be.false;
+      expect(successStub.calledOnceWith('test/index.html')).to.be.true;
+
       expect(markup.calledOnceWith(f)).to.be.true;
       expect(file.calledOnceWith(f)).to.be.false;
     });
@@ -76,6 +130,9 @@ describe('Deploy', function() {
           .returns([f]);
 
       await deploy({dir});
+
+      expect(errorStub.called).to.be.false;
+      expect(successStub.calledOnceWith('test/test.css')).to.be.true;
 
       expect(markup.calledOnceWith(f)).to.be.false;
       expect(file.calledOnceWith(f)).to.be.true;
@@ -105,6 +162,8 @@ describe('Deploy', function() {
       getFilesStub.withArgs(dir).returns([f]);
       await deploy({dir});
 
+      expect(errorStub.called).to.be.false;
+
       expect(unpublish.calledOnceWith('index.html')).to.be.true;
       expect(unpublish.neverCalledWith('test/dir/index.html')).to.be.true;
       expect(unpublish.neverCalledWith('test/index.html')).to.be.true;
@@ -116,7 +175,22 @@ describe('Deploy', function() {
 
       getFilesStub.withArgs(dir).returns([f]);
       await deploy({dir});
+
+      expect(errorStub.called).to.be.false;
       expect(unpublish.neverCalledWith('test/dir/index.html')).to.be.true;
+    });
+  });
+
+  describe('Error handling', function() {
+    it('should catch an invalid directory', async function() {
+      const dir = process.cwd() + "test/fixtures";
+      const f = `${dir}/test/index.html`;
+
+      getFilesStub.withArgs(dir).throws('InvalidDirectory', 'Not found');
+
+      await deploy({dir});
+
+      expect(fatalStub.calledOnceWith('Not found')).to.be.true;
     });
   });
 });
