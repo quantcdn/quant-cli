@@ -50,7 +50,8 @@ module.exports = async function(argv) {
   } catch (err) {
     // If we don't get the meta data back from quant
     // we should return.
-    return logger.info('Meta data is unavailable, we cannot automatically unpublish data.'); // eslint-disable-line
+    logger.info('Meta data is unavailable, we cannot automatically unpublish data.'); // eslint-disable-line
+    return 1001;
   }
 
   const relativeFiles = files.map((item) => `/${path.relative(p, item)}`);

@@ -28,10 +28,7 @@ describe('Deploy', function() {
   // Logger stubs.
   let titleStub;
   let infoStub;
-  let logStub;
   let successStub;
-  let tableStub;
-  let warnStub;
   let errorStub;
   let fatalStub;
 
@@ -183,14 +180,70 @@ describe('Deploy', function() {
 
   describe('Error handling', function() {
     it('should catch an invalid directory', async function() {
-      const dir = process.cwd() + "test/fixtures";
-      const f = `${dir}/test/index.html`;
-
+      const dir = process.cwd() + 'test/fixtures';
       getFilesStub.withArgs(dir).throws('InvalidDirectory', 'Not found');
+      await deploy({dir});
+      expect(fatalStub.calledOnceWith('Not found')).to.be.true;
+    });
+
+    it('should catch an invalid markup upload', async function() {
+      markup = sinon.stub().throws('error', 'failed');
+      meta = sinon.stub().returns({});
+
+      clientStub = sinon.stub(client, 'client').returns({
+        markup,
+        file,
+        meta,
+        unpublish,
+      });
+
+      const dir = process.cwd() + 'test/fixtures';
+      const f = `${dir}/test/index.html`;
+      getFilesStub.withArgs(dir).returns([f]);
 
       await deploy({dir});
 
-      expect(fatalStub.calledOnceWith('Not found')).to.be.true;
+      expect(errorStub.calledOnceWith('failed test/index.html')).to.be.true;
+      expect(markup.called).to.be.true;
+      expect(meta.called).to.be.true;
+    });
+
+    it('should handle invalid meta', async function() {
+      meta = sinon.stub().throws('error', 'unknown');
+      const dir = process.cwd() + 'test/fixtures';
+      const f = `${dir}/test/index.html`;
+
+      getFilesStub.withArgs(dir).returns([f]);
+      const metaRet = await deploy({dir});
+
+      expect(infoStub.calledOnceWith('Meta data is unavailable, we cannot automatically unpublish data.')); // eslint-disable-line
+      expect(metaRet).to.equal(1001);
+      expect(unpublish.called).to.be.false;
+    });
+
+    it('should handle an invalid unpublish', async function() {
+      const dir = process.cwd() + 'test/fixtures';
+      const f = `${dir}/test/index.html`;
+
+      getFilesStub.withArgs(dir).returns([f]);
+      meta = sinon.stub().returns({
+        meta: {
+          'index.html': {published: true},
+        },
+      });
+
+      unpublish = sinon.stub().throws('error', 'invalid');
+
+      clientStub = sinon.stub(client, 'client').returns({
+        markup,
+        file,
+        meta,
+        unpublish,
+      });
+
+      await deploy({dir});
+
+      expect(errorStub.calledOnceWith('invalid (index.html)')).to.be.true;
     });
   });
 });

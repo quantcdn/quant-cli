@@ -9,20 +9,25 @@
  *   quant file -f /path/to/asset.jpg -l /path/in/quant
  */
 
-const logger = require('../service/logger')();
+const logger = require('../service/logger');
 const config = require('../config');
 const client = require('../quant-client');
 
-module.exports = function(argv) {
+module.exports = async function(argv) {
   const filepath = argv.filepath;
   const location = argv.location;
 
-  // @TODO: Support dir.
+  // @TODO: Support passing config directory.
   config.load();
 
   logger.title('File');
 
-  client(config).file(filepath, location)
-      .then((body) => logger.success(`Added (${filepath})`))
-      .catch((err) => logger.error(`File [${filepath}] exists at location (${location})`)); // eslint-disable-line
+  try {
+    await client(config).file(filepath, location);
+  } catch(err) {
+    logger.error(`File [${filepath}] exists at location (${location})`);
+    return 1;
+  }
+
+  logger.success(`Added (${filepath})`);
 };

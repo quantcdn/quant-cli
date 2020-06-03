@@ -5,19 +5,20 @@
  *    quant info
  */
 
-const {title, success, info, log, table, fatal, warn} = require('../service/logger');
+const logger = require('../service/logger');
 const client = require('../quant-client');
 const config = require('../config');
 
-module.exports = function(argv) { // eslint-disable-line
+module.exports = async function(argv) { // eslint-disable-line
+  let data;
 
-  title('Info');
+  logger.title('Info');
 
   if (!config.load()) {
-    return info('Quant is not configured, run init.');
+    return logger.info('Quant is not configured, run init.');
   }
 
-  table(
+  logger.table(
       ['Endpoint', 'Customer', 'Project', 'Token'],
       [
         config.get('endpoint'),
@@ -29,32 +30,38 @@ module.exports = function(argv) { // eslint-disable-line
 
   const quant = client(config);
 
-  quant.ping()
-      .then((data) => {
-        success(
-            `Successfully connected to ${config.get('project')}`,
-        ); // eslint-disable-line max-len
-        quant.meta()
-            .then((data) => {
-              info('Published to your Quant:');
-              /* eslint-disable guard-for-in */
-              for (const path in data.meta) {
-                let pub;
-                if (data.meta[path].published) {
-                  pub = chalk.green('published');
-                } else {
-                  pub = chalk.yellow('unpublished');
-                }
-                log(` - ${path} (${pub})`);
-              }
-              /* eslint-enable guard-for-in */
-            })
-            .catch((err) => {
-              if (err.message == 'Global meta not found!') {
-                return warn('Unable to gather Quant metadata.');
-              }
-              info('No content has been deployed to Quant.');
-            });
-      })
-      .catch((err) => fatal(`Unable to connect to quant ${err.message}`)); // eslint-disable-line max-len
+  try {
+    await quant.ping();
+  } catch (err) {
+    logger.fatal(err.message);
+    return -1;
+  }
+
+  logger.success(`Successfully connected to ${config.get('project')}`);
+
+  try {
+    data = await quant.meta();
+  } catch (err) {
+    if (err.message == 'Global meta not found!') {
+      logger.warn('Unable to gather Quant metadata.');
+      return -2;
+    }
+    logger.info('No content has been deployed to Quant.');
+    return -3;
+  }
+
+  logger.info('Published to your Quant:');
+
+  /* eslint-disable guard-for-in */
+  for (const path in data.meta) {
+    let pub;
+    if (data.meta[path].published) {
+      pub = chalk.green('published');
+    } else {
+      pub = chalk.yellow('unpublished');
+    }
+    logger.log(` - ${path} (${pub})`);
+  }
+  /* eslint-enable guard-for-in */
+
 };
