@@ -19,6 +19,7 @@ const headers = {
   'User-Agent': 'Quant (+http://api.quantcdn.io)',
   'Quant-Token': 'test',
   'Quant-Customer': 'dev',
+  'Quant-Project': 'test',
   'Content-Type': 'application/json',
 };
 
@@ -33,6 +34,7 @@ describe('Quant Client', function() {
     cget.withArgs('endpoint').returns('http://localhost:8081');
     cget.withArgs('clientid').returns('dev');
     cget.withArgs('token').returns('test');
+    cget.withArgs('project').returns('test');
   });
 
   afterEach(function() {
@@ -142,6 +144,7 @@ describe('Quant Client', function() {
                 'User-Agent': 'Quant (+http://api.quantcdn.io)',
                 'Quant-Token': 'test',
                 'Quant-Customer': 'dev',
+                'Quant-Project': 'test',
                 'Content-Type': 'application/json',
               },
             }),

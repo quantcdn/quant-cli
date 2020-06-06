@@ -67,15 +67,15 @@ function writeResumeState() {
     console.log(chalk.bold.green('✅ DONE: Wrote resume state to ' + resumeFile));
 
 
-    fs.writeFile("last-run-failures.json", failures, 'utf8', function (err) {
+    fs.writeFile("last-run-failures.json", JSON.stringify(failures), 'utf8', function (err) {
       if (err) {
         console.log("An error occured while writing JSON Object to File.");
         return console.log(err);
       }
 
       console.log(chalk.bold.green('✅ DONE: Wrote failure log to last-run-failures.json'));
- 
-    }); 
+
+    });
 
 
 }
@@ -101,7 +101,7 @@ module.exports = async function(argv) {
 
   const domain = argv.domain;
   crawl = crawler(domain);
-  crawl.interval = 300;
+  crawl.interval = 500;
   crawl.maxConcurrency = 3;
   crawl.decodeResponses = true;
   crawl.maxResourceSize = 268435456; // 256MB
@@ -245,7 +245,7 @@ module.exports = async function(argv) {
             if (err) {
               console.log(chalk.bold.red('❌ ERROR REMOVING TEMPORARY FILE:') + ` ./tmp/${randomFile}`);
             }
-          }); 
+          });
           return;
         }
 
