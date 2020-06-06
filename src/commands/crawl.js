@@ -164,7 +164,7 @@ module.exports = async function(argv) {
     failures.push({'code': queueItem.stateData.code,'url': queueItem.url});
 
     if (queueItem.stateData.code == 403) {
-      process.exit();
+      console.log("403");
     }
   });
 
@@ -206,6 +206,7 @@ module.exports = async function(argv) {
           url: `${url}`,
           content: buffer.toString('utf8'),
           published: true,
+          find_attachments: false,
         },
         headers,
       };
