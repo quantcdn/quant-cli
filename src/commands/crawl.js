@@ -101,8 +101,8 @@ module.exports = async function(argv) {
 
   const domain = argv.domain;
   crawl = crawler(domain);
-  crawl.interval = 500;
-  crawl.maxConcurrency = 3;
+  crawl.interval = 300;
+  crawl.maxConcurrency = 8;
   crawl.decodeResponses = true;
   crawl.maxResourceSize = 268435456; // 256MB
 
@@ -165,6 +165,8 @@ module.exports = async function(argv) {
 
     if (queueItem.stateData.code == 403) {
       console.log("403");
+      crawl.stop();
+      writeResumeState();
     }
   });
 
