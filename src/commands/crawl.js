@@ -139,19 +139,23 @@ module.exports = async function(argv) {
 
   crawl.on("fetchredirect", function(queueItem, redirectQueueItem, response) {
 
+    var path = redirectQueueItem.path;
+
+    // Strip last slash.
+    if(path.substr(-1) === '/') {
+      path = path.substr(0, path.length - 1);
+    }
+
     // Add internal redirects to the expected domain to the queue.
     if (redirectQueueItem.host == hostname) {
       crawl.queueURL(redirectQueueItem.url, redirectQueueItem.referrer);
       console.log(chalk.bold.green('✅ Adding:') + ` ${redirectQueueItem.url}`);
+
+      // Add internal redirect.
+      quant.redirect(queueItem.path, path, 'quant-cli', 301);
+      console.log(chalk.bold.green('✅ REDIRECT:') + ` ${queueItem.path} => ${path}`);
     }
     else {
-      var path = redirectQueueItem.path;
-
-      // Strip last slash.
-      if(path.substr(-1) === '/') {
-        path = path.substr(0, path.length - 1);
-      }
-
       count++;
       quant.redirect(path, redirectQueueItem.url, 'quant-cli', 301);
       console.log(chalk.bold.green('✅ REDIRECT:') + ` ${path} => ${redirectQueueItem.url}`);
