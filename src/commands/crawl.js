@@ -181,8 +181,6 @@ module.exports = async function(argv) {
 
     if (queueItem.stateData.code == 403) {
       console.log("403");
-      crawl.stop();
-      writeResumeState();
     }
   });
 
