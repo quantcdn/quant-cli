@@ -102,9 +102,10 @@ module.exports = async function(argv) {
   const domain = argv.domain;
   crawl = crawler(domain);
   crawl.interval = 300;
-  crawl.maxConcurrency = 8;
   crawl.decodeResponses = true;
   crawl.maxResourceSize = 268435456; // 256MB
+  crawl.maxConcurrency = 4;
+  crawl.respectRobotsTxt = false;
 
   const quant = client(config);
 
@@ -139,7 +140,7 @@ module.exports = async function(argv) {
 
   crawl.on("fetchredirect", function(queueItem, redirectQueueItem, response) {
 
-    var path = redirectQueueItem.path;
+    var path = queueItem.path;
 
     // Strip last slash.
     if(path.substr(-1) === '/') {
@@ -148,12 +149,23 @@ module.exports = async function(argv) {
 
     // Add internal redirects to the expected domain to the queue.
     if (redirectQueueItem.host == hostname) {
+
+      crawl.queueURL(redirectQueueItem.url, redirectQueueItem.referrer);
+      console.log(chalk.bold.green('✅ Adding:') + ` ${redirectQueueItem.url}`);
+
+      // Ensure redirects pointing to themselves are ignored.
+      if (queueItem.path == path || queueItem.path == redirectQueueItem.path) {
+        return;
+      }
+
       crawl.queueURL(redirectQueueItem.url, redirectQueueItem.referrer);
       console.log(chalk.bold.green('✅ Adding:') + ` ${redirectQueueItem.url}`);
 
       // Add internal redirect.
-      quant.redirect(queueItem.path, path, 'quant-cli', 301);
-      console.log(chalk.bold.green('✅ REDIRECT:') + ` ${queueItem.path} => ${path}`);
+      if (queueItem.path != path) {
+        quant.redirect(queueItem.path, path, 'quant-cli', 301);
+        console.log(chalk.bold.green('✅ REDIRECT:') + ` ${queueItem.path} => ${path}`);
+      }
     }
     else {
       count++;
@@ -204,13 +216,22 @@ module.exports = async function(argv) {
     if (response.headers['content-type'].includes("text/html")) {
 
       const buffer = Buffer.from(responseBuffer, 'utf8');
+      var content = buffer.toString('utf8');
+
+      // @todo: Relative link rewrite, needs to be more robust and configurable.
+      const makeRelative = true;
+
+      if (makeRelative) {
+        const domainRegex = new RegExp(domain, 'g');
+        content = content.replace(domainRegex, '');
+      }
 
       const options = {
         url: `${config.get('endpoint')}`,
         json: true,
         body: {
           url: `${url}`,
-          content: buffer.toString('utf8'),
+          content: content,
           published: true,
           find_attachments: false,
         },
