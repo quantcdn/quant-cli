@@ -189,7 +189,7 @@ module.exports = async function(argv) {
     //console.log("It was a resource of type %s", response.headers['content-type']);
 
     // Find background images in css and page body.
-    if (response.headers['content-type'].includes("text/html") || response.headers['content-type'].includes("css")) {
+    if (response.headers['content-type'] && (response.headers['content-type'].includes("text/html") || response.headers['content-type'].includes("css"))) {
       const re = /background(-image)?:.*?url\(\s*(?<url>.*?)\s*\)/gi;
       const found = matchAll(responseBuffer, re);
 
@@ -211,7 +211,7 @@ module.exports = async function(argv) {
     let url = queueItem.url.replace(domain, '');
 
     // Send to Quant as content.
-    if (response.headers['content-type'].includes("text/html")) {
+    if (response.headers['content-type'] && response.headers['content-type'].includes("text/html")) {
 
       const buffer = Buffer.from(responseBuffer, 'utf8');
       var content = buffer.toString('utf8');
