@@ -13,9 +13,10 @@ const getFiles = require('../helper/getFiles');
 const path = require('path');
 
 module.exports = async function(argv) {
-  console.log(chalk.bold.green('*** Quant deploy ***'));
   let files;
   let data;
+
+  console.log(chalk.bold.green('*** Quant deploy ***'));
 
   // Make sure configuration is loaded.
   config.load();
@@ -33,14 +34,14 @@ module.exports = async function(argv) {
   /* eslint-disable guard-for-in */
   for (const file in files) {
     const filepath = path.relative(p, files[file]);
-    const method = filepath.endsWith('index.html') ? 'markup' : 'file';
 
     try {
-      await quant[method](files[file]);
+      await quant.send(files[file]);
     } catch (err) {
       console.log(chalk.yellow(err.message + ` (${filepath})`));
       continue;
     }
+
     console.log(chalk.bold.green('✅') + ` ${filepath}`);
   }
 

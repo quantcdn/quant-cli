@@ -6,6 +6,7 @@ const request = require('request');
 const util = require('util');
 const fs = require('fs');
 const path = require('path');
+const mime = require('mime-types');
 
 const client = function(config) {
   const req = util.promisify(request); // eslint-disable-line
@@ -92,6 +93,52 @@ const client = function(config) {
     },
 
     /**
+     * Send a file to the server.
+     *
+     * @param {string} file
+     *   The path to the file.
+     * @param {string} location
+     *   The path the location.
+     * @param {bool} published
+     *   The status.
+     * @param {string} encoding
+     *   The encoding type.
+     *
+     * @return {object}
+     *   The API response.
+     */
+    send: async function(file, location, published = true, encoding = 'utf-8') {
+      const mimeType = mime.lookup(file);
+
+      if (mimeType == 'text/html') {
+        if (!location) {
+          const p = path.resolve(process.cwd(), config.get('dir'));
+          // If a location isn't given, calculate it.
+          location = path.relative(p, file);
+        }
+
+        if (!file.endsWith('index.html')) {
+          // Some static site generators don't output files
+          // in the way that Quant is expecting to handle them
+          // this forces the location to a quant valid path
+          // and creates a redirect form the file location.
+          from = location.startsWith('/') ? location : `/${location}`;
+          location = location.replace('.html', '/index.html');
+          to = location.startsWith('/') ? location : `/${location}`;
+          try {
+            await this.redirect(from, to.replace('/index.html', ''));
+          } catch (err) {
+            // Fail silently if this has been created already.
+          };
+        }
+
+        return await this.markup(file, location, published, encoding);
+      } else {
+        return await this.file(file, location);
+      }
+    },
+
+    /**
      * Upload markup.
      *
      * @param {string} file
@@ -113,7 +160,7 @@ const client = function(config) {
         location = path.relative(p, file);
       }
 
-      if (!file.endsWith('index.html')) {
+      if (!file.endsWith('index.html') && !location.endsWith('index.html')) {
         throw new Error('Can only upload an index.html file.');
       }
 
