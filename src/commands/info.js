@@ -30,7 +30,8 @@ module.exports = function(argv) { // eslint-disable-line
         quant.meta()
             .then((data) => {
               console.log(chalk.yellow('\nInfo:'));
-              console.log(`Total published: ${data.total_records}`);
+              console.log(`Total records: ${data.total_records}`);
+              console.log(data.records[0].meta);
             })
             .catch((err) => {
               console.error(chalk.red(err.message));

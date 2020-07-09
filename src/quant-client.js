@@ -87,9 +87,9 @@ const client = function(config) {
      * @TODO
      *   - Async iterator for memory 21k items ~ 40mb.
      */
-    meta: async function(unfold = false) {
+    meta: async function(all = true, unfold = false) {
       const records = [];
-      const url = `${config.get('endpoint')}/global-meta?page_size=100`;
+      const url = all ? `${config.get('endpoint')}/global-meta?page_size=100` : `${config.get('endpoint')}/global-meta?page_size=100&published=true`;
 
       const doUnfold = async function(i) {
         const res = await get({
@@ -98,7 +98,7 @@ const client = function(config) {
           headers,
         });
         if (res.body.global_meta.records) {
-          records.push(res.body.global_meta.records);
+          records.push(...res.body.global_meta.records);
         }
       };
 
@@ -111,7 +111,7 @@ const client = function(config) {
 
       // Seed the record set.
       const res = await get(options);
-      records.push(res.body.global_meta.records);
+      records.push(...res.body.global_meta.records);
 
       if (unfold) {
         page++;

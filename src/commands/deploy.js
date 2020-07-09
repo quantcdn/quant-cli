@@ -46,37 +46,24 @@ module.exports = async function(argv) {
   }
 
   try {
-    data = await quant.meta();
+    data = await quant.meta(true, true);
   } catch (err) {
     console.log(chalk.yellow(err.message));
   }
 
   const relativeFiles = files.map((item) => `/${path.relative(p, item)}`);
 
-  for (const key in data.meta) {
-    if (!data.meta[key].published || relativeFiles.includes(key)) {
+  for (const key in data.records) {
+    const item = data.records[key];
+    if (!item.meta.published || relativeFiles.includes(item.meta.url)) {
       continue;
     }
-
-    // Check the non-index.html meta.
-    const bare = key.replace('/index.html', '');
-
-    // @TODO: Quant API unpublishes the bare route but the
-    // global meta doesn't update the index.html file so if we
-    // don't do this it will attempt to unpublish paths every
-    // time. We can't unpublish /path/to/index.html either
-    // as this is invalid within the API.
-    if (typeof data.meta[bare] != 'undefined' && !data.meta[bare].published) {
-      continue;
-    }
-
     try {
-      await quant.unpublish(key);
+      await quant.unpublish(item.meta.url);
     } catch (err) {
-      console.log(chalk.yellow(err.message + ` (${key})`));
-      continue;
+      console.log(chalk.yellow(err.message + ` (${item.meta.url})`));
     }
-    console.log(chalk.bold.green('✅') + ` ${key} unpublished.`);
+    console.log(chalk.bold.green('✅') + ` ${item.meta.url} unpublished.`);
   }
   /* eslint-enable guard-for-in */
 };
