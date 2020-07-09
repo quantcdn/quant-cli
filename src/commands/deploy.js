@@ -46,24 +46,27 @@ module.exports = async function(argv) {
   }
 
   try {
-    data = await quant.meta(true, true);
+    data = await quant.meta(true);
   } catch (err) {
     console.log(chalk.yellow(err.message));
   }
 
   const relativeFiles = files.map((item) => `/${path.relative(p, item)}`);
 
-  for (const key in data.records) {
-    const item = data.records[key];
-    if (!item.meta.published || relativeFiles.includes(item.meta.url)) {
-      continue;
+  data.records.map(async (item) => {
+    if (relativeFiles.includes(item)) {
+      // If the URL from quant matches an expected location on disk
+      // we assume that this record is still required.
+      return;
     }
+
     try {
-      await quant.unpublish(item.meta.url);
+      await quant.unpublish(item);
     } catch (err) {
-      console.log(chalk.yellow(err.message + ` (${item.meta.url})`));
+      console.log(chalk.yellow(err.message + ` (${item})`));
     }
-    console.log(chalk.bold.green('✅') + ` ${item.meta.url} unpublished.`);
-  }
+    console.log(chalk.bold.green('✅') + ` ${item} unpublished.`);
+  });
+
   /* eslint-enable guard-for-in */
 };
