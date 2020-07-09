@@ -76,20 +76,56 @@ const client = function(config) {
     /**
      * Access the global meta for the project.
      *
+     * @param {bool} unfold
+     *   Unfold the record set.
+     *
      * @return {object}
      *   The global meta response object.
      *
      * @throws Error.
+     *
+     * @TODO
+     *   - Async iterator for memory 21k items ~ 40mb.
      */
-    meta: async function() {
+    meta: async function(unfold = false) {
+      const records = [];
+      const url = `${config.get('endpoint')}/global-meta?page_size=100`;
+
+      const doUnfold = async function(i) {
+        const res = await get({
+          url: `${url}&page=${i}`,
+          json: true,
+          headers,
+        });
+        if (res.body.global_meta.records) {
+          records.push(res.body.global_meta.records);
+        }
+      };
+
+      let page = 1;
       const options = {
-        url: `${config.get('endpoint')}/global-meta`,
+        url: `${url}&page=${page}`,
         json: true,
         headers,
       };
 
+      // Seed the record set.
       const res = await get(options);
-      return handleResponse(res);
+      records.push(res.body.global_meta.records);
+
+      if (unfold) {
+        page++;
+        while (res.body.global_meta.total_pages > page) {
+          await doUnfold(page);
+          page++;
+        }
+      }
+
+      return {
+        total_pages: res.body.global_meta.total_pages,
+        total_records: res.body.global_meta.total_records,
+        records,
+      };
     },
 
     /**
