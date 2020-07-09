@@ -27,6 +27,7 @@
   },
   "dependencies": {
     "chalk": "^4.0.0",
+    "md5-file": "^5.0.0",
     "mime-types": "^2.1.27",
     "prompt": "^1.0.0",
     "request": "^2.88.2",

@@ -7,6 +7,7 @@ const util = require('util');
 const fs = require('fs');
 const path = require('path');
 const mime = require('mime-types');
+const md5 = require('md5-file');
 
 const client = function(config) {
   const req = util.promisify(request); // eslint-disable-line
@@ -164,6 +165,8 @@ const client = function(config) {
         throw new Error('Can only upload an index.html file.');
       }
 
+      const hash = md5.sync(file);
+
       const options = {
         url: `${config.get('endpoint')}`,
         json: true,
@@ -171,6 +174,7 @@ const client = function(config) {
           url: `/${location}`,
           content: fs.readFileSync(file, {encoding}),
           published,
+          hash,
         },
         headers,
       };
@@ -210,6 +214,8 @@ const client = function(config) {
         data: fs.createReadStream(local),
       };
 
+      const hash = md5.sync(local);
+
       location = location.startsWith('/') ? location : `/${location}`;
 
       const options = {
@@ -219,6 +225,7 @@ const client = function(config) {
           ...headers,
           'Content-Type': 'multipart/form-data',
           'Quant-File-Url': location,
+          'Quant-Hash': hash,
         },
         formData,
       };
