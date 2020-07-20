@@ -51,19 +51,19 @@ module.exports = async function(argv) {
     console.log(chalk.yellow(err.message));
   }
 
+  // Quant meta returns relative paths, so we map our local filesystem
+  // to relative URL paths so that we can do a simple [].includes to
+  // determine if we need to unpublish the URL.
   const relativeFiles = files.map((item) => `/${path.relative(p, item)}`);
 
   data.records.map(async (item) => {
     if (relativeFiles.includes(item)) {
-      // If the URL from quant matches an expected location on disk
-      // we assume that this record is still required.
       return;
     }
-
     try {
       await quant.unpublish(item);
     } catch (err) {
-      console.log(chalk.yellow(err.message + ` (${item})`));
+      return console.log(chalk.yellow(err.message + ` (${item})`));
     }
     console.log(chalk.bold.green('✅') + ` ${item} unpublished.`);
   });
