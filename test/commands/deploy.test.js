@@ -18,15 +18,12 @@ describe('Deploy', function() {
   let getFilesStub;
   let configGetStub;
   let clientStub;
-  let markup;
-  let file;
   let meta;
   let unpublish;
 
   beforeEach(function() {
-    markup = sinon.stub();
-    file = sinon.stub();
     unpublish = sinon.stub();
+    send = sinon.stub();
 
     configGetStub = sinon.stub(config, 'get');
     configGetStub.withArgs('endpoint').returns('http://localhost:8081');
@@ -46,10 +43,9 @@ describe('Deploy', function() {
     beforeEach(function() {
       meta = sinon.stub().returns({});
       clientStub = sinon.stub(client, 'client').returns({
-        markup,
-        file,
         meta,
         unpublish,
+        send,
       });
     });
 
@@ -63,8 +59,7 @@ describe('Deploy', function() {
 
       await deploy({dir});
 
-      expect(markup.calledOnceWith(f)).to.be.true;
-      expect(file.calledOnceWith(f)).to.be.false;
+      expect(send.calledOnceWith(f)).to.be.true;
     });
 
     it('should deploy built css files', async function() {
@@ -77,8 +72,7 @@ describe('Deploy', function() {
 
       await deploy({dir});
 
-      expect(markup.calledOnceWith(f)).to.be.false;
-      expect(file.calledOnceWith(f)).to.be.true;
+      expect(send.calledOnceWith(f)).to.be.true;
     });
   });
 
@@ -91,10 +85,9 @@ describe('Deploy', function() {
         },
       });
       clientStub = sinon.stub(client, 'client').returns({
-        markup,
-        file,
         meta,
         unpublish,
+        send,
       });
     });
 
