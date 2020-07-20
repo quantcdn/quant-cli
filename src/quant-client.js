@@ -7,6 +7,7 @@ const util = require('util');
 const fs = require('fs');
 const path = require('path');
 const mime = require('mime-types');
+const querystring = require('querystring');
 
 const client = function(config) {
   const req = util.promisify(request); // eslint-disable-line
@@ -87,9 +88,13 @@ const client = function(config) {
      * @TODO
      *   - Async iterator for memory 21k items ~ 40mb.
      */
-    meta: async function(unfold = false) {
+    meta: async function(unfold = false, extend = {}) {
       const records = [];
-      const url = `${config.get('endpoint')}/global-meta?page_size=500&published=true`;
+      const query = Object.assign({
+        page_size: 500,
+        published: true
+      }, extend)
+      const url = `${config.get('endpoint')}/global-meta?${querystring.stringify(query)} `;
 
       const doUnfold = async function(i) {
         const res = await get({
