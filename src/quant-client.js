@@ -154,22 +154,34 @@ const client = function(config) {
      *   The API response.
      */
     markup: async function(file, location, published = true, encoding = 'utf-8') { // eslint-disable-line max-len
+      let content;
+
       if (!location) {
         const p = path.resolve(process.cwd(), config.get('dir'));
         // If a location isn't given, calculate it.
         location = path.relative(p, file);
       }
 
-      if (!file.endsWith('index.html') && !location.endsWith('index.html')) {
-        throw new Error('Can only upload an index.html file.');
+      location = location.startsWith("/") ? location : `/${location}`;
+
+      if (Buffer.isBuffer(file)) {
+        content = file.toString('utf8');
+        console.log(content);
+      } else {
+        if (!file.endsWith('index.html') && !location.endsWith('index.html')) {
+          throw new Error('Can only upload an index.html file.');
+        }
+        fs.readFileSync(file, [encoding]);
       }
+
+      console.log(location);
 
       const options = {
         url: `${config.get('endpoint')}`,
         json: true,
         body: {
-          url: `/${location}`,
-          content: fs.readFileSync(file, {encoding}),
+          url: location,
+          content,
           published,
         },
         headers,
@@ -193,22 +205,29 @@ const client = function(config) {
      * @throws Error
      */
     file: async function(local, location) {
-      if (!location) {
-        const p = path.resolve(process.cwd(), config.get('dir'));
-        // If a location isn't given, calculate it.
-        location = path.relative(p, local);
-        location.replace(path.basename(location), '');
+      let formData;
+
+      if (Buffer.isBuffer(local)) {
+        formData = {
+          data: local,
+        };
       } else {
-        location = `${location}/${path.basename(local)}`;
-      }
+        if (!location) {
+          const p = path.resolve(process.cwd(), config.get("dir"));
+          // If a location isn't given, calculate it.
+          location = path.relative(p, local);
+          location.replace(path.basename(location), "");
+        } else {
+          location = `${location}/${path.basename(local)}`;
+        }
+        if (!fs.existsSync(local)) {
+          throw new Error(`${local} is not accessible.`);
+        }
 
-      if (!fs.existsSync(local)) {
-        throw new Error(`${local} is not accessible.`);
+        formData = {
+          data: fs.createReadStream(local),
+        };
       }
-
-      const formData = {
-        data: fs.createReadStream(local),
-      };
 
       location = location.startsWith('/') ? location : `/${location}`;
 
