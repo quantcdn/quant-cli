@@ -7,6 +7,7 @@ const util = require('util');
 const fs = require('fs');
 const path = require('path');
 const mime = require('mime-types');
+const {tmpdir} = require('os');
 
 const client = function(config) {
   const req = util.promisify(request); // eslint-disable-line
@@ -156,25 +157,21 @@ const client = function(config) {
     markup: async function(file, location, published = true, encoding = 'utf-8') { // eslint-disable-line max-len
       let content;
 
-      if (!location) {
-        const p = path.resolve(process.cwd(), config.get('dir'));
-        // If a location isn't given, calculate it.
-        location = path.relative(p, file);
-      }
-
-      location = location.startsWith("/") ? location : `/${location}`;
-
       if (Buffer.isBuffer(file)) {
         content = file.toString('utf8');
-        console.log(content);
       } else {
+        if (!location) {
+          const p = path.resolve(process.cwd(), config.get('dir'));
+          // If a location isn't given, calculate it.
+          location = path.relative(p, file);
+        }
         if (!file.endsWith('index.html') && !location.endsWith('index.html')) {
           throw new Error('Can only upload an index.html file.');
         }
         fs.readFileSync(file, [encoding]);
       }
 
-      console.log(location);
+      location = location.startsWith('/') ? location : `/${location}`;
 
       const options = {
         url: `${config.get('endpoint')}`,
@@ -213,17 +210,17 @@ const client = function(config) {
         };
       } else {
         if (!location) {
-          const p = path.resolve(process.cwd(), config.get("dir"));
+          const p = path.resolve(process.cwd(), config.get('dir'));
           // If a location isn't given, calculate it.
           location = path.relative(p, local);
-          location.replace(path.basename(location), "");
+          location.replace(path.basename(location), '');
         } else {
           location = `${location}/${path.basename(local)}`;
         }
         if (!fs.existsSync(local)) {
-          throw new Error(`${local} is not accessible.`);
+          throw new Error('File is not accessible.');
+          // throw new Error(`${local} is not accessible.`);
         }
-
         formData = {
           data: fs.createReadStream(local),
         };
