@@ -7,6 +7,7 @@ const util = require('util');
 const fs = require('fs');
 const path = require('path');
 const mime = require('mime-types');
+const querystring = require('querystring');
 
 const client = function(config) {
   const req = util.promisify(request); // eslint-disable-line
@@ -76,20 +77,63 @@ const client = function(config) {
     /**
      * Access the global meta for the project.
      *
+     * @param {bool} unfold
+     *   Unfold the record set.
+     *
      * @return {object}
      *   The global meta response object.
      *
      * @throws Error.
+     *
+     * @TODO
+     *   - Async iterator for memory 21k items ~ 40mb.
      */
-    meta: async function() {
+    meta: async function(unfold = false, extend = {}) {
+      const records = [];
+      const query = Object.assign({
+        page_size: 500,
+        published: true
+      }, extend)
+      const url = `${config.get('endpoint')}/global-meta?${querystring.stringify(query)} `;
+
+      const doUnfold = async function(i) {
+        const res = await get({
+          url: `${url}&page=${i}`,
+          json: true,
+          headers,
+        });
+
+        if (res.body.global_meta.records) {
+          res.body.global_meta.records.map((item) => records.push(item.meta.url));
+        }
+      };
+
+      let page = 1;
       const options = {
-        url: `${config.get('endpoint')}/global-meta`,
+        url: `${url}&page=${page}`,
         json: true,
         headers,
       };
 
+      // Seed the record set.
       const res = await get(options);
-      return handleResponse(res);
+      if (res.body.global_meta.records) {
+        res.body.global_meta.records.map((item) => records.push(item.meta.url));
+      }
+
+      if (unfold) {
+        page++;
+        while (res.body.global_meta.total_pages > page) {
+          await doUnfold(page);
+          page++;
+        }
+      }
+
+      return {
+        total_pages: res.body.global_meta.total_pages,
+        total_records: res.body.global_meta.total_records,
+        records,
+      };
     },
 
     /**
