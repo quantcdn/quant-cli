@@ -143,7 +143,9 @@ module.exports = async function(argv) {
         content = content.replace(domainRegex, '');
       }
       console.log(chalk.bold.green('✅ MARKUP:') + ` ${url}`);
-      await quant.markup(Buffer.from(content), url);
+      try {
+        await quant.markup(Buffer.from(content), url);
+      } catch (err) {}
     } else {
       // @TODO: Identify why the file needs to be downloaded twice is -
       // it looks to only affect some files, it seems PNG is affected but
@@ -162,7 +164,9 @@ module.exports = async function(argv) {
       fs.writeFileSync(tmpfile.name, asset);
 
       console.log(chalk.bold.green('✅ FILE:') + ` ${url}`);
-      await quant.file(tmpfile.name, url, true);
+      try {
+        await quant.file(tmpfile.name, url, true);
+      } catch (err) {}
     }
     count++;
   });
