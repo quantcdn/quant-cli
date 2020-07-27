@@ -192,16 +192,18 @@ const client = function(config) {
      * Send a file to the Quant API.
      *
      * @param {string} local
-     *  File path on disk.
+     *   File path on disk.
      * @param {string} location
      *   Accessible location.
+     * @param {bool} absolute
+     *   If the location is an absolute path.
      *
      * @return {object}
      *   The successful payload.
      *
      * @throws Error
      */
-    file: async function(local, location) {
+    file: async function(local, location, absolute = false) {
       let formData;
 
       if (Buffer.isBuffer(local)) {
@@ -215,7 +217,9 @@ const client = function(config) {
           location = path.relative(p, local);
           location.replace(path.basename(location), '');
         } else {
-          location = `${location}/${path.basename(local)}`;
+          if (!absolute) {
+            location = `${location}/${path.basename(local)}`;
+          }
         }
         if (!fs.existsSync(local)) {
           throw new Error('File is not accessible.');
@@ -238,6 +242,9 @@ const client = function(config) {
         },
         formData,
       };
+
+      console.log(local, location);
+      console.log(options);
 
       const res = await post(options);
       return handleResponse(res);

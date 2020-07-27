@@ -162,7 +162,7 @@ module.exports = async function(argv) {
       fs.writeFileSync(tmpfile.name, asset);
 
       console.log(chalk.bold.green('✅ FILE:') + ` ${url}`);
-      await quant.file(tmpfile.name, url);
+      await quant.file(tmpfile.name, url, true);
     }
     count++;
   });
