@@ -7,7 +7,7 @@ const util = require('util');
 const fs = require('fs');
 const path = require('path');
 const mime = require('mime-types');
-const {tmpdir} = require('os');
+const querystring = require('querystring');
 
 const client = function(config) {
   const req = util.promisify(request); // eslint-disable-line
@@ -47,7 +47,7 @@ const client = function(config) {
 
     const body = typeof response.body == 'string' ? JSON.parse(response.body) : response.body; // eslint-disable-line max-len
 
-    if (body.error) {
+    if (body.error || (typeof body.errorMsg != 'undefined' && body.errorMsg.length > 0)) { // eslint-disable-line max-len
       throw new Error(body.errorMsg);
     }
 
@@ -77,20 +77,65 @@ const client = function(config) {
     /**
      * Access the global meta for the project.
      *
+     * @param {bool} unfold
+     *   Unfold the record set.
+     * @param {object} extend
+     *   Additional query parameters to send.
+     *
      * @return {object}
      *   The global meta response object.
      *
      * @throws Error.
+     *
+     * @TODO
+     *   - Async iterator for memory 21k items ~ 40mb.
      */
-    meta: async function() {
+    meta: async function(unfold = false, extend = {}) {
+      const records = [];
+      const query = Object.assign({
+        page_size: 500,
+        published: true,
+      }, extend);
+      const url = `${config.get('endpoint')}/global-meta?${querystring.stringify(query)} `;
+
+      const doUnfold = async function(i) {
+        const res = await get({
+          url: `${url}&page=${i}`,
+          json: true,
+          headers,
+        });
+
+        if (res.body.global_meta.records) {
+          res.body.global_meta.records.map((item) => records.push(item.meta.url));
+        }
+      };
+
+      let page = 1;
       const options = {
-        url: `${config.get('endpoint')}/global-meta`,
+        url: `${url}&page=${page}`,
         json: true,
         headers,
       };
 
+      // Seed the record set.
       const res = await get(options);
-      return handleResponse(res);
+      if (res.body.global_meta.records) {
+        res.body.global_meta.records.map((item) => records.push(item.meta.url));
+      }
+
+      if (unfold) {
+        page++;
+        while (res.body.global_meta.total_pages > page) {
+          await doUnfold(page);
+          page++;
+        }
+      }
+
+      return {
+        total_pages: res.body.global_meta.total_pages,
+        total_records: res.body.global_meta.total_records,
+        records,
+      };
     },
 
     /**
@@ -110,14 +155,12 @@ const client = function(config) {
      */
     send: async function(file, location, published = true, encoding = 'utf-8') {
       const mimeType = mime.lookup(file);
-
       if (mimeType == 'text/html') {
         if (!location) {
           const p = path.resolve(process.cwd(), config.get('dir'));
           // If a location isn't given, calculate it.
           location = path.relative(p, file);
         }
-
         if (!file.endsWith('index.html')) {
           // Some static site generators don't output files
           // in the way that Quant is expecting to handle them
