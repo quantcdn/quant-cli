@@ -47,7 +47,7 @@ const client = function(config) {
 
     const body = typeof response.body == 'string' ? JSON.parse(response.body) : response.body; // eslint-disable-line max-len
 
-    if (body.error) {
+    if (body.error || (typeof body.errorMsg != 'undefined' && body.errorMsg.length > 0)) { // eslint-disable-line max-len
       throw new Error(body.errorMsg);
     }
 
@@ -79,6 +79,8 @@ const client = function(config) {
      *
      * @param {bool} unfold
      *   Unfold the record set.
+     * @param {object} extend
+     *   Additional query parameters to send.
      *
      * @return {object}
      *   The global meta response object.
@@ -153,14 +155,12 @@ const client = function(config) {
      */
     send: async function(file, location, published = true, encoding = 'utf-8') {
       const mimeType = mime.lookup(file);
-
       if (mimeType == 'text/html') {
         if (!location) {
           const p = path.resolve(process.cwd(), config.get('dir'));
           // If a location isn't given, calculate it.
           location = path.relative(p, file);
         }
-
         if (!file.endsWith('index.html')) {
           // Some static site generators don't output files
           // in the way that Quant is expecting to handle them

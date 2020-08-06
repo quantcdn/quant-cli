@@ -20,6 +20,11 @@ const argv = yargs
         alias: 'e',
         type: 'string',
       },
+      project: {
+        description: 'Optionally provide the project',
+        alias: 'p',
+        type: 'string',
+      },
       dir: {
         description: 'Optionally provide static asset directory',
         alias: 'd',
