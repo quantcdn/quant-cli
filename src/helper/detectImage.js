@@ -29,7 +29,7 @@ const detectImages = async (string, host = null, protocol = 'https') => {
   }
 
   return items.map((item) => {
-    let img = item.groups.url.replace(/'|\"/g, "");
+    let img = item.groups.url.replace(/'|\"/g, '');
     if (host) {
       img = `${protocol}://${host}${img}`;
     }
