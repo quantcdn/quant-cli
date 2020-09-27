@@ -94,8 +94,8 @@ const client = function(config) {
       const records = [];
       const query = Object.assign({
         page_size: 500,
-        published: true
-      }, extend)
+        published: true,
+      }, extend);
       const url = `${config.get('endpoint')}/global-meta?${querystring.stringify(query)} `;
 
       const doUnfold = async function(i) {
@@ -198,22 +198,30 @@ const client = function(config) {
      *   The API response.
      */
     markup: async function(file, location, published = true, encoding = 'utf-8') { // eslint-disable-line max-len
-      if (!location) {
-        const p = path.resolve(process.cwd(), config.get('dir'));
-        // If a location isn't given, calculate it.
-        location = path.relative(p, file);
+      let content;
+
+      if (Buffer.isBuffer(file)) {
+        content = file.toString('utf8');
+      } else {
+        if (!location) {
+          const p = path.resolve(process.cwd(), config.get('dir'));
+          // If a location isn't given, calculate it.
+          location = path.relative(p, file);
+        }
+        if (!file.endsWith('index.html') && !location.endsWith('index.html')) {
+          throw new Error('Can only upload an index.html file.');
+        }
+        fs.readFileSync(file, [encoding]);
       }
 
-      if (!file.endsWith('index.html') && !location.endsWith('index.html')) {
-        throw new Error('Can only upload an index.html file.');
-      }
+      location = location.startsWith('/') ? location : `/${location}`;
 
       const options = {
         url: `${config.get('endpoint')}`,
         json: true,
         body: {
-          url: `/${location}`,
-          content: fs.readFileSync(file, {encoding}),
+          url: location,
+          content,
           published,
         },
         headers,
@@ -227,32 +235,43 @@ const client = function(config) {
      * Send a file to the Quant API.
      *
      * @param {string} local
-     *  File path on disk.
+     *   File path on disk.
      * @param {string} location
      *   Accessible location.
+     * @param {bool} absolute
+     *   If the location is an absolute path.
      *
      * @return {object}
      *   The successful payload.
      *
      * @throws Error
      */
-    file: async function(local, location) {
-      if (!location) {
-        const p = path.resolve(process.cwd(), config.get('dir'));
-        // If a location isn't given, calculate it.
-        location = path.relative(p, local);
-        location.replace(path.basename(location), '');
+    file: async function(local, location, absolute = false) {
+      let formData;
+
+      if (Buffer.isBuffer(local)) {
+        formData = {
+          data: local,
+        };
       } else {
-        location = `${location}/${path.basename(local)}`;
+        if (!location) {
+          const p = path.resolve(process.cwd(), config.get('dir'));
+          // If a location isn't given, calculate it.
+          location = path.relative(p, local);
+          location.replace(path.basename(location), '');
+        } else {
+          if (!absolute) {
+            location = `${location}/${path.basename(local)}`;
+          }
+        }
+        if (!fs.existsSync(local)) {
+          throw new Error('File is not accessible.');
+          // throw new Error(`${local} is not accessible.`);
+        }
+        formData = {
+          data: fs.createReadStream(local),
+        };
       }
-
-      if (!fs.existsSync(local)) {
-        throw new Error(`${local} is not accessible.`);
-      }
-
-      const formData = {
-        data: fs.createReadStream(local),
-      };
 
       location = location.startsWith('/') ? location : `/${location}`;
 
@@ -266,6 +285,9 @@ const client = function(config) {
         },
         formData,
       };
+
+      console.log(local, location);
+      console.log(options);
 
       const res = await post(options);
       return handleResponse(res);

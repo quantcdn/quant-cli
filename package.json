@@ -26,10 +26,14 @@
     "quant": "cli.js"
   },
   "dependencies": {
+    "big-json": "^3.1.0",
     "chalk": "^4.0.0",
     "mime-types": "^2.1.27",
     "prompt": "^1.0.0",
     "request": "^2.88.2",
+    "simplecrawler": "^1.1.9",
+    "string.prototype.matchall": "^4.0.2",
+    "tmp": "^0.2.1",
     "yargs": "^15.3.1"
   },
   "devDependencies": {
