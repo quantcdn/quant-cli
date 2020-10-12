@@ -105,7 +105,7 @@ const client = function(config) {
           headers,
         });
 
-        if (res.body.global_meta.records) {
+        if (res.body.global_meta && res.body.global_meta.records) {
           res.body.global_meta.records.map((item) => records.push(item.meta.url));
         }
       };
@@ -119,6 +119,13 @@ const client = function(config) {
 
       // Seed the record set.
       const res = await get(options);
+
+      if (!res.body.global_meta) {
+        // If no records have been published then global_meta is not
+        // present in the response.
+        return;
+      }
+
       if (res.body.global_meta.records) {
         res.body.global_meta.records.map((item) => records.push(item.meta.url));
       }
