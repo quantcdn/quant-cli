@@ -17,11 +17,11 @@ const config = require('../config');
 const client = require('../quant-client');
 
 module.exports = function(argv) {
-  const token = argv.token;
-  const clientid = argv.clientid;
-  const endpoint = argv.endpoint;
-  const project = argv.project;
-  const dir = argv.dir;
+  const token = Array.isArray(argv.token) ? argv.token.pop() : argv.token;
+  const clientid = Array.isArray(argv.clientid) ? argv.clientid.pop() : argv.clientid;
+  const endpoint = Array.isArray(argv.endpoint) ? argv.endpoint.pop() : argv.endpoint;
+  const project = Array.isArray(argv.project) ? argv.project.pop() : argv.project;
+  const dir = Array.isArray(argv.dir) ? argv.dir.pop() : argv.dir;
 
   console.log(chalk.bold.green('*** Initialise Quant ***'));
 
