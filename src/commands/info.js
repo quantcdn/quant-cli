@@ -30,7 +30,11 @@ module.exports = function(argv) { // eslint-disable-line
         quant.meta()
             .then((data) => {
               console.log(chalk.yellow('\nInfo:'));
-              console.log(`Total records: ${data.total_records}`);
+              if (data && data.total_records) {
+                console.log(`Total records: ${data.total_records}`);
+              } else {
+                console.log('Use deploy to start seeding!');
+              }
             })
             .catch((err) => {
               console.error(chalk.red(err.message));
