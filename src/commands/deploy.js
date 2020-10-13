@@ -56,6 +56,12 @@ module.exports = async function(argv) {
   // determine if we need to unpublish the URL.
   const relativeFiles = files.map((item) => `/${path.relative(p, item)}`);
 
+  if (!data || ! 'records' in data) {
+    // The API doesn't return meta data if nothing has previously been
+    // pushed for the project.
+    return;
+  }
+
   data.records.map(async (item) => {
     if (relativeFiles.includes(item)) {
       return;

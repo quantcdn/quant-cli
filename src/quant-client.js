@@ -119,6 +119,7 @@ const client = function(config) {
 
       // Seed the record set.
       const res = await get(options);
+      console.log(res.body);
 
       if (!res.body.global_meta) {
         // If no records have been published then global_meta is not
@@ -182,7 +183,6 @@ const client = function(config) {
             // Fail silently if this has been created already.
           };
         }
-
         return await this.markup(file, location, published, encoding);
       } else {
         return await this.file(file, location);
@@ -205,11 +205,7 @@ const client = function(config) {
      *   The API response.
      */
     markup: async function(file, location, published = true, encoding = 'utf-8') { // eslint-disable-line max-len
-      let content;
-
-      if (Buffer.isBuffer(file)) {
-        content = file.toString('utf8');
-      } else {
+      if (!Buffer.isBuffer(file)) {
         if (!location) {
           const p = path.resolve(process.cwd(), config.get('dir'));
           // If a location isn't given, calculate it.
@@ -218,9 +214,10 @@ const client = function(config) {
         if (!file.endsWith('index.html') && !location.endsWith('index.html')) {
           throw new Error('Can only upload an index.html file.');
         }
-        fs.readFileSync(file, [encoding]);
+        file = fs.readFileSync(file, [encoding]);
       }
 
+      const content = file.toString('utf8');
       location = location.startsWith('/') ? location : `/${location}`;
 
       const options = {
@@ -254,13 +251,7 @@ const client = function(config) {
      * @throws Error
      */
     file: async function(local, location, absolute = false) {
-      let formData;
-
-      if (Buffer.isBuffer(local)) {
-        formData = {
-          data: local,
-        };
-      } else {
+      if (!Buffer.isBuffer(local)) {
         if (!location) {
           const p = path.resolve(process.cwd(), config.get('dir'));
           // If a location isn't given, calculate it.
@@ -273,12 +264,13 @@ const client = function(config) {
         }
         if (!fs.existsSync(local)) {
           throw new Error('File is not accessible.');
-          // throw new Error(`${local} is not accessible.`);
         }
-        formData = {
-          data: fs.createReadStream(local),
-        };
+        local = fs.createReadStream(local);
       }
+
+      const formData = {
+        data: local,
+      };
 
       location = location.startsWith('/') ? location : `/${location}`;
 
@@ -292,9 +284,6 @@ const client = function(config) {
         },
         formData,
       };
-
-      console.log(local, location);
-      console.log(options);
 
       const res = await post(options);
       return handleResponse(res);
