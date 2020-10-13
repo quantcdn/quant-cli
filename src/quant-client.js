@@ -96,7 +96,7 @@ const client = function(config) {
         page_size: 500,
         published: true,
       }, extend);
-      const url = `${config.get('endpoint')}/global-meta?${querystring.stringify(query)} `;
+      const url = `${config.get('endpoint')}/global-meta?${querystring.stringify(query)}`;
 
       const doUnfold = async function(i) {
         const res = await get({
