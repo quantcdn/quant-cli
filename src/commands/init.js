@@ -17,14 +17,15 @@ const config = require('../config');
 const client = require('../quant-client');
 
 module.exports = function(argv) {
-  const token = argv.token;
-  const clientid = argv.clientid;
-  const endpoint = argv.endpoint;
-  const dir = argv.dir;
+  const token = Array.isArray(argv.token) ? argv.token.pop() : argv.token;
+  const clientid = Array.isArray(argv.clientid) ? argv.clientid.pop() : argv.clientid;
+  const endpoint = Array.isArray(argv.endpoint) ? argv.endpoint.pop() : argv.endpoint;
+  const project = Array.isArray(argv.project) ? argv.project.pop() : argv.project;
+  const dir = Array.isArray(argv.dir) ? argv.dir.pop() : argv.dir;
 
   console.log(chalk.bold.green('*** Initialise Quant ***'));
 
-  if (!token || !clientid) {
+  if (!token || !clientid || !project) {
     const schema = {
       properties: {
         endpoint: {
@@ -37,6 +38,12 @@ module.exports = function(argv) {
           message: 'Client id must be only letters, numbers or dashes',
           required: true,
           description: 'Enter QuantCDN client id',
+        },
+        project: {
+          pattern: /^[a-zA-Z0-9\-]+$/,
+          message: 'Project must be only letters, numbers or dashes',
+          required: true,
+          description: 'Enter QuantCDN project',
         },
         token: {
           hidden: true,
@@ -56,14 +63,14 @@ module.exports = function(argv) {
       config.set(result);
       config.save();
       client(config).ping(config)
-          .then((message) => console.log(chalk.bold.green(`✅✅✅ Successfully connected to ${message}`))) // eslint-disable-line max-len
-          .catch((message) => console.log(chalk.bold.red(`Unable to connect to quant ${message}`))); // eslint-disable-line max-len
+          .then((message) => console.log(chalk.bold.green(`✅✅✅ Successfully connected to ${message.project}`))) // eslint-disable-line max-len
+          .catch((message) => console.log(chalk.bold.red(`Unable to connect to quant ${message.project}`))); // eslint-disable-line max-len
     });
   } else {
-    config.set({clientid, token, endpoint, dir});
+    config.set({clientid, project, token, endpoint, dir});
     config.save();
     client(config).ping(config)
-        .then((message) => console.log(chalk.bold.green(`✅✅✅ Successfully connected to ${message}`))) // eslint-disable-line max-len
-        .catch((message) => console.log(chalk.bold.red(`Unable to connect to quant ${message}`))); // eslint-disable-line max-len
+        .then((message) => console.log(chalk.bold.green(`✅✅✅ Successfully connected to ${message.project}`))) // eslint-disable-line max-len
+        .catch((message) => console.log(chalk.bold.red(`Unable to connect to quant ${message.project}`))); // eslint-disable-line max-len
   }
 };

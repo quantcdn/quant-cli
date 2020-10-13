@@ -18,30 +18,26 @@ module.exports = function(argv) { // eslint-disable-line
 
   console.log(`Endpoint: ${config.get('endpoint')}`);
   console.log(`Customer: ${config.get('clientid')}`);
+  console.log(`Project: ${config.get('project')}`);
   console.log(`Token: ****`);
 
   const quant = client(config);
 
   quant.ping()
-      .then((data) => {
-        console.log(chalk.bold.green(`✅✅✅ Successfully connected to ${data.project}`)); // eslint-disable-line max-len
+      .then(async (data) => {
+        console.log(chalk.bold.green(`✅✅✅ Successfully connected to ${config.get('project')}`)); // eslint-disable-line max-len
+
         quant.meta()
             .then((data) => {
-              console.log(chalk.yellow('\nPublished to your Quant:'));
-              /* eslint-disable guard-for-in */
-              for (const path in data.meta) {
-                let pub;
-                if (data.meta[path].published) {
-                  pub = chalk.green('published');
-                } else {
-                  pub = chalk.yellow('unpublished');
-                }
-                console.log(` - ${path} (${pub})`);
+              console.log(chalk.yellow('\nInfo:'));
+              if (data && data.total_records) {
+                console.log(`Total records: ${data.total_records}`);
+              } else {
+                console.log('Use deploy to start seeding!');
               }
-              /* eslint-enable guard-for-in */
             })
             .catch((err) => {
-              console.log('No content has been deployed to Quant.');
+              console.error(chalk.red(err.message));
             });
       })
       .catch((err) => console.log(chalk.bold.red(`Unable to connect to quant ${err.message}`))); // eslint-disable-line max-len

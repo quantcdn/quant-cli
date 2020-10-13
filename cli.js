@@ -1,4 +1,4 @@
-#!/usr/bin/env node
+#!/usr/bin/env node --max-old-space-size=8192
 const chalk = require('chalk');
 const yargs = require('yargs');
 
@@ -13,6 +13,11 @@ const argv = yargs
       clientid: {
         description: 'Optionally provide client id',
         alias: 'c',
+        type: 'string',
+      },
+      project: {
+        description: 'Optionally provide project',
+        alias: 'p',
         type: 'string',
       },
       endpoint: {
@@ -114,6 +119,13 @@ const argv = yargs
         type: 'string',
       },
     })
+    .command('crawl', 'Crawl and push entire website to QuantCDN', { // eslint-disable-line max-len
+      domain: {
+        description: 'The website domain to crawl',
+        alias: 'd',
+        type: 'string',
+      },
+    })
     .help()
     .alias('help', 'h').argv;
 
@@ -127,6 +139,7 @@ const commands = [
   'proxy',
   'redirect',
   'unpublish',
+  'crawl',
 ];
 
 for (let i = 0; i < commands.length; i++) {

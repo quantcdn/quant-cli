@@ -21,7 +21,7 @@ module.exports = function(argv) {
   // @TODO: Accept argv.dir.
   config.load();
 
-  client(config).proxy(from, to, author, status)
+  client(config).redirect(from, to, author, status)
     .then((body) => console.log(chalk.green('Success: ') + ` Added redirect ${from} to ${to}`)) // eslint-disable-line
       .catch((err) => console.log(chalk.red.bold('Error:') + ` ${err}`));
 };

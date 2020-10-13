@@ -13,9 +13,10 @@ const getFiles = require('../helper/getFiles');
 const path = require('path');
 
 module.exports = async function(argv) {
-  console.log(chalk.bold.green('*** Quant deploy ***'));
   let files;
   let data;
+
+  console.log(chalk.bold.green('*** Quant deploy ***'));
 
   // Make sure configuration is loaded.
   config.load();
@@ -33,49 +34,45 @@ module.exports = async function(argv) {
   /* eslint-disable guard-for-in */
   for (const file in files) {
     const filepath = path.relative(p, files[file]);
-    const method = filepath.endsWith('index.html') ? 'markup' : 'file';
 
     try {
-      await quant[method](files[file]);
+      await quant.send(files[file]);
     } catch (err) {
       console.log(chalk.yellow(err.message + ` (${filepath})`));
       continue;
     }
+
     console.log(chalk.bold.green('✅') + ` ${filepath}`);
   }
 
   try {
-    data = await quant.meta();
+    data = await quant.meta(true);
   } catch (err) {
     console.log(chalk.yellow(err.message));
   }
 
+  // Quant meta returns relative paths, so we map our local filesystem
+  // to relative URL paths so that we can do a simple [].includes to
+  // determine if we need to unpublish the URL.
   const relativeFiles = files.map((item) => `/${path.relative(p, item)}`);
 
-  for (const key in data.meta) {
-    if (!data.meta[key].published || relativeFiles.includes(key)) {
-      continue;
-    }
-
-    // Check the non-index.html meta.
-    const bare = key.replace('/index.html', '');
-
-    // @TODO: Quant API unpublishes the bare route but the
-    // global meta doesn't update the index.html file so if we
-    // don't do this it will attempt to unpublish paths every
-    // time. We can't unpublish /path/to/index.html either
-    // as this is invalid within the API.
-    if (typeof data.meta[bare] != 'undefined' && !data.meta[bare].published) {
-      continue;
-    }
-
-    try {
-      await quant.unpublish(key);
-    } catch (err) {
-      console.log(chalk.yellow(err.message + ` (${key})`));
-      continue;
-    }
-    console.log(chalk.bold.green('✅') + ` ${key} unpublished.`);
+  if (!data || ! 'records' in data) {
+    // The API doesn't return meta data if nothing has previously been
+    // pushed for the project.
+    return;
   }
+
+  data.records.map(async (item) => {
+    if (relativeFiles.includes(item)) {
+      return;
+    }
+    try {
+      await quant.unpublish(item);
+    } catch (err) {
+      return console.log(chalk.yellow(err.message + ` (${item})`));
+    }
+    console.log(chalk.bold.green('✅') + ` ${item} unpublished.`);
+  });
+
   /* eslint-enable guard-for-in */
 };
