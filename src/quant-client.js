@@ -119,7 +119,6 @@ const client = function(config) {
 
       // Seed the record set.
       const res = await get(options);
-      console.log(res.body);
 
       if (!res.body.global_meta) {
         // If no records have been published then global_meta is not
