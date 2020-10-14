@@ -212,7 +212,6 @@ const client = function(config) {
           // If a location isn't given, calculate it.
           location = path.relative(p, file);
         }
-
         if (!file.endsWith('index.html')) {
           // Some static site generators don't output files
           // in the way that Quant is expecting to handle them
