@@ -8,6 +8,7 @@ const deploy = require('../../src/commands/deploy');
 const chai = require('chai');
 const sinon = require('sinon');
 const expect = chai.expect;
+const path = require('path');
 
 // Stubs
 const getFiles = require('../../src/helper/getFiles');
@@ -41,7 +42,7 @@ describe('Deploy', function() {
 
   describe('Publish', function() {
     beforeEach(function() {
-      meta = sinon.stub().returns({});
+      meta = sinon.stub().returns();
       clientStub = sinon.stub(client, 'client').returns({
         meta,
         unpublish,
@@ -79,10 +80,11 @@ describe('Deploy', function() {
   describe('Unpublish', function() {
     beforeEach(function() {
       meta = sinon.stub().returns({
-        meta: {
-          'index.html': {published: true},
-          'test/dir/index.html': {published: false},
-        },
+        total_pages: 1,
+        total_records: 3,
+        records: [
+          'test/index.html',
+        ],
       });
       clientStub = sinon.stub(client, 'client').returns({
         meta,
@@ -92,24 +94,12 @@ describe('Deploy', function() {
     });
 
     it('should unpublish missing files', async function() {
-      const dir = process.cwd() + 'test/fixtures';
-      const f = `${dir}/test/index.html`;
-
-      getFilesStub.withArgs(dir).returns([f]);
+      const dir = path.resolve(process.cwd(), 'test/fixtures');
+      getFilesStub.withArgs(dir).returns([
+        'index.html',
+      ]);
       await deploy({dir});
-
-      expect(unpublish.calledOnceWith('index.html')).to.be.true;
-      expect(unpublish.neverCalledWith('test/dir/index.html')).to.be.true;
-      expect(unpublish.neverCalledWith('test/index.html')).to.be.true;
-    });
-
-    it('should not resend unpublish requests', async function() {
-      const dir = process.cwd() + 'test/fixtures';
-      const f = `${dir}/test/index.html`;
-
-      getFilesStub.withArgs(dir).returns([f]);
-      await deploy({dir});
-      expect(unpublish.neverCalledWith('test/dir/index.html')).to.be.true;
+      expect(unpublish.calledOnceWith('test/index.html')).to.be.true;
     });
   });
 });
