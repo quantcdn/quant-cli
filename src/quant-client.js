@@ -264,6 +264,8 @@ const client = function(config) {
       const content = file.toString('utf8');
       location = location.startsWith('/') ? location : `/${location}`;
 
+      location = location.startsWith('/') ? location : `/${location}`;
+
       const options = {
         url: `${config.get('endpoint')}`,
         json: true,
@@ -328,6 +330,9 @@ const client = function(config) {
         },
         formData,
       };
+
+      console.log(local, location);
+      console.log(options);
 
       const res = await post(options);
       return handleResponse(res);
