@@ -48,7 +48,7 @@ module.exports = async function(argv) {
 
   if (!token) {
     questions.push({
-      type: 'input',
+      type: 'password',
       name: 'token',
       message: 'Enter your QuantCDN token',
       validate: (value) => {
