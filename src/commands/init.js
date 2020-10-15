@@ -11,66 +11,82 @@
  */
 
 const chalk = require('chalk');
-const prompt = require('prompt');
+const {prompt} = require('enquirer');
 
 const config = require('../config');
 const client = require('../quant-client');
 
-module.exports = function(argv) {
+module.exports = async function(argv) {
   const token = Array.isArray(argv.token) ? argv.token.pop() : argv.token;
   const clientid = Array.isArray(argv.clientid) ? argv.clientid.pop() : argv.clientid;
   const endpoint = Array.isArray(argv.endpoint) ? argv.endpoint.pop() : argv.endpoint;
   const project = Array.isArray(argv.project) ? argv.project.pop() : argv.project;
   const dir = Array.isArray(argv.dir) ? argv.dir.pop() : argv.dir;
+  const questions = [];
+  const conf = {clientid, project, token, endpoint, dir};
+
 
   console.log(chalk.bold.green('*** Initialise Quant ***'));
 
-  if (!token || !clientid || !project) {
-    const schema = {
-      properties: {
-        endpoint: {
-          required: true,
-          description: 'Enter QuantCDN endpoint',
-          default: 'https://api.quantcdn.io',
-        },
-        clientid: {
-          pattern: /^[a-zA-Z0-9\-]+$/,
-          message: 'Client id must be only letters, numbers or dashes',
-          required: true,
-          description: 'Enter QuantCDN client id',
-        },
-        project: {
-          pattern: /^[a-zA-Z0-9\-]+$/,
-          message: 'Project must be only letters, numbers or dashes',
-          required: true,
-          description: 'Enter QuantCDN project',
-        },
-        token: {
-          hidden: true,
-          replace: '*',
-          required: true,
-          description: 'Enter QuantCDN token',
-        },
-        dir: {
-          required: true,
-          description: 'Directory containing static assets',
-          default: 'build',
-        },
-      },
-    };
-    prompt.start();
-    prompt.get(schema, function(err, result) {
-      config.set(result);
-      config.save();
-      client(config).ping(config)
-          .then((message) => console.log(chalk.bold.green(`✅✅✅ Successfully connected to ${message.project}`))) // eslint-disable-line max-len
-          .catch((message) => console.log(chalk.bold.red(`Unable to connect to quant ${message.project}`))); // eslint-disable-line max-len
+  if (!endpoint) {
+    questions.push({
+      type: 'input',
+      name: 'endpoint',
+      message: 'Enter the QuantCDN endpoint you want to connect to',
+      initial: 'https://api.quantcdn.io',
     });
-  } else {
-    config.set({clientid, project, token, endpoint, dir});
-    config.save();
-    client(config).ping(config)
-        .then((message) => console.log(chalk.bold.green(`✅✅✅ Successfully connected to ${message.project}`))) // eslint-disable-line max-len
-        .catch((message) => console.log(chalk.bold.red(`Unable to connect to quant ${message.project}`))); // eslint-disable-line max-len
   }
+
+  if (!dir) {
+    questions.push({
+      type: 'input',
+      name: 'dir',
+      message: 'Enter the directory path where the static assets will be located',
+      initial: 'build',
+    });
+  }
+
+  if (!token) {
+    questions.push({
+      type: 'input',
+      name: 'token',
+      message: 'Enter your QuantCDN token',
+      validate: (value) => {
+        if (value.indexOf(' ') > -1) {
+          return 'API tokens cannot have spaces.';
+        }
+        return true;
+      },
+    });
+  }
+
+  if (!clientid) {
+    questions.push({
+      type: 'input',
+      name: 'clientid',
+      message: 'Enter your QuantCDN client id',
+    });
+  }
+
+  if (!project) {
+    questions.push({
+      type: 'input',
+      name: 'project',
+      message: 'Enter your QuantCDN project name',
+    });
+  }
+
+  if (questions.length > 0) {
+    const response = await prompt(questions);
+    for (const key in response) {
+      conf[key] = response[key];
+    }
+  }
+
+  config.set(conf);
+  config.save();
+
+  client(config).ping(config)
+      .then((message) => console.log(chalk.bold.green(`✅✅✅ Successfully connected to ${message.project}`)))
+      .catch((message) => console.log(chalk.bold.red(`Unable to connect to quant ${message.project}`)));
 };
