@@ -31,7 +31,7 @@ module.exports = function(argv) {
         endpoint: {
           required: true,
           description: 'Enter QuantCDN endpoint',
-          default: 'https://api.quantcdn.io/v1',
+          default: 'https://api.quantcdn.io',
         },
         clientid: {
           pattern: /^[a-zA-Z0-9\-]+$/,

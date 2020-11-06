@@ -54,7 +54,19 @@ const client = function(config) {
     return body;
   };
 
+  /**
+   * Get API endpoint.
+   *
+   * @return {string}
+   *   The quant API endpoint with version suffix.
+   */
+  const getEndpoint = function() {
+    // API version should be configurable.
+    return `${config.get('endpoint')}/v1`;
+  };
+
   return {
+
     /**
      * Ping the quant API.
      *
@@ -65,7 +77,7 @@ const client = function(config) {
      */
     ping: async function() {
       const options = {
-        url: `${config.get('endpoint')}/ping`,
+        url: `${getEndpoint()}/ping`,
         json: true,
         headers,
       };
@@ -96,7 +108,7 @@ const client = function(config) {
         page_size: 500,
         published: true,
       }, extend);
-      const url = `${config.get('endpoint')}/global-meta?${querystring.stringify(query)}`;
+      const url = `${getEndpoint()}/global-meta?${querystring.stringify(query)}`;
 
       const doUnfold = async function(i) {
         const res = await get({
@@ -220,7 +232,7 @@ const client = function(config) {
       location = location.startsWith('/') ? location : `/${location}`;
 
       const options = {
-        url: `${config.get('endpoint')}`,
+        url: `${getEndpoint()}`,
         json: true,
         body: {
           url: location,
@@ -322,7 +334,7 @@ const client = function(config) {
       url = url.replace('/index.html', '');
 
       const options = {
-        url: `${config.get('endpoint')}/unpublish`,
+        url: `${getEndpoint()}/unpublish`,
         headers: {
           ...headers,
           'Quant-Url': url,
@@ -352,7 +364,7 @@ const client = function(config) {
      */
     redirect: async function(from, to, author, status = 302) {
       const options = {
-        url: `${config.get('endpoint')}/redirect`,
+        url: `${getEndpoint()}/redirect`,
         headers: {
           ...headers,
         },
@@ -398,7 +410,7 @@ const client = function(config) {
      */
     proxy: async function(url, destination, published = true, username, password) { // eslint-disable-line max-len
       const options = {
-        url: `${config.get('endpoint')}/proxy`,
+        url: `${getEndpoint()}/proxy`,
         headers: {
           ...headers,
         },
