@@ -32,7 +32,11 @@ const set = function(results) {
  *   The configuration value.
  */
 const get = function(key) {
-  return config[key];
+  let value = config[key];
+  if (key == 'endpoint') {
+    value += '/v1';
+  }
+  return value;
 };
 
 /**
