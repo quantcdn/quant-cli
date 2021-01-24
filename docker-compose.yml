@@ -1,0 +1,12 @@
+version: "3.9"
+
+services:
+  cli:
+    build:
+      context: .
+      dockerfile: .docker/quant-cli.Dockerfile
+    image: quantcdn/cli
+    entrypoint: "tail -F anything"
+
+volumes:
+  quant.json: {}

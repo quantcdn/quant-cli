@@ -4,7 +4,6 @@
  * @usage
  *  quant crawl -d https://www.google.com/
  */
-
 const chalk = require('chalk');
 const config = require('../config');
 const client = require('../quant-client');
@@ -21,6 +20,12 @@ let count = 0;
 const failures = [];
 const get = util.promisify(request.get);
 
+const command = {};
+
+command.command = 'crawl';
+command.describe = 'Crawl and push an entire domain';
+command.builder = {};
+
 /**
  * When the operator interrupts the process, store the
  * state of the crawler.
@@ -30,11 +35,13 @@ process.on('SIGINT', function() {
   write(crawl);
 });
 
-module.exports = async function(argv) {
+command.handler = async function(argv) {
   console.log(chalk.bold.green('*** Quant crawl ***'));
 
   // Make sure configuration is loaded.
-  config.load();
+  if (!config.fromArgs(argv)) {
+    return console.error(chalk.yellow('Quant is not configured, run init.'));
+  }
 
   const domain = argv.domain;
 
@@ -174,3 +181,5 @@ module.exports = async function(argv) {
   read(crawl);
   crawl.start();
 };
+
+module.exports = command;

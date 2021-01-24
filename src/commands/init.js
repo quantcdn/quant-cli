@@ -9,14 +9,29 @@
  *   quant init
  *   quant init -t <token> -c <client> -e <url> -d <build dir>
  */
-
 const chalk = require('chalk');
 const prompt = require('prompt');
 
 const config = require('../config');
 const client = require('../quant-client');
 
-module.exports = function(argv) {
+const command = {};
+
+command.command = 'init';
+command.describe = 'Initialise a project in the current directory';
+
+command.builder = (yargs) => {
+  yargs.option('dir', {
+    alias: 'd',
+    describe: 'Built asset directory',
+    type: 'string',
+    default: 'build',
+  });
+
+  return yargs;
+};
+
+command.handler = function(argv) {
   const token = Array.isArray(argv.token) ? argv.token.pop() : argv.token;
   const clientid = Array.isArray(argv.clientid) ? argv.clientid.pop() : argv.clientid;
   const endpoint = Array.isArray(argv.endpoint) ? argv.endpoint.pop() : argv.endpoint;
@@ -74,3 +89,5 @@ module.exports = function(argv) {
         .catch((message) => console.log(chalk.bold.red(`Unable to connect to quant ${message.project}`))); // eslint-disable-line max-len
   }
 };
+
+module.exports = command;

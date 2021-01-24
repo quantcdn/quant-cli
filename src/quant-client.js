@@ -48,8 +48,10 @@ const client = function(config) {
     const body = typeof response.body == 'string' ? JSON.parse(response.body) : response.body; // eslint-disable-line max-len
 
     if (body.error || (typeof body.errorMsg != 'undefined' && body.errorMsg.length > 0)) { // eslint-disable-line max-len
-      throw new Error(body.errorMsg);
+      const msg = typeof body.errorMsg != 'undefined' ? body.errorMsg: body.msg;
+      throw new Error(msg);
     }
+
 
     return body;
   };
@@ -424,4 +426,5 @@ const client = function(config) {
 module.exports = function() {
   return module.exports.client.apply(this, arguments); // eslint-disable-line
 };
+
 module.exports.client = client;
