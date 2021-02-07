@@ -3,7 +3,7 @@
  */
 
 const fs = require('fs');
-const {promisify, isObject} = require('util');
+const {promisify} = require('util');
 const {resolve} = require('path');
 const readdir = promisify(fs.readdir);
 const stat = promisify(fs.stat);

@@ -2,24 +2,37 @@
  * Deploy the configured build directory to QuantCDN.
  *
  * @usage
- *  quant deploy
- *  quant deploy -d /path/to/dir
+ *  quant deploy <dir>
  */
-
 const chalk = require('chalk');
 const config = require('../config');
 const client = require('../quant-client');
 const getFiles = require('../helper/getFiles');
 const path = require('path');
 
-module.exports = async function(argv) {
+const command = {};
+
+command.command = 'deploy [dir]';
+command.describe = 'Deploy the output of a static generator';
+command.builder = (yargs) => {
+  yargs.positional('dir', {
+    describe: 'Optional location of build artefacts ',
+    type: 'string',
+    default: null,
+  });
+};
+
+command.handler = async function(argv) {
   let files;
   let data;
 
   console.log(chalk.bold.green('*** Quant deploy ***'));
 
   // Make sure configuration is loaded.
-  config.load();
+  if (!config.fromArgs(argv)) {
+    return console.error(chalk.yellow('Quant is not configured, run init.'));
+  }
+
   const dir = argv.dir || config.get('dir');
 
   const p = path.resolve(process.cwd(), dir);
@@ -76,3 +89,5 @@ module.exports = async function(argv) {
 
   /* eslint-enable guard-for-in */
 };
+
+module.exports = command;

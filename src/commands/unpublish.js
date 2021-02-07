@@ -2,27 +2,30 @@
  * Unpublish a QuantCDN url.
  *
  * @usage
- *   quant unpublish -u /path/to/upublish
+ *   quant unpublish <path>
  */
-
 const chalk = require('chalk');
 const client = require('../quant-client');
 const config = require('../config');
 
-module.exports = function(argv) {
+const command = {};
+
+command.command = 'unpublish <path>';
+command.describe = 'Unpublish an asset';
+command.builder = {};
+
+command.handler = function(argv) {
   console.log(chalk.bold.green('*** Quant unpublish ***'));
 
-  // @TODO: Accept argv.dir.
-  config.load();
-
-  const url = argv.url;
-
-  if (!url) {
-    return console.log(chalk.red.bold('Error:') + ` Missing parameter [url].`);
+  // config.fromArgs(argv);
+  if (!config.fromArgs(argv)) {
+    return console.error(chalk.yellow('Quant is not configured, run init.'));
   }
 
   client(config)
-      .unpublish(url)
+      .unpublish(argv.path)
       .then(response => console.log(chalk.green('Success:') + ` Unpublished ${url}`)) // eslint-disable-line
       .catch((err) => console.log(chalk.red.bold('Error:') + ` ${err}`));
 };
+
+module.exports = command;
