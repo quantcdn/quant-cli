@@ -1,15 +1,80 @@
+# QuantCDN cli
+
 [![Codefresh build status]( https://g.codefresh.io/api/badges/pipeline/quantcdn/QuantCDN%2Fquant-cli?key=eyJhbGciOiJIUzI1NiJ9.NWU5ZDVmZmE1MWJmOTZjYTU0NWRiNTBk.2vLiCtkYTfWcwAbwbzuL5KlwSrZRXetNTXgpWn5ZMag&type=cf-1)]( https%3A%2F%2Fg.codefresh.io%2Fpipelines%2Fquant-cli%2Fbuilds%3Ffilter%3Dtrigger%3Abuild~Build%3Bpipeline%3A5ea3dca2e2365774c68179e7~quant-cli)
 
-## QuantCDN NodeJS cli tool
+Simplify deployments and interactions with the QuantCDN API by using the support cli tool.
 
-Provides `quant` cli tool for interfacing with QuantCDN.
+## Install
 
-### Installation
+The preferred method for installation is via npm.
 
-`npm i -g @quantcdn/quant-cli`
+```
+npm i -g @quantcdn/quant-cli
+```
 
-### Usage
+or locally to a project
 
-1. Initialise in any folder that contains static assets for deployment
-2. Run `quant init` and provide username, token, path to static assets
-3. Run `quant deploy` to push static assets to QuantCDN
+```
+npm i -D @quantcdn/quant-cli
+```
+
+## Usage
+
+```
+$ quant <command>
+
+Commands:
+  quant crawl                                         Crawl and push an entire domain
+  quant deploy [dir]                                  Deploy the output of a static generator
+  quant file <file> <location>                        Deploy a single asset
+  quant info                                          Give info based on current configuration
+  quant init                                          Initialise a project in the current directory
+  quant page <file> <location>                        Make a local page asset available via Quant
+  quant proxy <path> <origin> [status]                Create a proxy to allow traffic directly to
+  [basicAuthUser] [basicAuthPass]                     origin
+  quant redirect <from> <to> [status] [author]        Create a redirect
+  quant unpublish <path>                              Unpublish an asset
+
+Options:
+  --version       Show version number                                                      [boolean]
+  --help          Show help                                                                [boolean]
+  --clientid, -c  Project customer id for QuantCDN                                          [string]
+  --project, -p   Project name for QuantCDN                                                 [string]
+  --token, -t     Project token for QuantCDN                                                [string]
+  --endpoint, -e  API endpoint for QuantCDN            [string] [default: "https://api.quantcdn.io"]
+```
+
+## Get started
+
+Please refer to the ["get started" guide](https://docs.quantcdn.io/docs/cli/get-started) for more details on getting set up.
+
+Quant accepts options or will ready configuration values from a `quant.json` file in the current directory.
+
+```
+$ quant init
+```
+
+An interactive walk-through for configuring your API connection.
+
+```
+$ quant info
+
+Endpoint: https://api.quantcdn.io/v1
+Customer: quant
+Project: dev-docs
+Token: ****
+✅✅✅ Successfully connected to dev-docs
+```
+
+## Testing
+
+Automated via CodeFresh for all PRs and mainline branches.
+
+```
+$ npm run lint
+$ npm run test
+```
+
+## Contributing
+
+Issues and feature requests are managed via Github and pull requests are welcomed.
