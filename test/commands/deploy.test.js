@@ -2,7 +2,7 @@
  * Test the deploy command.
  */
 
-const deploy = require('../../src/commands/deploy');
+const deploy = require('../../src/commands/deploy').handler;
 
 // Testers.
 const chai = require('chai');

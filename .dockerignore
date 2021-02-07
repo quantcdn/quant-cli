@@ -1,0 +1,10 @@
+build
+node_modules
+quant.json
+.eslint*
+.git
+.git*
+.docker
+.github
+.DS_Store
+docker-compose.yml

@@ -1,6 +1,7 @@
 const fs = require('fs');
 
 const filename = 'quant.json';
+
 const config = {
   dir: 'build',
   endpoint: 'http://quantcdn.io',
@@ -59,6 +60,19 @@ const save = function(dir = '.') {
 };
 
 /**
+ * Validate the loaded configuration.
+ *
+ * @return {boolean}
+ *   If the configuration is valid.
+ */
+const validate = function() {
+  // Dir is optional as this can be an optional arg to relevant commands.
+  const reqKeys = ['clientid', 'project', 'endpoint', 'token'];
+  const diff = reqKeys.filter((i) => ! Object.keys(config).includes(i));
+  return diff.length == 0;
+};
+
+/**
  * Load the configuration to memory.
  *
  * @param {string} dir
@@ -69,13 +83,55 @@ const save = function(dir = '.') {
  */
 const load = function(dir = '.') {
   let data;
+
   try {
     data = fs.readFileSync(`${dir}/${filename}`);
   } catch (err) {
     return false;
   }
+
   data = JSON.parse(data);
   Object.assign(config, data);
+
+  if (!validate()) {
+    return false;
+  }
+
+  return true;
+};
+
+/**
+ * Load a configuration object from argv.
+ *
+ * @param {yargs} argv
+ *   yargs argv object.
+ *
+ * @return {boolean}
+ *   If config is valid.
+ */
+const fromArgs = function(argv) {
+  load();
+
+  if (argv.clientid) {
+    config.clientid = argv.clientid;
+  }
+
+  if (argv.project) {
+    config.project = argv.project;
+  }
+
+  if (argv.token) {
+    config.token = argv.token;
+  }
+
+  if (argv.endpoint) {
+    config.endpoint = argv.endpoint;
+  }
+
+  if (!validate()) {
+    return false;
+  }
+
   return true;
 };
 
@@ -84,4 +140,5 @@ module.exports = {
   load,
   set,
   get,
+  fromArgs,
 };

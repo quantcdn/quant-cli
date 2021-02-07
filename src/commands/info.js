@@ -4,15 +4,20 @@
  * @usage
  *    quant info
  */
-
 const chalk = require('chalk');
 const client = require('../quant-client');
 const config = require('../config');
 
-module.exports = function(argv) { // eslint-disable-line
+const command = {};
+
+command.command = 'info';
+command.describe = 'Give info based on current configuration';
+command.builder = {};
+
+command.handler = function(argv) { // eslint-disable-line
   console.log(chalk.bold.green('*** Quant info ***'));
 
-  if (!config.load()) {
+  if (!config.fromArgs(argv)) {
     return console.error(chalk.yellow('Quant is not configured, run init.'));
   }
 
@@ -42,3 +47,5 @@ module.exports = function(argv) { // eslint-disable-line
       })
       .catch((err) => console.log(chalk.bold.red(`Unable to connect to quant ${err.message}`))); // eslint-disable-line max-len
 };
+
+module.exports = command;

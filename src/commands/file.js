@@ -5,21 +5,36 @@
  * will be accessible by QuantCDN.
  *
  * @usage
- *   quant file -f /path/to/asset.jpg
- *   quant file -f /path/to/asset.jpg -l /path/in/quant
+ *   quant file <file> <location>
  */
-
 const config = require('../config');
 const client = require('../quant-client');
 const chalk = require('chalk');
 const util = require('util');
 
-module.exports = function(argv) {
-  const filepath = argv.filepath;
+const command = {};
+
+command.command = 'file <file> <location>';
+command.describe = 'Deploy a single asset';
+command.builder = (yargs) => {
+  yargs.positional('file', {
+    describe: 'Path to local file',
+    type: 'string',
+  });
+  yargs.positional('location', {
+    describe: 'The access URI',
+    type: 'string',
+  });
+};
+
+command.handler = function(argv) {
+  const filepath = argv.file;
   const location = argv.location;
 
   // @TODO: Support dir.
-  config.load();
+  if (!config.fromArgs(argv)) {
+    return console.error(chalk.yellow('Quant is not configured, run init.'));
+  }
 
   console.log(chalk.bold.green('*** Quant file ***'));
 
@@ -30,3 +45,5 @@ module.exports = function(argv) {
         console.log(msg);
       });
 };
+
+module.exports = command;

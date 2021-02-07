@@ -2,27 +2,33 @@
  * Redirect a QuantCDN path to another.
  *
  * @usage
- *   quant redirect -f /path/from -t /path/to
- *   quant redirect -f /path/from -t /path/to -s false
+ *   quant redirect <from> <to> --status
  */
-
 const chalk = require('chalk');
 const config = require('../config');
 const client = require('../quant-client');
 
-module.exports = function(argv) {
+const command = {};
+
+command.command = 'redirect <from> <to> [status] [author]';
+command.describe = 'Create a redirect';
+command.builder = (yargs) => {
+  yargs.default('status', 302);
+  yargs.default('author', null);
+  return yargs;
+};
+
+command.handler = function(argv) {
   console.log(chalk.bold.green('*** Quant redirect ***'));
 
-  const status = argv.status || 302;
-  const author = argv.author || null;
-  const from = argv.from;
-  const to = argv.to;
-
   // @TODO: Accept argv.dir.
-  config.load();
+  if (!config.fromArgs(argv)) {
+    return console.error(chalk.yellow('Quant is not configured, run init.'));
+  }
 
-  client(config).redirect(from, to, author, status)
+  client(config).redirect(argv.from, argv.to, argv.author, argv.status)
     .then((body) => console.log(chalk.green('Success: ') + ` Added redirect ${from} to ${to}`)) // eslint-disable-line
       .catch((err) => console.log(chalk.red.bold('Error:') + ` ${err}`));
 };
 
+module.exports = command;
