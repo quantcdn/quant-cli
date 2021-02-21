@@ -259,7 +259,7 @@ const client = function(config) {
           location = path.relative(p, local);
           location.replace(path.basename(location), '');
         } else {
-          if (!absolute) {
+          if (!path.extname(location)) {
             location = `${location}/${path.basename(local)}`;
           }
         }
