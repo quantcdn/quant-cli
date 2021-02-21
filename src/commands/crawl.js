@@ -22,7 +22,7 @@ const get = util.promisify(request.get);
 
 const command = {};
 
-command.command = 'crawl';
+command.command = 'crawl [domain]';
 command.describe = 'Crawl and push an entire domain';
 command.builder = {};
 
@@ -31,8 +31,10 @@ command.builder = {};
  * state of the crawler.
  */
 process.on('SIGINT', function() {
-  crawl.stop();
-  write(crawl);
+  if (typeof crawl != 'undefined') {
+    crawl.stop();
+    write(crawl);
+  }
 });
 
 command.handler = async function(argv) {
@@ -44,6 +46,8 @@ command.handler = async function(argv) {
   }
 
   const domain = argv.domain;
+
+  console.log('crawling', domain);
 
   if (!domain) {
     console.log('Missing required parameter: ' + chalk.red('[domain]'));

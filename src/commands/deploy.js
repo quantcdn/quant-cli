@@ -49,7 +49,7 @@ command.handler = async function(argv) {
     const filepath = path.relative(p, files[file]);
 
     try {
-      await quant.send(files[file]);
+      await quant.send(files[file], filepath);
     } catch (err) {
       console.log(chalk.yellow(err.message + ` (${filepath})`));
       continue;
