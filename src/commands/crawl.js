@@ -47,8 +47,6 @@ command.handler = async function(argv) {
 
   const domain = argv.domain;
 
-  console.log('crawling', domain);
-
   if (!domain) {
     console.log('Missing required parameter: ' + chalk.red('[domain]'));
     return;
