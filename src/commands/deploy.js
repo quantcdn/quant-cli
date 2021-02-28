@@ -9,6 +9,7 @@ const config = require('../config');
 const client = require('../quant-client');
 const getFiles = require('../helper/getFiles');
 const path = require('path');
+const yargs = require('yargs');
 
 const command = {};
 
@@ -30,7 +31,8 @@ command.handler = async function(argv) {
 
   // Make sure configuration is loaded.
   if (!config.fromArgs(argv)) {
-    return console.error(chalk.yellow('Quant is not configured, run init.'));
+    console.log(chalk.yellow('Quant is not configured, run init.'));
+    yargs.exit(1);
   }
 
   const dir = argv.dir || config.get('dir');
@@ -39,9 +41,17 @@ command.handler = async function(argv) {
   const quant = client(config);
 
   try {
+    await quant.ping();
+  } catch (err) {
+    console.log(chalk.red(err.message));
+    yargs.exit(1);
+  }
+
+  try {
     files = await getFiles(p);
   } catch (err) {
-    return console.log(err);
+    console.log(chalk.red(err.message));
+    yargs.exit(1);
   }
 
   /* eslint-disable guard-for-in */
@@ -76,7 +86,8 @@ command.handler = async function(argv) {
   }
 
   data.records.map(async (item) => {
-    if (relativeFiles.includes(item)) {
+    const f = item.replace('/index.html', '.html');
+    if (relativeFiles.includes(item) || relativeFiles.includes(f)) {
       return;
     }
     try {
