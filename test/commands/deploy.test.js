@@ -21,10 +21,12 @@ describe('Deploy', function() {
   let clientStub;
   let meta;
   let unpublish;
+  let ping;
 
   beforeEach(function() {
     unpublish = sinon.stub();
     send = sinon.stub();
+    ping = sinon.stub();
 
     configGetStub = sinon.stub(config, 'get');
     configGetStub.withArgs('endpoint').returns('http://localhost:8081');
@@ -47,6 +49,7 @@ describe('Deploy', function() {
         meta,
         unpublish,
         send,
+        ping,
       });
     });
 
@@ -90,6 +93,7 @@ describe('Deploy', function() {
         meta,
         unpublish,
         send,
+        ping,
       });
     });
 
