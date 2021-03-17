@@ -14,6 +14,7 @@ const client = function(config) {
   const get = util.promisify(request.get);
   const post = util.promisify(request.post);
   const patch = util.promisify(request.patch);
+  const del = util.promisify(request.delete);
 
   const headers = {
     'User-Agent': 'Quant (+http://api.quantcdn.io)',
@@ -33,19 +34,26 @@ const client = function(config) {
    *   The API response.
    */
   const handleResponse = function(response) {
-    // console.log(response);
+    const body = typeof response.body == 'string' ? JSON.parse(response.body) : response.body; // eslint-disable-line max-len
+
+    if (typeof body.errors != 'undefined') {
+      let msg = '';
+      for (i in body.errors) { // eslint-disable-line
+        msg += body.errors[i].errorMsg + '\n';
+      }
+      throw new Error(msg);
+    }
+
     if (response.statusCode == 400) {
       // @TODO: this is generally if the content is
       // streamed to the endpoint 4xx and 5xx are thrown
       // similarly, the API should respond with errors
       // otherwise.
-      if (typeof response.body.errorMsg != 'undefined') {
-        throw new Error(response.body.errorMsg);
+      if (typeof body.errorMsg != 'undefined') {
+        throw new Error(body.errorMsg);
       }
       throw new Error('Critical error...');
     }
-
-    const body = typeof response.body == 'string' ? JSON.parse(response.body) : response.body; // eslint-disable-line max-len
 
     if (body.error || (typeof body.errorMsg != 'undefined' && body.errorMsg.length > 0)) { // eslint-disable-line max-len
       const msg = typeof body.errorMsg != 'undefined' ? body.errorMsg: body.msg;
@@ -420,6 +428,33 @@ const client = function(config) {
       const res = await post(options);
       return handleResponse(res);
     },
+
+    /**
+     * Delete a path from Quant.
+     *
+     * @param {string} path
+     *
+     * @return {object}
+     *   The response object.
+     *
+     * @throw Error.
+     */
+    delete: async function(path) {
+
+      path = path.replace('index.html', '');
+
+      const options = {
+        url: `${config.get('endpoint')}/delete/all`,
+        headers: {
+          ...headers,
+          'Quant-Url': path,
+        },
+      };
+
+      const res = await del(options);
+      return handleResponse(res);
+    },
+
   };
 };
 
