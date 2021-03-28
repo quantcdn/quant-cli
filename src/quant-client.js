@@ -129,7 +129,7 @@ const client = function(config) {
       }
 
       if (res.body.global_meta.records) {
-        res.body.global_meta.records.map((item) => records.push(item.meta.url));
+        res.body.global_meta.records.map((item) => records.push({url: item.meta.url, md5: item.meta.md5}));
       }
 
       if (unfold) {
@@ -418,6 +418,38 @@ const client = function(config) {
       }
 
       const res = await post(options);
+      return handleResponse(res);
+    },
+
+    /**
+     * Get the revision history from Quant.
+     *
+     * @param {string} url
+     *   The URL path to get revisions for.
+     * @param {string|bool} revision
+     *   Retrieve a specific revision.
+     *
+     * @return {object}
+     *   The response.
+     *
+     * @throws Error.
+     */
+    revisions: async function(url, revision = false) {
+      const path = revision ? revision : 'published';
+
+      url = url.indexOf('/') == 0 ? url : `/${url}`;
+      url = url.toLowerCase();
+      url = url.replace(/\/?index\.html/, '');
+
+      const options = {
+        url: `${config.get('endpoint')}/revisions/${path}`,
+        headers: {
+          ...headers,
+          'Quant-Url': url,
+        },
+        json: true,
+      };
+      const res = await get(options);
       return handleResponse(res);
     },
   };
