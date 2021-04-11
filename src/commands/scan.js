@@ -42,31 +42,26 @@ command.handler = async function(argv) {
     yargs.exit(1);
   }
 
-
-  files.map(async (fp) => {
-    const relative = `/${path.relative(p, fp)}`;
-    let rev = false;
-    // const meta = data.records.find((item) => item.url == relative);
+  files.map(async (file) => {
+    const filepath = path.relative(p, file);
+    let revision = false;
 
     try {
-      rev = await quant.revisions(relative);
-    } catch (err) {
-      console.log(relative + ' ' + err.message);
-    }
+      revision = await quant.revisions(filepath);
+    } catch (err) {}
 
-    if (!rev) {
-      console.log(`[info]: Unable to find ${relative} in source.`);
+    if (!revision) {
+      console.log(`[info]: Unable to find ${filepath} in source.`);
       return;
     }
 
-    const localmd5 = md5File.sync(fp);
+    const localmd5 = md5File.sync(file);
 
-    if (rev.md5 == localmd5) {
-      console.log(chalk.green(`[info]: ${relative} is up-to-date`));
+    if (revision.md5 == localmd5) {
+      console.log(chalk.green(`[info]: ${filepath} is up-to-date`));
     } else {
-      console.log(chalk.yellow(`[info]: ${relative} is different.`));
+      console.log(chalk.yellow(`[info]: ${filepath} is different.`));
     }
-
   });
 
 

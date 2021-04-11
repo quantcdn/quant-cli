@@ -26,7 +26,6 @@ command.builder = (yargs) => {
 
 command.handler = async function(argv) {
   let files;
-  let metadata;
 
   console.log(chalk.bold.green('*** Quant deploy ***'));
 
@@ -65,10 +64,6 @@ command.handler = async function(argv) {
 
     if (revision) {
       const md5 = md5File.sync(file);
-      if (filepath == 'test-cli/index.html') {
-        console.log(`rev: ${revision.md5}`);
-        console.log(`local: ${md5}`);
-      }
       if (md5 == revision.md5) {
         console.log(chalk.blue(`Published version is up-to-date (${filepath})`));
         return;
