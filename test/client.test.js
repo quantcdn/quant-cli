@@ -151,6 +151,7 @@ describe('Quant Client', function() {
             }),
         ).to.be.true;
       });
+
       it('should accept html files', async function() {
         const response = {
           statusCode: 200,
@@ -168,8 +169,6 @@ describe('Quant Client', function() {
             .yields(null, response, response.body);
 
         await client(config).send('test/fixtures/some-file-path.html');
-
-        console.log(requestPost.getCalls(0));
 
         // Expect the post for the redirect.
         expect(
