@@ -86,7 +86,7 @@ describe('Deploy', function() {
         total_pages: 1,
         total_records: 3,
         records: [
-          'test/index.html',
+          {url: 'test/index.html'},
         ],
       });
       clientStub = sinon.stub(client, 'client').returns({
