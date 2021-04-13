@@ -14,6 +14,7 @@ const util = require('util');
 const fs = require('fs');
 const tmp = require('tmp');
 const detectImage = require('../helper/detectImage');
+const detectImage = require('../helper/responsiveImages');
 
 let crawl;
 let count = 0;
@@ -133,11 +134,22 @@ command.handler = async function(argv) {
   });
 
   crawl.on('fetchcomplete', async function(queueItem, responseBuffer, response) {
+    const items = [];
+
     if (response.headers['content-type'] && (response.headers['content-type'].includes('text/html') || response.headers['content-type'].includes('css'))) {
       // Find background images in css and page body and add them to the queue.
-      const items = await detectImage(responseBuffer, queueItem.host, queueItem.protocol);
-      items.forEach((item) => crawl.queueURL(item, queueItem.referrer));
+      const images = await detectImage(responseBuffer, queueItem.host, queueItem.protocol);
+      images.map((i) => items.push(i));
     }
+
+    // Detect pictures and srcset attributes.
+    if (response.headers['content-type'] && response.headers['content-type'].includes('text/html')) {
+      const images = await responsiveImages(responseBuffer, queueItem.host, queueItem.protocol);
+      images.map((i) => items.push(i));
+    }
+
+    items.forEach((item) => crawl.queueURL(item, queueItem.referrer));
+
 
     // Cheap strip of domain.
     const url = queueItem.url.replace(domain, '');
