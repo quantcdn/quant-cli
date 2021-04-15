@@ -14,6 +14,7 @@ const util = require('util');
 const fs = require('fs');
 const tmp = require('tmp');
 const detectImage = require('../helper/detectImage');
+const {redirectHandler} = require('../crawl/callbacks');
 
 let crawl;
 let count = 0;
@@ -90,38 +91,8 @@ command.handler = async function(argv) {
     write(crawl);
   });
 
-  crawl.on('fetchredirect', function(queueItem, redirectQueueItem, response) {
-    let path = queueItem.path;
-
-    // Strip last slash.
-    if (path.substr(-1) === '/') {
-      path = path.substr(0, path.length - 1);
-    }
-
-    // Add internal redirects to the expected domain to the queue.
-    if (redirectQueueItem.host == hostname) {
-      crawl.queueURL(redirectQueueItem.url, redirectQueueItem.referrer);
-      console.log(chalk.bold.green('✅ Adding:') + ` ${redirectQueueItem.url}`);
-
-      // Ensure redirects pointing to themselves are ignored.
-      if (queueItem.path == path || queueItem.path == redirectQueueItem.path) {
-        return;
-      }
-
-      crawl.queueURL(redirectQueueItem.url, redirectQueueItem.referrer);
-      console.log(chalk.bold.green('✅ Adding:') + ` ${redirectQueueItem.url}`);
-
-      // Add internal redirect.
-      if (queueItem.path != path) {
-        quant.redirect(queueItem.path, path, 'quant-cli', 301);
-        console.log(chalk.bold.green('✅ REDIRECT:') + ` ${queueItem.path} => ${path}`);
-      }
-    } else {
-      count++;
-      quant.redirect(path, redirectQueueItem.url, 'quant-cli', 301);
-      console.log(chalk.bold.green('✅ REDIRECT:') + ` ${path} => ${redirectQueueItem.url}`);
-    }
-  });
+  // Handle sending redirects to the Quant API.
+  crawl.on('fetchredirect', (item, redirect, response) => redirectHandler(quant, item, redirect));
 
   // Capture errors.
   crawl.on('fetcherror', function(queueItem, response) {
