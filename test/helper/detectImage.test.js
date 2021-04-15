@@ -26,14 +26,14 @@ describe('detectImage', function() {
 
   it('should add host and proto', async function() {
     const items = await detectImage(cssString, 'test.com');
-    const expected = ['https://test.com/nala.jpg'];
-    expect(items).to.eql(expected);
+    const expected = 'https://test.com/nala.jpg';
+    expect(items).to.include(expected);
   });
 
   it('should allow custom proto', async function() {
     const items = await detectImage(cssString, 'test.com', 'http');
-    const expected = ['http://test.com/nala.jpg'];
-    expect(items).to.eql(expected);
+    const expected = 'http://test.com/nala.jpg';
+    expect(items).to.include(expected);
   });
   it('should return empty array', async function() {
     const items = await detectImage('');
@@ -44,15 +44,34 @@ describe('detectImage', function() {
   describe('CSS String', function() {
     it('should find background images', async function() {
       const items = await detectImage(cssString);
-      const expected = ['/nala.jpg'];
-      expect(items).to.eql(expected);
+      const expected = '/nala.jpg';
+      expect(items).to.include(expected);
     });
   });
 
   describe('HTML String', function() {
     it('should find background images', async function() {
       const items = await detectImage(htmlString);
-      const expected = ['/nala.jpg'];
+      const expected = '/nala.jpg';
+      expect(items).to.include(expected);
+    });
+    it('should find data-src attributes', async function() {
+      const items = await detectImage(htmlString);
+      const expected = '/files/assets/test.jpg';
+      expect(items).to.include(expected);
+    });
+    it('should find data-src-retina attributes', async function() {
+      const items = await detectImage(htmlString);
+      const expected = '/files/assets/test-retina.jpg';
+      expect(items).to.include(expected);
+    });
+    it('should append host and proto', async function() {
+      const items = await detectImage(htmlString, 'test.com', 'https');
+      const expected = [
+        'https://test.com/nala.jpg',
+        'https://test.com/files/assets/test-retina.jpg',
+        'https://test.com/files/assets/test.jpg',
+      ];
       expect(items).to.eql(expected);
     });
   });
