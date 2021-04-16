@@ -15,6 +15,7 @@ const fs = require('fs');
 const tmp = require('tmp');
 const detectImage = require('../helper/detectImage');
 const {redirectHandler} = require('../crawl/callbacks');
+const domFilters = require('../crawl/dom');
 
 let crawl;
 let count = 0;
@@ -23,9 +24,15 @@ const get = util.promisify(request.get);
 
 const command = {};
 
-command.command = 'crawl [domain]';
+command.command = 'crawl <domain>';
 command.describe = 'Crawl and push an entire domain';
-command.builder = {};
+command.builder = {
+  rewrite: {
+    describe: 'Rewrite host patterns',
+    alias: 'r',
+    type: 'boolean',
+  },
+};
 
 /**
  * When the operator interrupts the process, store the
@@ -115,14 +122,21 @@ command.handler = async function(argv) {
     const buffer = Buffer.from(responseBuffer, 'utf8');
 
     if (response.headers['content-type'] && response.headers['content-type'].includes('text/html')) {
-      // @todo: Relative link rewrite, needs to be more robust and configurable.
-      const makeRelative = true;
       let content = buffer.toString();
-      if (makeRelative) {
-        const domainRegex = new RegExp(domain, 'g');
-        content = content.replace(domainRegex, '');
+
+      // eslint-disable-next-line no-unused-vars
+      for (const [name, filter] of Object.entries(domFilters)) {
+        if (!argv.hasOwnProperty(filter.option)) {
+          // Filters must have an option to toggle them - if the option is
+          // not defined we skip this filter.
+          continue;
+        }
+        if (argv[filter.option]) {
+          content = filter.handler(content, queueItem);
+        }
       }
       console.log(chalk.bold.green('✅ MARKUP:') + ` ${url}`);
+
       try {
         await quant.markup(Buffer.from(content), url);
       } catch (err) {}
