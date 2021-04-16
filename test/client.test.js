@@ -575,7 +575,7 @@ describe('Quant Client', function() {
               redirect_url: '/b',
               redirect_http_code: 301,
               published: true,
-              info: {author: 'test'},
+              info: {author_user: 'test'},
             },
           }),
       ).to.be.true;

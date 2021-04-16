@@ -18,10 +18,13 @@ module.exports = {
 
     if (path != queueItem.path) {
       console.log(chalk.bold.green('✅ REDIRECT:') + ` ${queueItem.path} => ${path}`);
-      quant.redirect(queueItem.path, path, 'quant-cli', queueItem.stateData.code || 301);
+      quant.redirect(queueItem.path, path, 'quant-cli', queueItem.stateData.code || 301)
+          .catch((err) => null);
     } else {
-      console.log(chalk.bold.green('✅ REDIRECT:') + ` ${path} => ${redirectQueueItem.url}`);
-      quant.redirect(path, redirectQueueItem.url, 'quant-cli', redirectQueueItem.stateData.code || 301);
+      const destination = queueItem.host == redirectQueueItem.host ? redirectQueueItem.path : redirectQueueItem.url;
+      console.log(chalk.bold.green('✅ REDIRECT:') + ` ${path} => ${destination}`);
+      quant.redirect(path, destination, 'quant-cli', redirectQueueItem.stateData.code || 301)
+          .catch((err) => null);
     }
   },
 };
