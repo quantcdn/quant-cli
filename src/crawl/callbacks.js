@@ -6,8 +6,9 @@ const chalk = require('chalk');
 module.exports = {
   redirectHandler: (quant, queueItem, redirectQueueItem) => {
     let path = queueItem.path;
-    // Strip last slash.
-    if (path.substr(-1) === '/') {
+
+    if (path.substr(-1) === '/' && path.length > 1) {
+      // Strip trailing slashes except if only / is present in the path.
       path = path.substr(0, path.length - 1);
     }
 

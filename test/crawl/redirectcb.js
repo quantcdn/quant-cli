@@ -19,6 +19,7 @@ describe('crawl::redirectHandler', function() {
 
   // Disable console log for neater test output.
   before(() => sinon.stub(console, 'log'));
+  after(() => sinon.restore());
 
   beforeEach(() => {
     quant = {redirect: sinon.spy()};
@@ -52,6 +53,12 @@ describe('crawl::redirectHandler', function() {
     quant.redirect.should.have.been.calledOnceWith('/test', 'http://test.com/dest', 'quant-cli', 301);
   });
 
+  it('should be able to redirect bare /', () => {
+    const path = {path: '/', url: 'http://test.com/', stateData: {code: 302}};
+    const dest = {path: '/Home', url: 'http://test.com/Home', stateData: {code: 302}};
+    redirectHandler(quant, path, dest);
+    quant.redirect.should.have.been.calledOnceWith('/', 'http://test.com/Home', 'quant-cli', 302);
+  });
 
   describe('internal', () => {
 
