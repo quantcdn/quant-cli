@@ -4,7 +4,7 @@
 const chalk = require('chalk');
 
 module.exports = {
-  redirectHandler: (quant, queueItem, redirectQueueItem) => {
+  redirectHandler: async (quant, queueItem, redirectQueueItem) => {
     let path = queueItem.path;
 
     if (path.substr(-1) === '/' && path.length > 1) {
@@ -18,13 +18,15 @@ module.exports = {
 
     if (path != queueItem.path) {
       console.log(chalk.bold.green('✅ REDIRECT:') + ` ${queueItem.path} => ${path}`);
-      quant.redirect(queueItem.path, path, 'quant-cli', queueItem.stateData.code || 301)
-          .catch((err) => null);
+      try {
+        await quant.redirect(queueItem.path, path, 'quant-cli', queueItem.stateData.code || 301);
+      } catch (err) {}
     } else {
       const destination = queueItem.host == redirectQueueItem.host ? redirectQueueItem.path : redirectQueueItem.url;
       console.log(chalk.bold.green('✅ REDIRECT:') + ` ${path} => ${destination}`);
-      quant.redirect(path, destination, 'quant-cli', redirectQueueItem.stateData.code || 301)
-          .catch((err) => null);
+      try {
+        await quant.redirect(path, destination, 'quant-cli', redirectQueueItem.stateData.code || 301);
+      } catch (err) {}
     }
   },
 };
