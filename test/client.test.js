@@ -140,7 +140,13 @@ describe('Quant Client', function() {
             requestPost.calledOnceWith({
               url: 'http://localhost:8081',
               json: true,
-              body: {url: '/index.html', content: '', published: true, find_attachments: false},
+              body: {
+                url: '/index.html',
+                find_attachments: false,
+                content: '',
+                published: true,
+                info: {},
+              },
               headers: {
                 'User-Agent': 'Quant (+http://api.quantcdn.io)',
                 'Quant-Token': 'test',
@@ -179,6 +185,7 @@ describe('Quant Client', function() {
                 find_attachments: true,
                 content: '',
                 published: true,
+                info: {},
               },
               headers: {
                 'User-Agent': 'Quant (+http://api.quantcdn.io)',
@@ -218,6 +225,7 @@ describe('Quant Client', function() {
                 find_attachments: false,
                 content: '',
                 published: true,
+                info: {},
               },
               headers: {
                 'User-Agent': 'Quant (+http://api.quantcdn.io)',
@@ -257,6 +265,7 @@ describe('Quant Client', function() {
                 find_attachments: false,
                 content: '',
                 published: true,
+                info: {},
               },
               headers: {
                 'User-Agent': 'Quant (+http://api.quantcdn.io)',
@@ -296,6 +305,7 @@ describe('Quant Client', function() {
                 find_attachments: false,
                 content: '',
                 published: false,
+                info: {},
               },
               headers: {
                 'User-Agent': 'Quant (+http://api.quantcdn.io)',
@@ -357,6 +367,7 @@ describe('Quant Client', function() {
                 content: '',
                 published: true,
                 find_attachments: false,
+                info: {},
               },
               headers: {
                 'User-Agent': 'Quant (+http://api.quantcdn.io)',
@@ -424,7 +435,13 @@ describe('Quant Client', function() {
             requestPost.calledOnceWith({
               url: 'http://localhost:8081',
               json: true,
-              body: {url: '/index.html', content: '', published: true, find_attachments: false},
+              body: {
+                url: '/index.html',
+                find_attachments: false,
+                content: '',
+                published: true,
+                info: {},
+              },
               headers: {
                 'User-Agent': 'Quant (+http://api.quantcdn.io)',
                 'Quant-Token': 'test',
@@ -720,7 +737,7 @@ describe('Quant Client', function() {
       };
       requestPost = sinon.stub(request, 'post').yields(null, response, response.body); // eslint-disable-line max-len
 
-      await client(config).redirect('/a', '/b', 'test', 301); // eslint-disable-line max-len
+      await client(config).redirect('/a', '/b', 301); // eslint-disable-line max-len
 
       expect(
           requestPost.calledOnceWith({
@@ -732,7 +749,6 @@ describe('Quant Client', function() {
               redirect_url: '/b',
               redirect_http_code: 301,
               published: true,
-              info: {author_user: 'test'},
             },
           }),
       ).to.be.true;
@@ -740,13 +756,13 @@ describe('Quant Client', function() {
 
     it('should not accept an invalid http status code', async function() {
       try {
-        await client(config).redirect('/a', '/b', 'test', 200);
+        await client(config).redirect('/a', '/b', 200);
       } catch (err) {
         assert.typeOf(err, 'Error');
         assert.equal(err.message, 'A valid redirect status code is required');
       }
       try {
-        await client(config).redirect('/a', '/b', 'test', 401);
+        await client(config).redirect('/a', '/b', 401);
       } catch (err) {
         assert.typeOf(err, 'Error');
         assert.equal(

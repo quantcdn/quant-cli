@@ -160,11 +160,13 @@ const client = function(config) {
      *   Should quant find attachments.
      * @param {string} encoding
      *   The encoding type.
+     * @param {QuantInfo} info
+     *   A QuantInfo object.
      *
      * @return {object}
      *   The API response.
      */
-    send: async function(file, location, published = true, attachments = false, encoding = 'utf-8') {
+    send: async function(file, location, published = true, attachments = false, encoding = 'utf-8', info = new QuantInfo) {
       const mimeType = mime.lookup(file);
       if (mimeType == 'text/html') {
         if (!location) {
@@ -186,7 +188,7 @@ const client = function(config) {
             // Fail silently if this has been created already.
           };
         }
-        return await this.markup(file, location, published, attachments, encoding);
+        return await this.markup(file, location, published, attachments, encoding, info);
       } else {
         return await this.file(file, location);
       }
@@ -205,11 +207,13 @@ const client = function(config) {
      *   Quant looking for attachments.
      * @param {string} encoding
      *   The encoding type.
+     * @param {QuantInfo} info
+     *   A QuantInfo object.
      *
      * @return {object}
      *   The API response.
      */
-    markup: async function(file, location, published = true, attachments = false, encoding = 'utf-8') { // eslint-disable-line max-len
+    markup: async function(file, location, published = true, attachments = false, encoding = 'utf-8', info = new QuantInfo) { // eslint-disable-line max-len
       if (!Buffer.isBuffer(file)) {
         if (!location) {
           const p = path.resolve(process.cwd(), config.get('dir'));
@@ -233,10 +237,11 @@ const client = function(config) {
           find_attachments: attachments,
           content,
           published,
+          info: info.toObject(),
         },
         headers,
       };
-
+      console.info(options);
       const res = await post(options);
       return handleResponse(res);
     },
@@ -347,17 +352,17 @@ const client = function(config) {
      *   The URL to redirect form.
      * @param {string} to
      *   The URL to redirect to.
-     * @param {string} author
-     *   (Optional) Author.
      * @param {int} status
      *   HTTP status code.
+     * @param {QuantInfo} info
+     *   A QuantInfo object.
      *
      * @return {object}
      *   API payload.
      *
      * @throws Error.
      */
-    redirect: async function(from, to, author, status = 302) {
+    redirect: async function(from, to, status = 302, info = false) {
       const options = {
         url: `${config.get('endpoint')}/redirect`,
         headers: {
@@ -376,8 +381,8 @@ const client = function(config) {
         throw new Error('A valid redirect status code is required');
       }
 
-      if (author) {
-        options.body.info = {author_user: author};
+      if (info) {
+        options.body.info = info.toObject();
       }
 
       const res = await post(options);
@@ -397,13 +402,15 @@ const client = function(config) {
      *   Basic auth user.
      * @param {string} password
      *   Basic auth password.
+     * @param {QuantInfo} info
+     *   A QuantInfo object.
      *
      * @return {object}
      *   The response.
      *
      * @throws Error.
      */
-    proxy: async function(url, destination, published = true, username, password) { // eslint-disable-line max-len
+    proxy: async function(url, destination, published = true, username, password, info) { // eslint-disable-line max-len
       const options = {
         url: `${config.get('endpoint')}/proxy`,
         headers: {
@@ -460,8 +467,63 @@ const client = function(config) {
   };
 };
 
+/**
+ * An info object.
+ */
+class QuantInfo {
+
+  /**
+   * Construct the info object.
+   */
+  constructor() {
+    this.attributes = {};
+  }
+
+  /**
+   * Set an attribute value.
+   *
+   * @param {string} key
+   *   The key to use.
+   * @param {string} value
+   *   The value to use.
+   */
+  attr(key, value) {
+    const keys = {
+      'author_user': 128,
+      'author_name': 128,
+      'author_email': 255,
+      'log': 255,
+      'custom_1': 255,
+      'custom_2': 255,
+      'source': 50,
+    };
+
+    if (!keys.hasOwnProperty(key)) {
+      throw new Error(`Invalid attribute [${key}]`);
+    }
+
+    // Validate the info value as per Quant API rules.
+    if (value.length > keys[key]) {
+      throw new Error(`Invalid value provided must be < ${keys[key]}`);
+    }
+
+    this.attributes[key] = value;
+  };
+
+  /**
+   * Get an object for the API requet.
+   *
+   * @return {object}
+   *   Returns an object for the API request.
+   */
+  toObject() {
+    return this.attributes;
+  }
+}
+
 module.exports = function() {
   return module.exports.client.apply(this, arguments); // eslint-disable-line
 };
 
 module.exports.client = client;
+module.exports.QuantInfo = QuantInfo;
