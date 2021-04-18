@@ -23,6 +23,10 @@ describe('Deploy', function() {
   let unpublish;
   let ping;
 
+  // Disable console log for neater test output.
+  before(() => sinon.stub(console, 'log'));
+  after(() => sinon.restore());
+
   beforeEach(function() {
     unpublish = sinon.stub();
     send = sinon.stub();

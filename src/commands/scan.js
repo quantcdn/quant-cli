@@ -63,8 +63,6 @@ command.handler = async function(argv) {
       console.log(chalk.yellow(`[info]: ${filepath} is different.`));
     }
   });
-
-
 };
 
 module.exports = command;

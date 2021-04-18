@@ -372,7 +372,7 @@ const client = function(config) {
       }
 
       if (author) {
-        options.body.info = {author};
+        options.body.info = {author_user: author};
       }
 
       const res = await post(options);

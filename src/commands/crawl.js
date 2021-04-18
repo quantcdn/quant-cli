@@ -13,8 +13,11 @@ const request = require('request');
 const util = require('util');
 const fs = require('fs');
 const tmp = require('tmp');
-const detectImage = require('../helper/detectImage');
-const detectImage = require('../helper/responsiveImages');
+
+const {redirectHandler} = require('../crawl/callbacks');
+
+const filters = require('../crawl/filters');
+const detectors = require('../crawl/detectors');
 
 let crawl;
 let count = 0;
@@ -23,9 +26,15 @@ const get = util.promisify(request.get);
 
 const command = {};
 
-command.command = 'crawl [domain]';
+command.command = 'crawl <domain>';
 command.describe = 'Crawl and push an entire domain';
-command.builder = {};
+command.builder = {
+  rewrite: {
+    describe: 'Rewrite host patterns',
+    alias: 'r',
+    type: 'boolean',
+  },
+};
 
 /**
  * When the operator interrupts the process, store the
@@ -91,38 +100,8 @@ command.handler = async function(argv) {
     write(crawl);
   });
 
-  crawl.on('fetchredirect', function(queueItem, redirectQueueItem, response) {
-    let path = queueItem.path;
-
-    // Strip last slash.
-    if (path.substr(-1) === '/') {
-      path = path.substr(0, path.length - 1);
-    }
-
-    // Add internal redirects to the expected domain to the queue.
-    if (redirectQueueItem.host == hostname) {
-      crawl.queueURL(redirectQueueItem.url, redirectQueueItem.referrer);
-      console.log(chalk.bold.green('✅ Adding:') + ` ${redirectQueueItem.url}`);
-
-      // Ensure redirects pointing to themselves are ignored.
-      if (queueItem.path == path || queueItem.path == redirectQueueItem.path) {
-        return;
-      }
-
-      crawl.queueURL(redirectQueueItem.url, redirectQueueItem.referrer);
-      console.log(chalk.bold.green('✅ Adding:') + ` ${redirectQueueItem.url}`);
-
-      // Add internal redirect.
-      if (queueItem.path != path) {
-        quant.redirect(queueItem.path, path, 'quant-cli', 301);
-        console.log(chalk.bold.green('✅ REDIRECT:') + ` ${queueItem.path} => ${path}`);
-      }
-    } else {
-      count++;
-      quant.redirect(path, redirectQueueItem.url, 'quant-cli', 301);
-      console.log(chalk.bold.green('✅ REDIRECT:') + ` ${path} => ${redirectQueueItem.url}`);
-    }
-  });
+  // Handle sending redirects to the Quant API.
+  crawl.on('fetchredirect', (item, redirect, response) => redirectHandler(quant, item, redirect));
 
   // Capture errors.
   crawl.on('fetcherror', function(queueItem, response) {
@@ -134,36 +113,39 @@ command.handler = async function(argv) {
   });
 
   crawl.on('fetchcomplete', async function(queueItem, responseBuffer, response) {
-    const items = [];
+    const extraItems = [];
 
-    if (response.headers['content-type'] && (response.headers['content-type'].includes('text/html') || response.headers['content-type'].includes('css'))) {
-      // Find background images in css and page body and add them to the queue.
-      const images = await detectImage(responseBuffer, queueItem.host, queueItem.protocol);
-      images.map((i) => items.push(i));
+    // Prepare the detectors - attempt to locate additional requests to add
+    // to the queue based on patterns in the DOMString.
+    // eslint-disable-next-line no-unused-vars
+    for (const [n, detector] of Object.entries(detectors)) {
+      if (detector.applies(response)) {
+        await detector.handler(responseBuffer, queueItem.host, queueItem.protocol).map((i) => extraItems.push(i));
+      }
     }
 
-    // Detect pictures and srcset attributes.
-    if (response.headers['content-type'] && response.headers['content-type'].includes('text/html')) {
-      const images = await responsiveImages(responseBuffer, queueItem.host, queueItem.protocol);
-      images.map((i) => items.push(i));
-    }
-
-    items.forEach((item) => crawl.queueURL(item, queueItem.referrer));
-
+    extraItems.forEach((item) => crawl.queueURL(item, queueItem.referrer));
 
     // Cheap strip of domain.
     const url = queueItem.url.replace(domain, '');
     const buffer = Buffer.from(responseBuffer, 'utf8');
 
     if (response.headers['content-type'] && response.headers['content-type'].includes('text/html')) {
-      // @todo: Relative link rewrite, needs to be more robust and configurable.
-      const makeRelative = true;
       let content = buffer.toString();
-      if (makeRelative) {
-        const domainRegex = new RegExp(domain, 'g');
-        content = content.replace(domainRegex, '');
+
+      // eslint-disable-next-line no-unused-vars
+      for (const [name, filter] of Object.entries(filters)) {
+        if (!argv.hasOwnProperty(filter.option)) {
+          // Filters must have an option to toggle them - if the option is
+          // not defined we skip this filter.
+          continue;
+        }
+        if (argv[filter.option]) {
+          content = filter.handler(content, queueItem);
+        }
       }
       console.log(chalk.bold.green('✅ MARKUP:') + ` ${url}`);
+
       try {
         await quant.markup(Buffer.from(content), url);
       } catch (err) {}
