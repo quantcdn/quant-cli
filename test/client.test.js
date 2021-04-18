@@ -140,7 +140,163 @@ describe('Quant Client', function() {
             requestPost.calledOnceWith({
               url: 'http://localhost:8081',
               json: true,
-              body: {url: '/index.html', content: '', published: true},
+              body: {url: '/index.html', content: '', published: true, find_attachments: false},
+              headers: {
+                'User-Agent': 'Quant (+http://api.quantcdn.io)',
+                'Quant-Token': 'test',
+                'Quant-Customer': 'dev',
+                'Quant-Project': 'test',
+                'Content-Type': 'application/json',
+              },
+            }),
+        ).to.be.true;
+      });
+
+      it('should find attachments', async function() {
+        const response = {
+          statusCode: 200,
+          body: {
+            quant_revision: 1,
+            md5: 'da697d6f9a318fe26d2dd75a6b123df0',
+            quant_filename: 'index.html',
+            errorMsg: '',
+            error: false,
+          },
+        };
+
+        requestPost = sinon
+            .stub(request, 'post')
+            .yields(null, response, response.body);
+
+        await client(config).send('test/fixtures/index.html', 'test/fixtures/index.html', true, true);
+
+        expect(
+            requestPost.calledOnceWith({
+              url: 'http://localhost:8081',
+              json: true,
+              body: {
+                url: '/test/fixtures/index.html',
+                find_attachments: true,
+                content: '',
+                published: true,
+              },
+              headers: {
+                'User-Agent': 'Quant (+http://api.quantcdn.io)',
+                'Quant-Token': 'test',
+                'Quant-Customer': 'dev',
+                'Quant-Project': 'test',
+                'Content-Type': 'application/json',
+              },
+            }),
+        ).to.be.true;
+      });
+
+      it('should accept a location', async function() {
+        const response = {
+          statusCode: 200,
+          body: {
+            quant_revision: 1,
+            md5: 'da697d6f9a318fe26d2dd75a6b123df0',
+            quant_filename: 'index.html',
+            errorMsg: '',
+            error: false,
+          },
+        };
+
+        requestPost = sinon
+            .stub(request, 'post')
+            .yields(null, response, response.body);
+
+        await client(config).send('test/fixtures/index.html', 'test/index.html');
+
+        expect(
+            requestPost.calledOnceWith({
+              url: 'http://localhost:8081',
+              json: true,
+              body: {
+                url: '/test/index.html',
+                find_attachments: false,
+                content: '',
+                published: true,
+              },
+              headers: {
+                'User-Agent': 'Quant (+http://api.quantcdn.io)',
+                'Quant-Token': 'test',
+                'Quant-Customer': 'dev',
+                'Quant-Project': 'test',
+                'Content-Type': 'application/json',
+              },
+            }),
+        ).to.be.true;
+      });
+
+      it('should accept a location', async function() {
+        const response = {
+          statusCode: 200,
+          body: {
+            quant_revision: 1,
+            md5: 'da697d6f9a318fe26d2dd75a6b123df0',
+            quant_filename: 'index.html',
+            errorMsg: '',
+            error: false,
+          },
+        };
+
+        requestPost = sinon
+            .stub(request, 'post')
+            .yields(null, response, response.body);
+
+        await client(config).send('test/fixtures/index.html', 'test/index.html');
+
+        expect(
+            requestPost.calledOnceWith({
+              url: 'http://localhost:8081',
+              json: true,
+              body: {
+                url: '/test/index.html',
+                find_attachments: false,
+                content: '',
+                published: true,
+              },
+              headers: {
+                'User-Agent': 'Quant (+http://api.quantcdn.io)',
+                'Quant-Token': 'test',
+                'Quant-Customer': 'dev',
+                'Quant-Project': 'test',
+                'Content-Type': 'application/json',
+              },
+            }),
+        ).to.be.true;
+      });
+
+      it('should accept published status', async function() {
+        const response = {
+          statusCode: 200,
+          body: {
+            quant_revision: 1,
+            md5: 'da697d6f9a318fe26d2dd75a6b123df0',
+            quant_filename: 'index.html',
+            errorMsg: '',
+            error: false,
+          },
+        };
+
+        requestPost = sinon
+            .stub(request, 'post')
+            .yields(null, response, response.body);
+
+        await client(config).send('test/fixtures/index.html', 'test/index.html', false);
+
+        expect(
+            requestPost.calledOnceWith({
+              url: 'http://localhost:8081',
+              json: true,
+              body: {
+                url: '/test/index.html',
+                find_attachments: false,
+                content: '',
+                published: false,
+              },
               headers: {
                 'User-Agent': 'Quant (+http://api.quantcdn.io)',
                 'Quant-Token': 'test',
@@ -200,6 +356,7 @@ describe('Quant Client', function() {
                 url: '/some-file-path/index.html',
                 content: '',
                 published: true,
+                find_attachments: false,
               },
               headers: {
                 'User-Agent': 'Quant (+http://api.quantcdn.io)',
@@ -267,7 +424,7 @@ describe('Quant Client', function() {
             requestPost.calledOnceWith({
               url: 'http://localhost:8081',
               json: true,
-              body: {url: '/index.html', content: '', published: true},
+              body: {url: '/index.html', content: '', published: true, find_attachments: false},
               headers: {
                 'User-Agent': 'Quant (+http://api.quantcdn.io)',
                 'Quant-Token': 'test',

@@ -156,13 +156,15 @@ const client = function(config) {
      *   The path the location.
      * @param {bool} published
      *   The status.
+     * @param {bool} attachments
+     *   Should quant find attachments.
      * @param {string} encoding
      *   The encoding type.
      *
      * @return {object}
      *   The API response.
      */
-    send: async function(file, location, published = true, encoding = 'utf-8') {
+    send: async function(file, location, published = true, attachments = false, encoding = 'utf-8') {
       const mimeType = mime.lookup(file);
       if (mimeType == 'text/html') {
         if (!location) {
@@ -184,7 +186,7 @@ const client = function(config) {
             // Fail silently if this has been created already.
           };
         }
-        return await this.markup(file, location, published, encoding);
+        return await this.markup(file, location, published, attachments, encoding);
       } else {
         return await this.file(file, location);
       }
@@ -199,13 +201,15 @@ const client = function(config) {
      *   The path the location.
      * @param {bool} published
      *   The status.
+     * @param {bool} attachments
+     *   Quant looking for attachments.
      * @param {string} encoding
      *   The encoding type.
      *
      * @return {object}
      *   The API response.
      */
-    markup: async function(file, location, published = true, encoding = 'utf-8') { // eslint-disable-line max-len
+    markup: async function(file, location, published = true, attachments = false, encoding = 'utf-8') { // eslint-disable-line max-len
       if (!Buffer.isBuffer(file)) {
         if (!location) {
           const p = path.resolve(process.cwd(), config.get('dir'));
@@ -226,6 +230,7 @@ const client = function(config) {
         json: true,
         body: {
           url: location,
+          find_attachments: attachments,
           content,
           published,
         },
