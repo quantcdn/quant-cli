@@ -471,7 +471,6 @@ const client = function(config) {
  * An info object.
  */
 class QuantInfo {
-
   /**
    * Construct the info object.
    */
