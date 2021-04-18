@@ -1,0 +1,28 @@
+<html>
+<!-- Text between angle brackets is an HTML tag and is not displayed.
+Most tags, such as the HTML and /HTML tags that surround the contents of
+a page, come in pairs; some tags, like HR, for a horizontal rule, stand
+alone. Comments, such as the text you're reading, are not displayed when
+the Web page is shown. The information between the HEAD and /HEAD tags is
+not displayed. The information between the BODY and /BODY tags is displayed.-->
+
+<head>
+  <title>Enter a title, displayed at the top of the window.</title>
+</head>
+
+<body>
+
+  <img srcset="elva-fairy-320w.jpg,
+    elva-fairy-480w.jpg 1.5x,
+    elva-fairy-640w.jpg 2x" src="elva-fairy-640w.jpg" alt="Elva dressed as a fairy">
+
+  <img srcset="elva-fairy-320w.jpg,
+      elva-fairy-480w.jpg 1.5x,
+      elva-fairy-640w.jpg 2x" src="elva-fairy-640w.jpg" alt="Elva dressed as a fairy">
+
+  <picture>
+    <source media="(max-width: 799px)" srcset="elva-480w-close-portrait.jpg">
+    <source media="(min-width: 800px)" srcset="elva-800w.jpg">
+    <img src="elva-800w.jpg" alt="Chris standing up holding his daughter Elva">
+  </picture>
+</body>

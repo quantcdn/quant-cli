@@ -1,7 +1,7 @@
 /**
  * Test the redirect determination logic.
  */
-const {relativeDomains} = require('../../../src/crawl/dom');
+const {relativeDomains} = require('../../../src/crawl/filters');
 
 const chai = require('chai');
 const sinon = require('sinon');

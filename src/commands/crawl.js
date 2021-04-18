@@ -13,9 +13,11 @@ const request = require('request');
 const util = require('util');
 const fs = require('fs');
 const tmp = require('tmp');
-const detectImage = require('../helper/detectImage');
+
 const {redirectHandler} = require('../crawl/callbacks');
-const domFilters = require('../crawl/dom');
+
+const filters = require('../crawl/filters');
+const detectors = require('../crawl/detectors');
 
 let crawl;
 let count = 0;
@@ -111,11 +113,18 @@ command.handler = async function(argv) {
   });
 
   crawl.on('fetchcomplete', async function(queueItem, responseBuffer, response) {
-    if (response.headers['content-type'] && (response.headers['content-type'].includes('text/html') || response.headers['content-type'].includes('css'))) {
-      // Find background images in css and page body and add them to the queue.
-      const items = await detectImage(responseBuffer, queueItem.host, queueItem.protocol);
-      items.forEach((item) => crawl.queueURL(item, queueItem.referrer));
+    const extraItems = [];
+
+    // Prepare the detectors - attempt to locate additional requests to add
+    // to the queue based on patterns in the DOMString.
+    // eslint-disable-next-line no-unused-vars
+    for (const [n, detector] of Object.entries(detectors)) {
+      if (detector.applies(response)) {
+        await detector.handler(responseBuffer, queueItem.host, queueItem.protocol).map((i) => extraItems.push(i));
+      }
     }
+
+    extraItems.forEach((item) => crawl.queueURL(item, queueItem.referrer));
 
     // Cheap strip of domain.
     const url = queueItem.url.replace(domain, '');
@@ -125,7 +134,7 @@ command.handler = async function(argv) {
       let content = buffer.toString();
 
       // eslint-disable-next-line no-unused-vars
-      for (const [name, filter] of Object.entries(domFilters)) {
+      for (const [name, filter] of Object.entries(filters)) {
         if (!argv.hasOwnProperty(filter.option)) {
           // Filters must have an option to toggle them - if the option is
           // not defined we skip this filter.
