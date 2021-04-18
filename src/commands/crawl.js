@@ -33,6 +33,13 @@ command.builder = {
     describe: 'Rewrite host patterns',
     alias: 'r',
     type: 'boolean',
+    default: false,
+  },
+  attachments: {
+    describe: 'Find attachments',
+    alias: 'a',
+    type: 'boolean',
+    default: false,
   },
 };
 
@@ -147,7 +154,7 @@ command.handler = async function(argv) {
       console.log(chalk.bold.green('✅ MARKUP:') + ` ${url}`);
 
       try {
-        await quant.markup(Buffer.from(content), url);
+        await quant.markup(Buffer.from(content), url, true, argv.attachments);
       } catch (err) {}
     } else {
       // @TODO: Identify why the file needs to be downloaded twice is -

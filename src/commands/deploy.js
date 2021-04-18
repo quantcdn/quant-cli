@@ -22,6 +22,12 @@ command.builder = (yargs) => {
     type: 'string',
     default: null,
   });
+  yargs.options('attachments', {
+    describe: 'Find attachments',
+    alias: 'a',
+    type: 'boolean',
+    default: false,
+  });
 };
 
 command.handler = async function(argv) {
@@ -71,7 +77,7 @@ command.handler = async function(argv) {
     }
 
     try {
-      await quant.send(file, filepath);
+      await quant.send(file, filepath, true, argv.attachments);
     } catch (err) {
       console.log(chalk.yellow(err.message + ` (${filepath})`));
       return;
