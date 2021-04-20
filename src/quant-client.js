@@ -245,7 +245,6 @@ const client = function(config) {
 
       if (Object.entries(extraHeaders).length > 0) {
         options.body.headers = JSON.stringify(extraHeaders);
-        console.info(options);
       }
 
       const res = await post(options);
