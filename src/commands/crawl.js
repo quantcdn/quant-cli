@@ -171,7 +171,15 @@ command.handler = async function(argv) {
       }
 
       const asset = Buffer.from(response.body, 'utf8');
+      let extraHeaders = {};
       fs.writeFileSync(tmpfile.name, asset);
+
+      // Disposition headers.
+      ['content-disposition', 'content-type'].map((i) => {
+        if (Object.keys(queueItem.stateData.headers).includes(i)) {
+          extraHeaders[i] = queueItem.stateData.headers[i];
+        }
+      });
 
       console.log(chalk.bold.green('✅ FILE:') + ` ${url}`);
       try {
