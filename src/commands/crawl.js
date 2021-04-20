@@ -171,7 +171,7 @@ command.handler = async function(argv) {
       }
 
       const asset = Buffer.from(response.body, 'utf8');
-      let extraHeaders = {};
+      const extraHeaders = {};
       fs.writeFileSync(tmpfile.name, asset);
 
       // Disposition headers.
