@@ -178,7 +178,8 @@ describe('Quant Client', function() {
                 url: '/test/fixtures',
                 find_attachments: false,
                 content: '',
-                published: true
+                published: true,
+                headers: '{"test":"headers"}',
               },
               headers: {
                 'User-Agent': 'Quant (+http://api.quantcdn.io)',
@@ -186,7 +187,6 @@ describe('Quant Client', function() {
                 'Quant-Customer': 'dev',
                 'Quant-Project': 'test',
                 'Content-Type': 'application/json',
-                test: 'headers',
               },
             }),
         ).to.be.true;
@@ -522,7 +522,8 @@ describe('Quant Client', function() {
                 url: '/test/fixtures',
                 find_attachments: false,
                 content: '',
-                published: true
+                published: true,
+                headers: '{"test":"header"}',
               },
               headers: {
                 'User-Agent': 'Quant (+http://api.quantcdn.io)',
@@ -530,7 +531,6 @@ describe('Quant Client', function() {
                 'Quant-Customer': 'dev',
                 'Quant-Project': 'test',
                 'Content-Type': 'application/json',
-                'test': 'header',
               },
             }),
         ).to.be.true;
@@ -588,13 +588,16 @@ describe('Quant Client', function() {
         expect(
             requestPost.calledOnceWith({
               url: 'http://localhost:8081',
+              json: true,
               headers: {
-                ...headers,
+                'User-Agent': 'Quant (+http://api.quantcdn.io)',
+                'Quant-Token': 'test',
+                'Quant-Customer': 'dev',
+                'Quant-Project': 'test',
                 'Content-Type': 'multipart/form-data',
                 'Quant-File-Url': '/nala.jpg',
-                'test': 'headers',
+                'Quant-File-Headers': '{"test":"headers"}',
               },
-              json: true,
               formData: {data: {}},
             }),
         ).to.be.true;

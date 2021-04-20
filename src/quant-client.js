@@ -240,9 +240,13 @@ const client = function(config) {
         },
         headers: {
           ...headers,
-          ...extraHeaders,
         },
       };
+
+      if (Object.entries(extraHeaders).length > 0) {
+        options.body.headers = JSON.stringify(extraHeaders);
+        console.info(options);
+      }
 
       const res = await post(options);
       return handleResponse(res);
@@ -294,12 +298,16 @@ const client = function(config) {
         json: true,
         headers: {
           ...headers,
-          ...extraHeaders,
           'Content-Type': 'multipart/form-data',
           'Quant-File-Url': location,
         },
         formData,
       };
+
+      if (Object.entries(extraHeaders).length > 0) {
+        options.headers['Quant-File-Headers'] = JSON.stringify(extraHeaders);
+      }
+
       const res = await post(options);
       return handleResponse(res);
     },
