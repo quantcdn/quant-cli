@@ -244,7 +244,7 @@ const client = function(config) {
       };
 
       if (Object.entries(extraHeaders).length > 0) {
-        options.body.headers = JSON.stringify(extraHeaders);
+        options.body.headers = extraHeaders;
       }
 
       const res = await post(options);

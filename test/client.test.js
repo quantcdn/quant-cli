@@ -179,7 +179,7 @@ describe('Quant Client', function() {
                 find_attachments: false,
                 content: '',
                 published: true,
-                headers: '{"test":"headers"}',
+                headers: {'test': 'headers'},
               },
               headers: {
                 'User-Agent': 'Quant (+http://api.quantcdn.io)',
@@ -523,7 +523,7 @@ describe('Quant Client', function() {
                 find_attachments: false,
                 content: '',
                 published: true,
-                headers: '{"test":"header"}',
+                headers: {'test': 'header'},
               },
               headers: {
                 'User-Agent': 'Quant (+http://api.quantcdn.io)',
