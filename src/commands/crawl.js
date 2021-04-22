@@ -183,7 +183,7 @@ command.handler = async function(argv) {
 
       console.log(chalk.bold.green('✅ FILE:') + ` ${url}`);
       try {
-        await quant.file(tmpfile.name, url, true);
+        await quant.file(tmpfile.name, url, true, extraHeaders);
       } catch (err) {}
     }
     count++;
