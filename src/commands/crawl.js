@@ -21,6 +21,7 @@ const detectors = require('../crawl/detectors');
 
 let crawl;
 let count = 0;
+var writingState = false;
 const failures = [];
 const get = util.promisify(request.get);
 
@@ -47,11 +48,14 @@ command.builder = {
  * When the operator interrupts the process, store the
  * state of the crawler.
  */
-process.on('SIGINT', function() {
-  if (typeof crawl != 'undefined') {
-    crawl.stop();
-    write(crawl);
-  }
+[`exit`, `SIGINT`, `SIGUSR1`, `SIGUSR2`, `uncaughtException`, `SIGTERM`].forEach((eventType) => {
+  process.on(eventType, function() {
+    if (typeof crawl != 'undefined' && !writingState) {
+      writingState = true;
+      crawl.stop();
+      write(crawl);
+    }
+  });
 });
 
 command.handler = async function(argv) {
