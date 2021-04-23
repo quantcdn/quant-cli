@@ -152,6 +152,46 @@ describe('Quant Client', function() {
         ).to.be.true;
       });
 
+      it('should accept custom headers', async function() {
+        const response = {
+          statusCode: 200,
+          body: {
+            quant_revision: 1,
+            md5: 'da697d6f9a318fe26d2dd75a6b123df0',
+            quant_filename: 'index.html',
+            errorMsg: '',
+            error: false,
+          },
+        };
+
+        requestPost = sinon
+            .stub(request, 'post')
+            .yields(null, response, response.body);
+
+        await client(config).send('test/fixtures/index.html', 'test/fixtures', true, false, {test: 'headers'});
+
+        expect(
+            requestPost.calledOnceWith({
+              url: 'http://localhost:8081',
+              json: true,
+              body: {
+                url: '/test/fixtures',
+                find_attachments: false,
+                content: '',
+                published: true,
+                headers: {'test': 'headers'},
+              },
+              headers: {
+                'User-Agent': 'Quant (+http://api.quantcdn.io)',
+                'Quant-Token': 'test',
+                'Quant-Customer': 'dev',
+                'Quant-Project': 'test',
+                'Content-Type': 'application/json',
+              },
+            }),
+        ).to.be.true;
+      });
+
       it('should find attachments', async function() {
         const response = {
           statusCode: 200,
@@ -457,6 +497,45 @@ describe('Quant Client', function() {
           assert.equal(err.message, 'Can only upload an index.html file.');
         }
       });
+      it('should accept custom headers', async function() {
+        const response = {
+          statusCode: 200,
+          body: {
+            quant_revision: 1,
+            md5: 'da697d6f9a318fe26d2dd75a6b123df0',
+            quant_filename: 'index.html',
+            errorMsg: '',
+            error: false,
+          },
+        };
+        requestPost = sinon
+            .stub(request, 'post')
+            .yields(null, response, response.body);
+
+        const data = await client(config).markup('test/fixtures/index.html', 'test/fixtures', true, false, {test: 'header'});
+
+        expect(
+            requestPost.calledOnceWith({
+              url: 'http://localhost:8081',
+              json: true,
+              body: {
+                url: '/test/fixtures',
+                find_attachments: false,
+                content: '',
+                published: true,
+                headers: {'test': 'header'},
+              },
+              headers: {
+                'User-Agent': 'Quant (+http://api.quantcdn.io)',
+                'Quant-Token': 'test',
+                'Quant-Customer': 'dev',
+                'Quant-Project': 'test',
+                'Content-Type': 'application/json',
+              },
+            }),
+        ).to.be.true;
+        assert.equal(data, response.body);
+      });
     });
     describe('files', function() {
       it('should accept a local file', async function() {
@@ -484,6 +563,41 @@ describe('Quant Client', function() {
                 'Quant-File-Url': '/nala.jpg',
               },
               json: true,
+              formData: {data: {}},
+            }),
+        ).to.be.true;
+        assert.equal(data, response.body);
+      });
+
+      it('should accept custom headers', async function() {
+        const response = {
+          statusCode: 200,
+          body: {
+            quant_revision: 1,
+            md5: 'da697d6f9a318fe26d2dd75a6b123df0',
+            quant_filename: 'nala.jpg',
+            errorMsg: '',
+            error: false,
+          },
+        };
+        requestPost = sinon.stub(request, 'post')
+            .yields(null, response, response.body);
+
+        const data = await client(config).file('test/fixtures/nala.jpg', 'nala.jpg', false, {test: 'headers'});
+
+        expect(
+            requestPost.calledOnceWith({
+              url: 'http://localhost:8081',
+              json: true,
+              headers: {
+                'User-Agent': 'Quant (+http://api.quantcdn.io)',
+                'Quant-Token': 'test',
+                'Quant-Customer': 'dev',
+                'Quant-Project': 'test',
+                'Content-Type': 'multipart/form-data',
+                'Quant-File-Url': '/nala.jpg',
+                'Quant-File-Headers': '{"test":"headers"}',
+              },
               formData: {data: {}},
             }),
         ).to.be.true;
