@@ -13,6 +13,7 @@ const request = require('request');
 const util = require('util');
 const fs = require('fs');
 const tmp = require('tmp');
+const prompt = require('prompt');
 
 const {redirectHandler} = require('../crawl/callbacks');
 
@@ -21,7 +22,10 @@ const detectors = require('../crawl/detectors');
 
 let crawl;
 let count = 0;
-var writingState = false;
+let writingState = false;
+let filename;
+
+const tmpfiles = [];
 const failures = [];
 const get = util.promisify(request.get);
 
@@ -30,15 +34,54 @@ const command = {};
 command.command = 'crawl <domain>';
 command.describe = 'Crawl and push an entire domain';
 command.builder = {
-  rewrite: {
+  'rewrite': {
     describe: 'Rewrite host patterns',
     alias: 'r',
     type: 'boolean',
     default: false,
   },
-  attachments: {
+  'attachments': {
     describe: 'Find attachments',
     alias: 'a',
+    type: 'boolean',
+    default: false,
+  },
+  'interval': {
+    describe: 'Crawl interval',
+    alias: 'i',
+    type: 'integer',
+    default: 200,
+  },
+  'cookies': {
+    describe: 'Accept cookies during the crawl',
+    alias: 'c',
+    type: 'boolean',
+    default: false,
+  },
+  'concurrency': {
+    describe: 'Crawl concurrency',
+    alias: 'n',
+    type: 'integer',
+    default: 4,
+  },
+  'size': {
+    describe: 'Crawl resource buffer size in bytes',
+    alias: 's',
+    type: 'integer',
+    default: 268435456,
+  },
+  'robots': {
+    describe: 'Respect robots',
+    type: 'boolean',
+    default: false,
+  },
+  'skip-resume': {
+    describe: 'Start a fresh crawl ignoring resume state',
+    type: 'boolean',
+    default: false,
+  },
+  'no-interaction': {
+    describe: 'No user interaction',
     type: 'boolean',
     default: false,
   },
@@ -53,7 +96,7 @@ command.builder = {
     if (typeof crawl != 'undefined' && !writingState) {
       writingState = true;
       crawl.stop();
-      write(crawl);
+      write(crawl, filename);
     }
   });
 });
@@ -66,6 +109,9 @@ command.handler = async function(argv) {
     return console.error(chalk.yellow('Quant is not configured, run init.'));
   }
 
+  // Set the resume-state filename.
+  filename = `${config.get('clientid')}-${config.get('project')}`;
+
   const domain = argv.domain;
 
   if (!domain) {
@@ -75,25 +121,25 @@ command.handler = async function(argv) {
 
   crawl = crawler(domain);
 
-  crawl.interval = 300;
+  crawl.interval = argv.interval;
   crawl.decodeResponses = true;
-  crawl.maxResourceSize = 268435456; // 256MB
-  crawl.maxConcurrency = 4;
-  crawl.respectRobotsTxt = false;
+  crawl.maxResourceSize = argv.size; // 256MB
+  crawl.maxConcurrency = argv.concurrency;
+  crawl.respectRobotsTxt = argv.robots;
 
   const quant = client(config);
 
   // Get the domain host.
   let hostname = domain;
+
   if (hostname.indexOf('//') > -1) {
     hostname = hostname.split('/')[2];
   } else {
     hostname = hostname.split('/')[0];
   }
 
-  // find & remove port number
+  // Prepare the hostname.
   hostname = hostname.split(':')[0];
-  // find & remove "?"
   hostname = hostname.split('?')[0];
 
   crawl.domainWhitelist = [
@@ -104,11 +150,13 @@ command.handler = async function(argv) {
     crawl.domainWhitelist.push(hostname.slice(4));
   }
 
-  crawl.on('complete', await function() {
+  crawl.on('complete', function() {
     console.log(chalk.bold.green('✅ All done! ') + ` ${count} total items.`);
     console.log(chalk.bold.green('Failed items:'));
     console.log(failures);
-    write(crawl);
+    console.log(`Removing temporary files ${tempfiles.length}`);
+    tmpfiles.map(fs.unlinkSync);
+    write(crawl, filename);
   });
 
   // Handle sending redirects to the Quant API.
@@ -169,6 +217,8 @@ command.handler = async function(argv) {
       const opts = {url: queueItem.url, encoding: null};
       const response = await get(opts);
 
+      tmpfiles.push(tmpfile.name);
+
       if (!response.body || response.body.byteLength < 50) {
         queueItem.status = 'failed';
         file.close();
@@ -193,7 +243,30 @@ command.handler = async function(argv) {
     count++;
   });
 
-  read(crawl);
+  if (!argv['skip-resume']) {
+    let result;
+
+    if (!argv['no-interaction']) {
+      prompt.start();
+      result = await prompt.get({
+        properties: {
+          resume: {
+            required: true,
+            description: 'Resume from the previous crawl?',
+            default: true,
+            type: 'boolean',
+          },
+        },
+      });
+    } else {
+      result = {resume: true};
+    }
+
+    if (result.resume) {
+      read(crawl, filename);
+    }
+  }
+
   crawl.start();
 };
 

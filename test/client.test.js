@@ -603,6 +603,41 @@ describe('Quant Client', function() {
         ).to.be.true;
         assert.equal(data, response.body);
       });
+
+      it('should accept empty object', async function() {
+        const response = {
+          statusCode: 200,
+          body: {
+            quant_revision: 1,
+            md5: 'da697d6f9a318fe26d2dd75a6b123df0',
+            quant_filename: 'nala.jpg',
+            errorMsg: '',
+            error: false,
+          },
+        };
+        requestPost = sinon.stub(request, 'post')
+            .yields(null, response, response.body);
+
+        const data = await client(config).file('test/fixtures/nala.jpg', 'nala.jpg', false, {});
+
+        expect(
+            requestPost.calledOnceWith({
+              url: 'http://localhost:8081',
+              json: true,
+              headers: {
+                'User-Agent': 'Quant (+http://api.quantcdn.io)',
+                'Quant-Token': 'test',
+                'Quant-Customer': 'dev',
+                'Quant-Project': 'test',
+                'Content-Type': 'multipart/form-data',
+                'Quant-File-Url': '/nala.jpg',
+              },
+              formData: {data: {}},
+            }),
+        ).to.be.true;
+        assert.equal(data, response.body);
+      });
+
       it('should accept nested local files', async function() {
         const response = {
           statusCode: 200,
@@ -649,7 +684,7 @@ describe('Quant Client', function() {
             .yields(null, response, response.body);
 
         const data = await client(config)
-            .file('test/fixtures/sample/nala.jpg', '/path-to-file');
+            .file('test/fixtures/sample/nala.jpg', '/path-to-file/nala.jpg');
 
         expect(
             requestPost.calledOnceWith({
@@ -681,7 +716,7 @@ describe('Quant Client', function() {
             .yields(null, response, response.body);
 
         const data = await client(config)
-            .file('test/fixtures/sample/nala.jpg', '/path/to/file');
+            .file('test/fixtures/sample/nala.jpg', '/path/to/file/nala.jpg');
 
         expect(
             requestPost.calledOnceWith({

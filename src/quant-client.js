@@ -275,10 +275,6 @@ const client = function(config) {
           // If a location isn't given, calculate it.
           location = path.relative(p, local);
           location.replace(path.basename(location), '');
-        } else {
-          if (!path.extname(location)) {
-            location = `${location}/${path.basename(local)}`;
-          }
         }
         if (!fs.existsSync(local)) {
           throw new Error('File is not accessible.');

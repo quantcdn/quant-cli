@@ -14,10 +14,12 @@ const {tmpdir} = require('os');
  * @param {string} resumeFile
  *   The name of the resume file.
  */
-const write = async (crawl, resumeFile = `${tmpdir()}/quant-resume`) => {
+const write = async (crawl, resumeFile = `quant-resume`) => {
   console.log(chalk.bold.blue('Stopping crawl...'));
   crawl.stop();
   console.log(chalk.bold.blue('Writing resume state to disk...'));
+
+  resumeFile = `${tmpdir()}/${resumeFile}`;
 
   if (fs.existsSync(resumeFile)) {
     // Clean up the resume file.
@@ -52,7 +54,9 @@ const write = async (crawl, resumeFile = `${tmpdir()}/quant-resume`) => {
  *
  * @throws Error
  */
-const read = async (crawl, resumeFile = `${tmpdir()}/quant-resume`) => {
+const read = async (crawl, resumeFile = `quant-resume`) => {
+  resumeFile = `${tmpdir()}/${resumeFile}`;
+
   if (fs.existsSync(resumeFile)) {
     await crawl.queue.defrost(resumeFile, () => {});
     console.log(chalk.bold.green('✅ DONE: Loaded resume state from ' + resumeFile)); // eslint-disable-line max-len

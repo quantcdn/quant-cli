@@ -8,6 +8,7 @@ const chalk = require('chalk');
 const config = require('../config');
 const client = require('../quant-client');
 const getFiles = require('../helper/getFiles');
+const normalizePaths = require('../helper/normalizePaths');
 const path = require('path');
 const yargs = require('yargs');
 const md5File = require('md5-file');
@@ -61,7 +62,9 @@ command.handler = async function(argv) {
   }
 
   files.map(async (file) => {
-    const filepath = path.relative(p, file);
+    let filepath = path.relative(p, file);
+    filepath = normalizePaths(filepath);
+
     let revision = false;
 
     try {
