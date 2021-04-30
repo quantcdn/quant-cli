@@ -128,6 +128,7 @@ command.handler = async function(argv) {
   crawl.maxResourceSize = argv.size; // 256MB
   crawl.maxConcurrency = argv.concurrency;
   crawl.respectRobotsTxt = argv.robots;
+  crawl.acceptCookies = argv.cookies;
 
   const quant = client(config);
 
