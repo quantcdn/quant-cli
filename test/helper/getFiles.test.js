@@ -11,7 +11,7 @@ chai.use(chaiAsPromied);
 const assert = chai.assert;
 const expect = chai.expect;
 
-describe('getFiles', function() {
+describe('helpers::getFiles', function() {
   it('should return a promise', function() {
     return getFiles('test/fixtures')
         .then((files) => {
