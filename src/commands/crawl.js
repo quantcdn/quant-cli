@@ -8,12 +8,13 @@ const chalk = require('chalk');
 const config = require('../config');
 const client = require('../quant-client');
 const crawler = require('simplecrawler');
-const {write, read} = require('../helper/resumeState');
+const {write} = require('../helper/resumeState');
 const request = require('request');
 const util = require('util');
 const fs = require('fs');
 const tmp = require('tmp');
 const prompt = require('prompt');
+const os = require('os');
 
 const {redirectHandler} = require('../crawl/callbacks');
 
@@ -95,7 +96,8 @@ command.builder = {
   process.on(eventType, function() {
     if (typeof crawl != 'undefined' && !writingState) {
       writingState = true;
-      crawl.stop();
+      // Saving the state cannot be async as exit hooks don't correctly
+      // execute async callbacks.
       write(crawl, filename);
     }
   });
@@ -263,11 +265,17 @@ command.handler = async function(argv) {
     }
 
     if (result.resume) {
-      read(crawl, filename);
+      // Defrost is async and supports non-existent files.
+      crawl.queue.defrost(`${os.homedir()}/.quant/${filename}`, (err) => {
+        console.log(chalk.bold.green('✅ DONE: Loaded resume state from ' + `${os.homedir()}/.quant/${filename}`)); // eslint-disable-line max-len
+        crawl.start();
+      });
+    } else {
+      crawl.start();
     }
+  } else {
+    crawl.start();
   }
-
-  crawl.start();
 };
 
 module.exports = command;
