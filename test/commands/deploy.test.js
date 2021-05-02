@@ -23,6 +23,10 @@ describe('Deploy', function() {
   let unpublish;
   let ping;
 
+  // Disable console log for neater test output.
+  before(() => sinon.stub(console, 'log'));
+  after(() => sinon.restore());
+
   beforeEach(function() {
     unpublish = sinon.stub();
     send = sinon.stub();
@@ -86,7 +90,7 @@ describe('Deploy', function() {
         total_pages: 1,
         total_records: 3,
         records: [
-          'test/index.html',
+          {url: 'test/index.html'},
         ],
       });
       clientStub = sinon.stub(client, 'client').returns({

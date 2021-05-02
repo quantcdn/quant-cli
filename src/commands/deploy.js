@@ -8,8 +8,10 @@ const chalk = require('chalk');
 const config = require('../config');
 const client = require('../quant-client');
 const getFiles = require('../helper/getFiles');
+const normalizePaths = require('../helper/normalizePaths');
 const path = require('path');
 const yargs = require('yargs');
+const md5File = require('md5-file');
 
 const command = {};
 
@@ -21,11 +23,16 @@ command.builder = (yargs) => {
     type: 'string',
     default: null,
   });
+  yargs.options('attachments', {
+    describe: 'Find attachments',
+    alias: 'a',
+    type: 'boolean',
+    default: false,
+  });
 };
 
 command.handler = async function(argv) {
   let files;
-  let data;
 
   console.log(chalk.bold.green('*** Quant deploy ***'));
 
@@ -54,19 +61,32 @@ command.handler = async function(argv) {
     yargs.exit(1);
   }
 
-  /* eslint-disable guard-for-in */
-  for (const file in files) {
-    const filepath = path.relative(p, files[file]);
+  files.map(async (file) => {
+    let filepath = path.relative(p, file);
+    filepath = normalizePaths(filepath);
+
+    let revision = false;
 
     try {
-      await quant.send(files[file], filepath);
-    } catch (err) {
-      console.log(chalk.yellow(err.message + ` (${filepath})`));
-      continue;
+      revision = await quant.revisions(filepath);
+    } catch (err) {}
+
+    if (revision) {
+      const md5 = md5File.sync(file);
+      if (md5 == revision.md5) {
+        console.log(chalk.blue(`Published version is up-to-date (${filepath})`));
+        return;
+      }
     }
 
+    try {
+      await quant.send(file, filepath, true, argv.attachments);
+    } catch (err) {
+      console.log(chalk.yellow(err.message + ` (${filepath})`));
+      return;
+    }
     console.log(chalk.bold.green('✅') + ` ${filepath}`);
-  }
+  });
 
   try {
     data = await quant.meta(true);
@@ -86,16 +106,16 @@ command.handler = async function(argv) {
   }
 
   data.records.map(async (item) => {
-    const f = item.replace('/index.html', '.html');
-    if (relativeFiles.includes(item) || relativeFiles.includes(f)) {
+    const f = item.url.replace('/index.html', '.html');
+    if (relativeFiles.includes(item.url) || relativeFiles.includes(f)) {
       return;
     }
     try {
-      await quant.unpublish(item);
+      await quant.unpublish(item.url);
     } catch (err) {
-      return console.log(chalk.yellow(err.message + ` (${item})`));
+      return console.log(chalk.yellow(err.message + ` (${item.url})`));
     }
-    console.log(chalk.bold.green('✅') + ` ${item} unpublished.`);
+    console.log(chalk.bold.green('✅') + ` ${item.url} unpublished.`);
   });
 
   /* eslint-enable guard-for-in */

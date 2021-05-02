@@ -129,7 +129,7 @@ const client = function(config) {
       }
 
       if (res.body.global_meta.records) {
-        res.body.global_meta.records.map((item) => records.push(item.meta.url));
+        res.body.global_meta.records.map((item) => records.push({url: item.meta.url, md5: item.meta.md5}));
       }
 
       if (unfold) {
@@ -156,13 +156,17 @@ const client = function(config) {
      *   The path the location.
      * @param {bool} published
      *   The status.
+     * @param {bool} attachments
+     *   Should quant find attachments.
+     * @param {object} extraHeaders
+     *   Additional HTTP headers.
      * @param {string} encoding
      *   The encoding type.
      *
      * @return {object}
      *   The API response.
      */
-    send: async function(file, location, published = true, encoding = 'utf-8') {
+    send: async function(file, location, published = true, attachments = false, extraHeaders = {}, encoding = 'utf-8') {
       const mimeType = mime.lookup(file);
       if (mimeType == 'text/html') {
         if (!location) {
@@ -184,9 +188,9 @@ const client = function(config) {
             // Fail silently if this has been created already.
           };
         }
-        return await this.markup(file, location, published, encoding);
+        return await this.markup(file, location, published, attachments, extraHeaders, encoding);
       } else {
-        return await this.file(file, location);
+        return await this.file(file, location, false, extraHeaders);
       }
     },
 
@@ -199,13 +203,17 @@ const client = function(config) {
      *   The path the location.
      * @param {bool} published
      *   The status.
+     * @param {bool} attachments
+     *   Quant looking for attachments.
+     * @param {object} extraHeaders
+     *   Additional HTTP headers.
      * @param {string} encoding
      *   The encoding type.
      *
      * @return {object}
      *   The API response.
      */
-    markup: async function(file, location, published = true, encoding = 'utf-8') { // eslint-disable-line max-len
+    markup: async function(file, location, published = true, attachments = false, extraHeaders = {}, encoding = 'utf-8') { // eslint-disable-line max-len
       if (!Buffer.isBuffer(file)) {
         if (!location) {
           const p = path.resolve(process.cwd(), config.get('dir'));
@@ -226,11 +234,18 @@ const client = function(config) {
         json: true,
         body: {
           url: location,
+          find_attachments: attachments,
           content,
           published,
         },
-        headers,
+        headers: {
+          ...headers,
+        },
       };
+
+      if (Object.entries(extraHeaders).length > 0) {
+        options.body.headers = extraHeaders;
+      }
 
       const res = await post(options);
       return handleResponse(res);
@@ -245,23 +260,21 @@ const client = function(config) {
      *   Accessible location.
      * @param {bool} absolute
      *   If the location is an absolute path.
+     * @param {object} extraHeaders
+     *   Additional HTTP headers.
      *
      * @return {object}
      *   The successful payload.
      *
      * @throws Error
      */
-    file: async function(local, location, absolute = false) {
+    file: async function(local, location, absolute = false, extraHeaders = {}) {
       if (!Buffer.isBuffer(local)) {
         if (!location) {
           const p = path.resolve(process.cwd(), config.get('dir'));
           // If a location isn't given, calculate it.
           location = path.relative(p, local);
           location.replace(path.basename(location), '');
-        } else {
-          if (!path.extname(location)) {
-            location = `${location}/${path.basename(local)}`;
-          }
         }
         if (!fs.existsSync(local)) {
           throw new Error('File is not accessible.');
@@ -285,6 +298,10 @@ const client = function(config) {
         },
         formData,
       };
+
+      if (Object.entries(extraHeaders).length > 0) {
+        options.headers['Quant-File-Headers'] = JSON.stringify(extraHeaders);
+      }
 
       const res = await post(options);
       return handleResponse(res);
@@ -372,7 +389,7 @@ const client = function(config) {
       }
 
       if (author) {
-        options.body.info = {author};
+        options.body.info = {author_user: author};
       }
 
       const res = await post(options);
@@ -418,6 +435,38 @@ const client = function(config) {
       }
 
       const res = await post(options);
+      return handleResponse(res);
+    },
+
+    /**
+     * Get the revision history from Quant.
+     *
+     * @param {string} url
+     *   The URL path to get revisions for.
+     * @param {string|bool} revision
+     *   Retrieve a specific revision.
+     *
+     * @return {object}
+     *   The response.
+     *
+     * @throws Error.
+     */
+    revisions: async function(url, revision = false) {
+      const path = revision ? revision : 'published';
+
+      url = url.indexOf('/') == 0 ? url : `/${url}`;
+      url = url.toLowerCase();
+      url = url.replace(/\/?index\.html/, '');
+
+      const options = {
+        url: `${config.get('endpoint')}/revisions/${path}`,
+        headers: {
+          ...headers,
+          'Quant-Url': url,
+        },
+        json: true,
+      };
+      const res = await get(options);
       return handleResponse(res);
     },
   };
