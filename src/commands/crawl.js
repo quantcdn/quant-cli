@@ -26,7 +26,6 @@ let count = 0;
 let writingState = false;
 let filename;
 
-const tmpfiles = [];
 const failures = [];
 const get = util.promisify(request.get);
 
@@ -75,6 +74,10 @@ command.builder = {
     describe: 'Respect robots',
     type: 'boolean',
     default: false,
+  },
+  'extra-domains': {
+    describe: 'CSV of additional host names to fan out to',
+    alias: 'e',
   },
   'skip-resume': {
     describe: 'Start a fresh crawl ignoring resume state',
@@ -153,12 +156,13 @@ command.handler = async function(argv) {
     crawl.domainWhitelist.push(hostname.slice(4));
   }
 
+  crawl.domainWhitelist.push(argv['extra-domains'].split(',').map((d) => d.trim()));
+
   crawl.on('complete', function() {
     console.log(chalk.bold.green('✅ All done! ') + ` ${count} total items.`);
     console.log(chalk.bold.green('Failed items:'));
     console.log(failures);
     console.log(`Removing temporary files ${tempfiles.length}`);
-    tmpfiles.map(fs.unlinkSync);
     write(crawl, filename);
   });
 
@@ -203,7 +207,7 @@ command.handler = async function(argv) {
           continue;
         }
         if (argv[filter.option]) {
-          content = filter.handler(content, queueItem);
+          content = filter.handler(content, queueItem, argv);
         }
       }
       console.log(chalk.bold.green('✅ MARKUP:') + ` ${url}`);
@@ -219,8 +223,6 @@ command.handler = async function(argv) {
       const file = fs.createWriteStream(tmpfile.name);
       const opts = {url: queueItem.url, encoding: null};
       const response = await get(opts);
-
-      tmpfiles.push(tmpfile.name);
 
       if (!response.body || response.body.byteLength < 50) {
         queueItem.status = 'failed';
@@ -242,6 +244,8 @@ command.handler = async function(argv) {
       try {
         await quant.file(tmpfile.name, url, true, extraHeaders);
       } catch (err) {}
+
+      fs.unlink(tmpfile.name);
     }
     count++;
   });

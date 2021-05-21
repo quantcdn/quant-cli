@@ -11,8 +11,20 @@
  */
 module.exports = {
   option: 'rewrite',
-  handler: (dom, opts) => {
+  handler: (dom, opts, argv = []) => {
     const regex = new RegExp(`http[s]?:\/\/${opts.host}(:\\d+)?`, 'gi');
-    return dom.replace(regex, '');
+    let body = dom.replace(regex, '');
+
+    if ('extra-domains' in argv) {
+      let r;
+      const extraDomains = argv['extra-domains'].split(',').map((d) => d.trim());
+
+      for (let i = 0; i < extraDomains.length; i++) {
+        r = new RegExp(`http[s]?:\/\/${extraDomains[i]}(:\\d+)?`, 'gi');
+        body = body.replace(r, '');
+      }
+    }
+
+    return body;
   },
 };

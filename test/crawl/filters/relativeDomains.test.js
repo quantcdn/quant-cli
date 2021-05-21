@@ -56,4 +56,22 @@ describe('crawl:filters:relativeDomains', function() {
     chai.expect(string).to.include('/test/link');
     chai.expect(string).to.include('/test-other-link');
   });
+
+  it('should replace extra domains', () => {
+    let string = '<a href="https://localhost:3000/test/link">test link</a>' +
+      '<p>Some other thing</p>' +
+      '<a href="https://content.localhost/path/to/somewhere">Extra</a>' +
+      '<p>Some other thing</p>' +
+      '<p>Some other thing</p>' +
+      '<p>Some other thing</p>' +
+      '<p>Some other thing</p>' +
+      'https://localhost:3000/test-other-link';
+
+    string = relativeDomains.handler(string, opts, {'extra-domains': 'content.localhost'});
+
+    chai.expect(string).to.not.include('https://localhost:3000');
+    chai.expect(string).to.not.include('https://content.localhost');
+    chai.expect(string).to.include('/test/link');
+    chai.expect(string).to.include('/path/to/somewhere');
+  });
 });
