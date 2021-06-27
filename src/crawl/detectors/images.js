@@ -6,6 +6,7 @@ const {decode} = require('html-entities');
 const matchAll = require('string.prototype.matchall');
 const bgImg = /background(-image)?:.*?url\(\s*(?<url>.*?)\s*\)/gi;
 const dataSrc = /data-src(?:\-retina)?=\"(?<url>[^']*?)\"/gi;
+const xlinkHref = /xlink:href=\"(?<url>.*?)\"/gi;
 
 module.exports = {
   applies: (response) => {
@@ -16,7 +17,7 @@ module.exports = {
       string = string.toString();
     }
 
-    const items = [...matchAll(string, bgImg), ...matchAll(string, dataSrc)];
+    const items = [...matchAll(string, bgImg), ...matchAll(string, dataSrc), ...matchAll(string, xlinkHref)];
 
     if (items.length < 0) {
       return [];

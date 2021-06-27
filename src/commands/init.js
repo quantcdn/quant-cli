@@ -49,8 +49,8 @@ command.handler = function(argv) {
           default: 'https://api.quantcdn.io',
         },
         clientid: {
-          pattern: /^[a-zA-Z0-9\-]+$/,
-          message: 'Client id must be only letters, numbers or dashes',
+          pattern: /^[a-zA-Z0-9\-\_]+$/,
+          message: 'Client id must be only letters, numbers, underscores or dashes',
           required: true,
           description: 'Enter QuantCDN client id',
         },
