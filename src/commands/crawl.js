@@ -26,7 +26,6 @@ let count = 0;
 let writingState = false;
 let filename;
 
-const tmpfiles = [];
 const failures = [];
 const get = util.promisify(request.get);
 
@@ -157,8 +156,6 @@ command.handler = async function(argv) {
     console.log(chalk.bold.green('✅ All done! ') + ` ${count} total items.`);
     console.log(chalk.bold.green('Failed items:'));
     console.log(failures);
-    console.log(`Removing temporary files ${tempfiles.length}`);
-    tmpfiles.map(fs.unlinkSync);
     write(crawl, filename);
   });
 
@@ -220,8 +217,6 @@ command.handler = async function(argv) {
       const opts = {url: queueItem.url, encoding: null};
       const response = await get(opts);
 
-      tmpfiles.push(tmpfile.name);
-
       if (!response.body || response.body.byteLength < 50) {
         queueItem.status = 'failed';
         file.close();
@@ -242,6 +237,9 @@ command.handler = async function(argv) {
       try {
         await quant.file(tmpfile.name, url, true, extraHeaders);
       } catch (err) {}
+
+      // Remove temporary file immediately.
+      fs.unlinkSync(tmpfile.name);
     }
     count++;
   });
