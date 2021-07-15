@@ -11,7 +11,7 @@ const config = require('../config');
 const command = {};
 
 command.command = 'purge <path>';
-command.describe = 'Purge a quantCDN url';
+command.describe = 'Purge the cache for a given url';
 command.builder = {};
 
 command.handler = function(argv) {
