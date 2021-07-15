@@ -469,6 +469,25 @@ const client = function(config) {
       const res = await get(options);
       return handleResponse(res);
     },
+
+    /**
+     * Purge URL patterns from Quants Varnish.
+     *
+     * @param {string} urlPattern
+     *
+     * @throws Error
+     */
+    purge: async function(urlPattern) {
+      const options = {
+        url: `${config.get('endpoint')}/purge`,
+        headers: {
+          ...headers,
+          'Quant-Url': urlPattern,
+        },
+      };
+      const res = await post(options);
+      return handleResponse(res);
+    },
   };
 };
 
