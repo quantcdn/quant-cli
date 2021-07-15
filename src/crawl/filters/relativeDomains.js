@@ -12,7 +12,7 @@
 module.exports = {
   option: 'rewrite',
   handler: (dom, opts) => {
-    const regex = new RegExp(`http[s]?:\/\/${opts.host}(:\\d+)?`, 'gi');
-    return dom.replace(regex, '');
+    const regex = new RegExp(`http[s]?:\/\/${opts.host}(:\\d+)?\/[\/]?`, 'gi');
+    return dom.replace(regex, '/');
   },
 };
