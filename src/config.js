@@ -4,7 +4,7 @@ const filename = 'quant.json';
 
 const config = {
   dir: 'build',
-  endpoint: 'http://quantcdn.io',
+  endpoint: 'https://api.quantcdn.io',
   clientid: null,
   project: null,
   token: null,

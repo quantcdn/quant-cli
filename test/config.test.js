@@ -14,7 +14,7 @@ const fs = require('fs');
 describe('Config', function() {
   describe('defaults', function() {
     it('should have a default endpoint', function() {
-      assert.equal(config.get('endpoint'), 'http://quantcdn.io/v1');
+      assert.equal(config.get('endpoint'), 'https://api.quantcdn.io/v1');
     });
     it('should have a default directory', function() {
       assert.equal(config.get('dir'), 'build');
