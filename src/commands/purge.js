@@ -1,5 +1,5 @@
 /**
- * Purge a QuantCDN url.
+ * Purge the cache for a given url.
  *
  * @usage
  *   quant unpublish <path>
