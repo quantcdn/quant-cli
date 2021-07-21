@@ -30,7 +30,7 @@ command.builder = (yargs) => {
     default: false,
   });
   yargs.options('disable-unpublish', {
-    describe: 'Disable the automatic cleanup process',
+    describe: 'Skip the automatic unpublish process',
     alias: 'u',
     type: 'boolean',
     default: false,
