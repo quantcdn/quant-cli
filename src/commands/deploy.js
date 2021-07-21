@@ -82,7 +82,7 @@ command.handler = async function(argv) {
       const md5 = md5File.sync(file);
       if (md5 == revision.md5) {
         console.log(chalk.blue(`Published version is up-to-date (${filepath})`));
-        return;
+        continue;
       }
     }
     try {
