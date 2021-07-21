@@ -95,7 +95,7 @@ command.handler = async function(argv) {
   });
 
   if (argv['disable-unpublish']) {
-    console.log(chalk.yellow('[skip]: Skipping automatic path removal.'));
+    console.log(chalk.yellow('[skip]: Skipping automatic unpublish'));
     return;
   }
 
