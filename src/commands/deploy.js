@@ -29,7 +29,7 @@ command.builder = (yargs) => {
     type: 'boolean',
     default: false,
   });
-  yargs.options('disable-unpublish', {
+  yargs.options('skip-unpublish', {
     describe: 'Skip the automatic unpublish process',
     alias: 'u',
     type: 'boolean',
