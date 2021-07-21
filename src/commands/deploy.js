@@ -29,6 +29,12 @@ command.builder = (yargs) => {
     type: 'boolean',
     default: false,
   });
+  yargs.options('skip-unpublish', {
+    describe: 'Skip the automatic unpublish process',
+    alias: 'u',
+    type: 'boolean',
+    default: false,
+  });
 };
 
 command.handler = async function(argv) {
@@ -87,6 +93,11 @@ command.handler = async function(argv) {
     }
     console.log(chalk.bold.green('✅') + ` ${filepath}`);
   });
+
+  if (argv['disable-unpublish']) {
+    console.log(chalk.yellow('[skip]: Skipping automatic unpublish'));
+    return;
+  }
 
   try {
     data = await quant.meta(true);
