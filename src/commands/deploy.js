@@ -94,7 +94,7 @@ command.handler = async function(argv) {
     console.log(chalk.bold.green('✅') + ` ${filepath}`);
   });
 
-  if (argv['disable-unpublish']) {
+  if (argv['skip-unpublish']) {
     console.log(chalk.yellow('[skip]: Skipping automatic unpublish'));
     return;
   }
