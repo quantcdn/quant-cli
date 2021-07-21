@@ -68,7 +68,7 @@ command.handler = async function(argv) {
   }
 
   for (let i = 0; i < files.length; i++) {
-    let file = files[i];
+    const file = files[i];
     let filepath = path.relative(p, file);
     filepath = normalizePaths(filepath);
 
@@ -89,7 +89,7 @@ command.handler = async function(argv) {
       await quant.send(file, filepath, true, argv.attachments);
     } catch (err) {
       console.log(chalk.yellow(err.message + ` (${filepath})`));
-      return;
+      continue;
     }
     console.log(chalk.bold.green('✅') + ` ${filepath}`);
   }
