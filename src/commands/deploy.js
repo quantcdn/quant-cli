@@ -96,7 +96,7 @@ command.handler = async function(argv) {
 
   if (argv['skip-unpublish']) {
     console.log(chalk.yellow('[skip]: Skipping automatic unpublish'));
-    return;
+    yargs.exit(0);
   }
 
   try {
