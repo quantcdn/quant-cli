@@ -67,8 +67,7 @@ command.handler = async function(argv) {
     yargs.exit(1);
   }
 
-  for (let i = 0; i < files.length; i++) {
-    const file = files[i];
+  await Promise.all(files.map(async (file) => {
     let filepath = path.relative(p, file);
     filepath = normalizePaths(filepath);
 
@@ -82,20 +81,20 @@ command.handler = async function(argv) {
       const md5 = md5File.sync(file);
       if (md5 == revision.md5) {
         console.log(chalk.blue(`Published version is up-to-date (${filepath})`));
-        continue;
+        return;
       }
     }
     try {
       await quant.send(file, filepath, true, argv.attachments);
     } catch (err) {
       console.log(chalk.yellow(err.message + ` (${filepath})`));
-      continue;
+      return;
     }
     console.log(chalk.bold.green('✅') + ` ${filepath}`);
-  }
+  }));
 
   if (argv['skip-unpublish']) {
-    console.log(chalk.yellow('[skip]: Skipping automatic unpublish'));
+    console.log(chalk.yellow(' -> Skipping the automatic unpublish process'));
     yargs.exit(0);
   }
 
