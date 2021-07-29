@@ -80,7 +80,7 @@ command.handler = async function(argv) {
   if (argv['chunk-size'] > 10) {
     argv['chunk-size'] = 10;
   }
-  files = chunk(files, 1);
+  files = chunk(files, argv['chunk-size']);
 
   for (let i = 0; i < files.length; i++) {
     await Promise.all(files[i].map(async (file) => {
