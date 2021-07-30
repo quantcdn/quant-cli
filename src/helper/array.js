@@ -11,7 +11,7 @@
  * @return {array}
  *   An array containing chunks.
  */
-const chunk = (array, size) => {
+const chunk = (array, size = 10) => {
   if (array.length <= size) {
     return [array];
   }
