@@ -1,6 +1,6 @@
 {
   "name": "@quantcdn/quant-cli",
-  "version": "1.6.3",
+  "version": "1.7.0",
   "description": "Deploy tools for QuantCDN",
   "main": "cli.js",
   "scripts": {
