@@ -126,7 +126,8 @@ command.handler = async function(argv) {
   // determine if we need to unpublish the URL.
   const relativeFiles = [];
   for (let i = 0; i < files.length; i++) {
-    await Promise.all(files[i].map((item) => relativeFiles.push(`/${path.relative(p, item)}`)));
+    // Quant URLs are all lowercase, relative paths need to be made lc for comparison.
+    await Promise.all(files[i].map((item) => relativeFiles.push(`/${path.relative(p, item).toLowerCase()}`)));
   }
 
   if (!data || ! 'records' in data) {
