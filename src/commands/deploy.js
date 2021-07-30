@@ -77,8 +77,8 @@ command.handler = async function(argv) {
 
   // Chunk the files array into smaller pieces to handle
   // concurrency with the api requests.
-  if (argv['chunk-size'] > 10) {
-    argv['chunk-size'] = 10;
+  if (argv['chunk-size'] > 20) {
+    argv['chunk-size'] = 20;
   }
   files = chunk(files, argv['chunk-size']);
 
