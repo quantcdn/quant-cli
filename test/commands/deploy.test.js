@@ -66,7 +66,6 @@ describe('Deploy', function() {
           .returns([f]);
 
       await deploy({dir});
-
       expect(send.calledOnceWith(f)).to.be.true;
     });
 
@@ -79,7 +78,6 @@ describe('Deploy', function() {
           .returns([f]);
 
       await deploy({dir});
-
       expect(send.calledOnceWith(f)).to.be.true;
     });
   });
@@ -106,6 +104,7 @@ describe('Deploy', function() {
       getFilesStub.withArgs(dir).returns([
         'index.html',
       ]);
+
       await deploy({dir});
       expect(unpublish.calledOnceWith('test/index.html')).to.be.true;
     });
