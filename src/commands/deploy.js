@@ -12,7 +12,7 @@ const normalizePaths = require('../helper/normalizePaths');
 const path = require('path');
 const yargs = require('yargs');
 const md5File = require('md5-file');
-const { chunk } = require('../helper/array');
+const {chunk} = require('../helper/array');
 
 const command = {};
 

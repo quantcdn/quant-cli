@@ -8,7 +8,7 @@
  * @param {array} array The array to chunk
  * @param {int} size The number of items per chunk
  *
- * @returns {array}
+ * @return {array}
  *   An array containing chunks.
  */
 const chunk = (array, size) => {
