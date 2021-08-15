@@ -25,6 +25,10 @@
   "bin": {
     "quant": "cli.js"
   },
+  "files": [
+    "cli.js",
+    "/src"
+  ],
   "dependencies": {
     "big-json": "^3.1.0",
     "chalk": "^4.1.0",
