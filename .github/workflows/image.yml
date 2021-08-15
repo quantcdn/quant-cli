@@ -34,3 +34,4 @@ jobs:
           file: .docker/quant-cli.Dockerfile
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
+          push: true
