@@ -1,4 +1,4 @@
-#!/usr/bin/env node
+#!/usr/bin/env node --max-old-space-size=14000
 
 require('yargs/yargs')(process.argv.slice(2))
     .strict()
