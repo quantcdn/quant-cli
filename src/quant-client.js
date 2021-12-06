@@ -108,7 +108,7 @@ const client = function(config) {
         });
 
         if (res.body.global_meta && res.body.global_meta.records) {
-          res.body.global_meta.records.map((item) => records.push(item.meta.url));
+          res.body.global_meta.records.map((item) => records.push({url: item.meta.url, md5: item.meta.md5}));
         }
       };
 
@@ -467,6 +467,25 @@ const client = function(config) {
         json: true,
       };
       const res = await get(options);
+      return handleResponse(res);
+    },
+
+    /**
+     * Purge URL patterns from Quants Varnish.
+     *
+     * @param {string} urlPattern
+     *
+     * @throws Error
+     */
+    purge: async function(urlPattern) {
+      const options = {
+        url: `${config.get('endpoint')}/purge`,
+        headers: {
+          ...headers,
+          'Quant-Url': urlPattern,
+        },
+      };
+      const res = await post(options);
       return handleResponse(res);
     },
   };
