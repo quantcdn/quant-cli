@@ -168,7 +168,7 @@ describe('Quant Client', function() {
             .stub(request, 'post')
             .yields(null, response, response.body);
 
-        await client(config).send('test/fixtures/index.html', 'test/fixtures', true, false, {test: 'headers'});
+        await client(config).send('test/fixtures/index.html', 'test/fixtures', true, false, false, {test: 'headers'});
 
         expect(
             requestPost.calledOnceWith({
