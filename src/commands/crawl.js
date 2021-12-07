@@ -87,8 +87,8 @@ command.builder = {
   },
   'urls-file': {
     describe: 'JSON file containing array of URLs to add to the queue',
-    type: 'string'
-  }
+    type: 'string',
+  },
 };
 
 /**
@@ -131,7 +131,7 @@ command.handler = async function(argv) {
       urlsdata = JSON.parse(fs.readFileSync(argv['urls-file']));
     } catch (error) {
       console.log(chalk.bold.red('❌ ERROR: Cannot read urls-file: ' + argv['urls-file']));
-      process.exit(1)
+      process.exit(1);
     }
   }
 
@@ -263,8 +263,7 @@ command.handler = async function(argv) {
 
     if (!fs.existsSync(`${os.homedir()}/.quant/${filename}`)) {
       result = {resume: false};
-    }
-    else if (!argv['no-interaction']) {
+    } else if (!argv['no-interaction']) {
       prompt.start();
       result = await prompt.get({
         properties: {
@@ -281,7 +280,6 @@ command.handler = async function(argv) {
     }
 
     if (result.resume) {
-
       // Prevent manual URL list when resuming.
       if (urlsdata.length > 0) {
         console.log(chalk.bold.green('❌ ERROR: Cannot use --urls-file while resuming, ignoring.'));
@@ -293,7 +291,6 @@ command.handler = async function(argv) {
         console.log(chalk.bold.green('✅ DONE: Loaded resume state from ' + `${os.homedir()}/.quant/${filename}`)); // eslint-disable-line max-len
       });
     }
-
   } else {
     console.log(chalk.bold.green('Skipping resume state via --skip-resume.'));
   }
