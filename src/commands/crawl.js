@@ -85,6 +85,10 @@ command.builder = {
     type: 'boolean',
     default: false,
   },
+  'urls-file': {
+    describe: 'JSON file containing array of URLs to add to the queue',
+    type: 'string',
+  },
 };
 
 /**
@@ -120,8 +124,18 @@ command.handler = async function(argv) {
     return;
   }
 
-  crawl = crawler(domain);
+  // Queue URLs from urls-file if provided.
+  urlsdata = [];
+  if (argv['urls-file'] && argv['urls-file'].length > 0) {
+    try {
+      urlsdata = JSON.parse(fs.readFileSync(argv['urls-file']));
+    } catch (error) {
+      console.log(chalk.bold.red('❌ ERROR: Cannot read urls-file: ' + argv['urls-file']));
+      process.exit(1);
+    }
+  }
 
+  crawl = crawler(domain);
   crawl.interval = argv.interval;
   crawl.decodeResponses = true;
   crawl.maxResourceSize = argv.size; // 256MB
@@ -247,7 +261,9 @@ command.handler = async function(argv) {
   if (!argv['skip-resume']) {
     let result;
 
-    if (!argv['no-interaction']) {
+    if (!fs.existsSync(`${os.homedir()}/.quant/${filename}`)) {
+      result = {resume: false};
+    } else if (!argv['no-interaction']) {
       prompt.start();
       result = await prompt.get({
         properties: {
@@ -264,17 +280,29 @@ command.handler = async function(argv) {
     }
 
     if (result.resume) {
+      // Prevent manual URL list when resuming.
+      if (urlsdata.length > 0) {
+        console.log(chalk.bold.green('❌ ERROR: Cannot use --urls-file while resuming, ignoring.'));
+        urlsdata = [];
+      }
+
       // Defrost is async and supports non-existent files.
       crawl.queue.defrost(`${os.homedir()}/.quant/${filename}`, (err) => {
         console.log(chalk.bold.green('✅ DONE: Loaded resume state from ' + `${os.homedir()}/.quant/${filename}`)); // eslint-disable-line max-len
-        crawl.start();
       });
-    } else {
-      crawl.start();
     }
   } else {
-    crawl.start();
+    console.log(chalk.bold.green('Skipping resume state via --skip-resume.'));
   }
+
+  // Inject URLs provided via urls-file.
+  if (urlsdata.length > 0) {
+    for (const url of urlsdata) {
+      crawl.queueURL(url);
+    }
+  }
+
+  crawl.start();
 };
 
 module.exports = command;
