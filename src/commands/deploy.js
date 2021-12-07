@@ -36,6 +36,12 @@ command.builder = (yargs) => {
     type: 'boolean',
     default: false,
   });
+  yargs.options('skip-purge', {
+    describe: 'Skip the automatic cache purge process',
+    alias: 'sp',
+    type: 'boolean',
+    default: false,
+  });
   yargs.option('chunk-size', {
     describe: 'Control the chunk-size for concurrency',
     alias: 'cs',
@@ -101,7 +107,7 @@ command.handler = async function(argv) {
         }
       }
       try {
-        await quant.send(file, filepath, true, argv.attachments);
+        await quant.send(file, filepath, true, argv.attachments, argv['skip-purge']);
       } catch (err) {
         console.log(chalk.yellow(err.message + ` (${filepath})`));
         return;

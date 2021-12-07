@@ -29,3 +29,8 @@ require('yargs/yargs')(process.argv.slice(2))
     .demandCommand()
     .wrap(100)
     .argv;
+
+process.on('SIGINT', function() {
+  console.log('Caught interrupt signal');
+  process.exit();
+});
