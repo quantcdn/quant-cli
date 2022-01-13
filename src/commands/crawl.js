@@ -142,6 +142,7 @@ command.handler = async function(argv) {
   crawl.maxConcurrency = argv.concurrency;
   crawl.respectRobotsTxt = argv.robots;
   crawl.acceptCookies = argv.cookies;
+  crawl.maxDepth = 1;
 
   const quant = client(config);
 

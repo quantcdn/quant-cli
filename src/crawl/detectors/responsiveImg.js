@@ -43,7 +43,9 @@ module.exports = {
       imgs.map((i) => {
         i.groups.attr.split(',').map((a) => {
           a = prepare(a);
-          a = (host) ? `${protocol}://${host}/${a}` : a;
+          if (host && a.indexOf(host) == -1) {
+            a = `${protocol}://${host}/${a}`;
+          }
           if (retval.indexOf(a) === -1) {
             retval.push(a);
           }
