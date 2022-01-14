@@ -5,6 +5,7 @@
   "main": "cli.js",
   "scripts": {
     "test": "mocha --recursive",
+    "mocha": "mocha",
     "lint:cli": "eslint cli.js",
     "lint:src": "eslint src",
     "lint": "npm run lint:cli && npm run lint:src"

@@ -65,5 +65,14 @@ describe('crawl:detectors:responsiveImg', function() {
       expect(images).to.include(`https://${host}/elva-fairy-480w.jpg`);
       expect(images).to.include(`https://${host}/elva-fairy-640w.jpg`);
     });
+
+    it('should not duplicate the host', function() {
+      const host = 'test.com.au';
+      const images = detector.handler(htmlString, host);
+      expect(images).to.not.include(`https://${host}/https:/${host}/hotlinked-image.jpg`);
+      expect(images).to.include(`https://${host}/hotlinked-image.jpg`);
+      expect(images).to.include(`https://${host}/hotlinked-image-480w.jpg`);
+      expect(images).to.include(`https://${host}/hotlinked-image-640w.jpg`);
+    });
   });
 });
