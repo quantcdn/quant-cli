@@ -25,8 +25,12 @@ require('yargs/yargs')(process.argv.slice(2))
       alias: 'e',
       describe: 'API endpoint for QuantCDN',
       type: 'string',
-      default: 'https://api.quantcdn.io',
     })
     .demandCommand()
     .wrap(100)
     .argv;
+
+process.on('SIGINT', function() {
+  console.log('Caught interrupt signal');
+  process.exit();
+});

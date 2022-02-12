@@ -1,5 +1,5 @@
 /**
- * Unpublish a QuantCDN url.
+ * Purge the cache for a given url.
  *
  * @usage
  *   quant unpublish <path>
@@ -10,12 +10,12 @@ const config = require('../config');
 
 const command = {};
 
-command.command = 'unpublish <path>';
-command.describe = 'Unpublish an asset';
+command.command = 'purge <path>';
+command.describe = 'Purge the cache for a given url';
 command.builder = {};
 
 command.handler = function(argv) {
-  console.log(chalk.bold.green('*** Quant unpublish ***'));
+  console.log(chalk.bold.green('*** Quant purge ***'));
 
   // config.fromArgs(argv);
   if (!config.fromArgs(argv)) {
@@ -23,8 +23,8 @@ command.handler = function(argv) {
   }
 
   client(config)
-      .unpublish(argv.path)
-      .then(response => console.log(chalk.green('Success:') + ` Unpublished successfully`)) // eslint-disable-line
+      .purge(argv.path)
+      .then(response => console.log(chalk.green('Success:') + ` Purged ${argv.path}`)) // eslint-disable-line
       .catch((err) => console.log(chalk.red.bold('Error:') + ` ${err}`));
 };
 

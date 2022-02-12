@@ -33,8 +33,9 @@ Commands:
   quant page <file> <location>                       Make a local page asset available via Quant
   quant proxy <path> <origin> [status]               Create a proxy to allow traffic directly to
   [basicAuthUser] [basicAuthPass]                     origin
-  quant redirect <from> <to> [status] [author]       Create a redirect
-  quant unpublish <path>                             Unpublish an asset
+  quant purge <path>                                  Purge the cache for a given url
+  quant redirect <from> <to> [status] [author]        Create a redirect
+  quant unpublish <path>                              Unpublish an asset
 
 Options:
   --version       Show version number                                                      [boolean]

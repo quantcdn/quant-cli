@@ -11,7 +11,7 @@ chai.use(chaiAsPromied);
 const assert = chai.assert;
 const expect = chai.expect;
 
-describe('getFiles', function() {
+describe('helpers::getFiles', function() {
   it('should return a promise', function() {
     return getFiles('test/fixtures')
         .then((files) => {
@@ -25,6 +25,7 @@ describe('getFiles', function() {
     const expected = [
       `${process.cwd()}/test/fixtures/index.html`,
       `${process.cwd()}/test/fixtures/nala.jpg`,
+      `${process.cwd()}/test/fixtures/responsive-images.html`,
       `${process.cwd()}/test/fixtures/sample/nala.jpg`,
       `${process.cwd()}/test/fixtures/some-file-path.html`,
       `${process.cwd()}/test/fixtures/test.css`,
