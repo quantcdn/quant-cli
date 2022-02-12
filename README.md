@@ -24,13 +24,14 @@ npm i -D @quantcdn/quant-cli
 $ quant <command>
 
 Commands:
-  quant crawl                                         Crawl and push an entire domain
-  quant deploy [dir]                                  Deploy the output of a static generator
-  quant file <file> <location>                        Deploy a single asset
-  quant info                                          Give info based on current configuration
-  quant init                                          Initialise a project in the current directory
-  quant page <file> <location>                        Make a local page asset available via Quant
-  quant proxy <path> <origin> [status]                Create a proxy to allow traffic directly to
+  quant crawl [domain]                               Crawl and push an entire domain
+  quant delete <path>                                Delete a deployed path from Quant
+  quant deploy [dir]                                 Deploy the output of a static generator
+  quant file <file> <location>                       Deploy a single asset
+  quant info                                         Give info based on current configuration
+  quant init                                         Initialise a project in the current directory
+  quant page <file> <location>                       Make a local page asset available via Quant
+  quant proxy <path> <origin> [status]               Create a proxy to allow traffic directly to
   [basicAuthUser] [basicAuthPass]                     origin
   quant purge <path>                                  Purge the cache for a given url
   quant redirect <from> <to> [status] [author]        Create a redirect
