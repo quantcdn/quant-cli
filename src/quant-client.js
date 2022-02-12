@@ -471,7 +471,6 @@ const client = function(config) {
      * @throw Error.
      */
     delete: async function(path) {
-
       path = path.replace('index.html', '');
 
       const options = {
