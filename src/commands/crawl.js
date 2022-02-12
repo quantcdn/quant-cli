@@ -89,6 +89,11 @@ command.builder = {
     describe: 'JSON file containing array of URLs to add to the queue',
     type: 'string',
   },
+  'seed-notfound': {
+    describe: 'Send the content of unique not found pages to quant',
+    type: 'boolean',
+    default: false,
+  },
 };
 
 /**
@@ -162,30 +167,7 @@ command.handler = async function(argv) {
     hostname,
   ];
 
-  if (hostname.startsWith('www.')) {
-    crawl.domainWhitelist.push(hostname.slice(4));
-  }
-
-  crawl.on('complete', function() {
-    console.log(chalk.bold.green('✅ All done! ') + ` ${count} total items.`);
-    console.log(chalk.bold.green('Failed items:'));
-    console.log(failures);
-    write(crawl, filename);
-  });
-
-  // Handle sending redirects to the Quant API.
-  crawl.on('fetchredirect', (item, redirect, response) => redirectHandler(quant, item, redirect));
-
-  // Capture errors.
-  crawl.on('fetcherror', function(queueItem, response) {
-    console.log(chalk.bold.red('❌ ERROR:') + ` ${queueItem.stateData.code} for ${queueItem.url}`);
-    failures.push({'code': queueItem.stateData.code, 'url': queueItem.url});
-    if (queueItem.stateData.code == 403) {
-      console.log('403');
-    }
-  });
-
-  crawl.on('fetchcomplete', async function(queueItem, responseBuffer, response) {
+  const fetchCallback = async function(queueItem, responseBuffer, response) {
     const extraItems = [];
 
     // Prepare the detectors - attempt to locate additional requests to add
@@ -238,6 +220,7 @@ command.handler = async function(argv) {
 
       const asset = Buffer.from(response.body, 'utf8');
       const extraHeaders = {};
+
       fs.writeFileSync(tmpfile.name, asset);
 
       // Disposition headers.
@@ -250,12 +233,49 @@ command.handler = async function(argv) {
       console.log(chalk.bold.green('✅ FILE:') + ` ${url}`);
       try {
         await quant.file(tmpfile.name, url, true, extraHeaders);
-      } catch (err) {}
+      } catch (err) {
+        console.log(err);
+      }
 
       // Remove temporary file immediately.
       fs.unlinkSync(tmpfile.name);
     }
     count++;
+  };
+
+  if (hostname.startsWith('www.')) {
+    crawl.domainWhitelist.push(hostname.slice(4));
+  }
+
+  crawl.on('complete', function() {
+    console.log(chalk.bold.green('✅ All done! ') + ` ${count} total items.`);
+    console.log(chalk.bold.green('Failed items:'));
+    console.log(failures);
+    write(crawl, filename);
+  });
+
+  // Handle sending redirects to the Quant API.
+  crawl.on('fetchredirect', (item, redirect, response) => redirectHandler(quant, item, redirect));
+
+  // Capture errors.
+  crawl.on('fetcherror', function(queueItem, response) {
+    console.log(chalk.bold.red('❌ ERROR:') + ` ${queueItem.stateData.code} for ${queueItem.url}`);
+    failures.push({'code': queueItem.stateData.code, 'url': queueItem.url});
+    if (queueItem.stateData.code == 403) {
+      console.log('403');
+    }
+  });
+
+  crawl.on('fetch404', async function(queueItem, response) {
+    if (argv['seed-notfound']) {
+      response.on('data', async function(buffer) {
+        await fetchCallback(queueItem, buffer, response);
+      });
+    }
+  });
+
+  crawl.on('fetchcomplete', async function(queueItem, responseBuffer, response) {
+    await fetchCallback(queueItem, responseBuffer, response);
   });
 
   if (!argv['skip-resume']) {
