@@ -75,6 +75,10 @@ command.builder = {
     type: 'boolean',
     default: false,
   },
+  'extra-domains': {
+    describe: 'CSV of additional host names to fan out to',
+    alias: 'e',
+  },
   'skip-resume': {
     describe: 'Start a fresh crawl ignoring resume state',
     type: 'boolean',
@@ -167,6 +171,8 @@ command.handler = async function(argv) {
     hostname,
   ];
 
+  crawl.domainWhitelist.push(argv['extra-domains'].split(',').map((d) => d.trim()));
+
   const fetchCallback = async function(queueItem, responseBuffer, response) {
     const extraItems = [];
 
@@ -196,7 +202,7 @@ command.handler = async function(argv) {
           continue;
         }
         if (argv[filter.option]) {
-          content = filter.handler(content, queueItem);
+          content = filter.handler(content, queueItem, argv);
         }
       }
       console.log(chalk.bold.green('✅ MARKUP:') + ` ${url}`);
