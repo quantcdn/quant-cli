@@ -33,7 +33,6 @@ const client = function(config) {
    *   The API response.
    */
   const handleResponse = function(response) {
-    // console.log(response);
     if (response.statusCode == 400) {
       // @TODO: this is generally if the content is
       // streamed to the endpoint 4xx and 5xx are thrown
@@ -108,7 +107,7 @@ const client = function(config) {
         });
 
         if (res.body.global_meta && res.body.global_meta.records) {
-          res.body.global_meta.records.map((item) => records.push(item.meta.url));
+          res.body.global_meta.records.map((item) => records.push({url: item.meta.url, md5: item.meta.md5}));
         }
       };
 
@@ -158,6 +157,8 @@ const client = function(config) {
      *   The status.
      * @param {bool} attachments
      *   Should quant find attachments.
+     * @param {bool} skipPurge
+     *   Skip CDN cache purge.
      * @param {object} extraHeaders
      *   Additional HTTP headers.
      * @param {string} encoding
@@ -166,7 +167,7 @@ const client = function(config) {
      * @return {object}
      *   The API response.
      */
-    send: async function(file, location, published = true, attachments = false, extraHeaders = {}, encoding = 'utf-8') {
+    send: async function(file, location, published = true, attachments = false, skipPurge = false, extraHeaders = {}, encoding = 'utf-8') {
       const mimeType = mime.lookup(file);
       if (mimeType == 'text/html') {
         if (!location) {
@@ -188,9 +189,9 @@ const client = function(config) {
             // Fail silently if this has been created already.
           };
         }
-        return await this.markup(file, location, published, attachments, extraHeaders, encoding);
+        return await this.markup(file, location, published, attachments, extraHeaders, encoding, skipPurge);
       } else {
-        return await this.file(file, location, false, extraHeaders);
+        return await this.file(file, location, false, extraHeaders, skipPurge);
       }
     },
 
@@ -209,11 +210,13 @@ const client = function(config) {
      *   Additional HTTP headers.
      * @param {string} encoding
      *   The encoding type.
+     * @param {bool} skipPurge
+     *   Skip CDN cache purge.
      *
      * @return {object}
      *   The API response.
      */
-    markup: async function(file, location, published = true, attachments = false, extraHeaders = {}, encoding = 'utf-8') { // eslint-disable-line max-len
+    markup: async function(file, location, published = true, attachments = false, extraHeaders = {}, encoding = 'utf-8', skipPurge = false) { // eslint-disable-line max-len
       if (!Buffer.isBuffer(file)) {
         if (!location) {
           const p = path.resolve(process.cwd(), config.get('dir'));
@@ -228,6 +231,10 @@ const client = function(config) {
 
       const content = file.toString('utf8');
       location = location.startsWith('/') ? location : `/${location}`;
+
+      if (skipPurge) {
+        headers['Quant-Skip-Purge'] = 'true';
+      }
 
       const options = {
         url: `${config.get('endpoint')}`,
@@ -262,13 +269,15 @@ const client = function(config) {
      *   If the location is an absolute path.
      * @param {object} extraHeaders
      *   Additional HTTP headers.
+     * @param {bool} skipPurge
+     *   Skip CDN cache purge.
      *
      * @return {object}
      *   The successful payload.
      *
      * @throws Error
      */
-    file: async function(local, location, absolute = false, extraHeaders = {}) {
+    file: async function(local, location, absolute = false, extraHeaders = {}, skipPurge = false) {
       if (!Buffer.isBuffer(local)) {
         if (!location) {
           const p = path.resolve(process.cwd(), config.get('dir'));
@@ -287,6 +296,10 @@ const client = function(config) {
       };
 
       location = location.startsWith('/') ? location : `/${location}`;
+
+      if (skipPurge) {
+        headers['Quant-Skip-Purge'] = 'true';
+      }
 
       const options = {
         url: config.get('endpoint'),
@@ -467,6 +480,25 @@ const client = function(config) {
         json: true,
       };
       const res = await get(options);
+      return handleResponse(res);
+    },
+
+    /**
+     * Purge URL patterns from Quants Varnish.
+     *
+     * @param {string} urlPattern
+     *
+     * @throws Error
+     */
+    purge: async function(urlPattern) {
+      const options = {
+        url: `${config.get('endpoint')}/purge`,
+        headers: {
+          ...headers,
+          'Quant-Url': urlPattern,
+        },
+      };
+      const res = await post(options);
       return handleResponse(res);
     },
   };

@@ -89,6 +89,15 @@ command.builder = {
     type: 'boolean',
     default: false,
   },
+  'urls-file': {
+    describe: 'JSON file containing array of URLs to add to the queue',
+    type: 'string',
+  },
+  'seed-notfound': {
+    describe: 'Send the content of unique not found pages to quant',
+    type: 'boolean',
+    default: false,
+  },
 };
 
 /**
@@ -124,8 +133,18 @@ command.handler = async function(argv) {
     return;
   }
 
-  crawl = crawler(domain);
+  // Queue URLs from urls-file if provided.
+  urlsdata = [];
+  if (argv['urls-file'] && argv['urls-file'].length > 0) {
+    try {
+      urlsdata = JSON.parse(fs.readFileSync(argv['urls-file']));
+    } catch (error) {
+      console.log(chalk.bold.red('❌ ERROR: Cannot read urls-file: ' + argv['urls-file']));
+      process.exit(1);
+    }
+  }
 
+  crawl = crawler(domain);
   crawl.interval = argv.interval;
   crawl.decodeResponses = true;
   crawl.maxResourceSize = argv.size; // 256MB
@@ -152,33 +171,9 @@ command.handler = async function(argv) {
     hostname,
   ];
 
-  if (hostname.startsWith('www.')) {
-    crawl.domainWhitelist.push(hostname.slice(4));
-  }
-
   crawl.domainWhitelist.push(argv['extra-domains'].split(',').map((d) => d.trim()));
 
-  crawl.on('complete', function() {
-    console.log(chalk.bold.green('✅ All done! ') + ` ${count} total items.`);
-    console.log(chalk.bold.green('Failed items:'));
-    console.log(failures);
-    console.log(`Removing temporary files ${tempfiles.length}`);
-    write(crawl, filename);
-  });
-
-  // Handle sending redirects to the Quant API.
-  crawl.on('fetchredirect', (item, redirect, response) => redirectHandler(quant, item, redirect));
-
-  // Capture errors.
-  crawl.on('fetcherror', function(queueItem, response) {
-    console.log(chalk.bold.red('❌ ERROR:') + ` ${queueItem.stateData.code} for ${queueItem.url}`);
-    failures.push({'code': queueItem.stateData.code, 'url': queueItem.url});
-    if (queueItem.stateData.code == 403) {
-      console.log('403');
-    }
-  });
-
-  crawl.on('fetchcomplete', async function(queueItem, responseBuffer, response) {
+  const fetchCallback = async function(queueItem, responseBuffer, response) {
     const extraItems = [];
 
     // Prepare the detectors - attempt to locate additional requests to add
@@ -231,6 +226,7 @@ command.handler = async function(argv) {
 
       const asset = Buffer.from(response.body, 'utf8');
       const extraHeaders = {};
+
       fs.writeFileSync(tmpfile.name, asset);
 
       // Disposition headers.
@@ -243,17 +239,57 @@ command.handler = async function(argv) {
       console.log(chalk.bold.green('✅ FILE:') + ` ${url}`);
       try {
         await quant.file(tmpfile.name, url, true, extraHeaders);
-      } catch (err) {}
+      } catch (err) {
+        console.log(err);
+      }
 
-      fs.unlink(tmpfile.name);
+      // Remove temporary file immediately.
+      fs.unlinkSync(tmpfile.name);
     }
     count++;
+  };
+
+  if (hostname.startsWith('www.')) {
+    crawl.domainWhitelist.push(hostname.slice(4));
+  }
+
+  crawl.on('complete', function() {
+    console.log(chalk.bold.green('✅ All done! ') + ` ${count} total items.`);
+    console.log(chalk.bold.green('Failed items:'));
+    console.log(failures);
+    write(crawl, filename);
+  });
+
+  // Handle sending redirects to the Quant API.
+  crawl.on('fetchredirect', (item, redirect, response) => redirectHandler(quant, item, redirect));
+
+  // Capture errors.
+  crawl.on('fetcherror', function(queueItem, response) {
+    console.log(chalk.bold.red('❌ ERROR:') + ` ${queueItem.stateData.code} for ${queueItem.url}`);
+    failures.push({'code': queueItem.stateData.code, 'url': queueItem.url});
+    if (queueItem.stateData.code == 403) {
+      console.log('403');
+    }
+  });
+
+  crawl.on('fetch404', async function(queueItem, response) {
+    if (argv['seed-notfound']) {
+      response.on('data', async function(buffer) {
+        await fetchCallback(queueItem, buffer, response);
+      });
+    }
+  });
+
+  crawl.on('fetchcomplete', async function(queueItem, responseBuffer, response) {
+    await fetchCallback(queueItem, responseBuffer, response);
   });
 
   if (!argv['skip-resume']) {
     let result;
 
-    if (!argv['no-interaction']) {
+    if (!fs.existsSync(`${os.homedir()}/.quant/${filename}`)) {
+      result = {resume: false};
+    } else if (!argv['no-interaction']) {
       prompt.start();
       result = await prompt.get({
         properties: {
@@ -270,17 +306,29 @@ command.handler = async function(argv) {
     }
 
     if (result.resume) {
+      // Prevent manual URL list when resuming.
+      if (urlsdata.length > 0) {
+        console.log(chalk.bold.green('❌ ERROR: Cannot use --urls-file while resuming, ignoring.'));
+        urlsdata = [];
+      }
+
       // Defrost is async and supports non-existent files.
       crawl.queue.defrost(`${os.homedir()}/.quant/${filename}`, (err) => {
         console.log(chalk.bold.green('✅ DONE: Loaded resume state from ' + `${os.homedir()}/.quant/${filename}`)); // eslint-disable-line max-len
-        crawl.start();
       });
-    } else {
-      crawl.start();
     }
   } else {
-    crawl.start();
+    console.log(chalk.bold.green('Skipping resume state via --skip-resume.'));
   }
+
+  // Inject URLs provided via urls-file.
+  if (urlsdata.length > 0) {
+    for (const url of urlsdata) {
+      crawl.queueURL(url);
+    }
+  }
+
+  crawl.start();
 };
 
 module.exports = command;
