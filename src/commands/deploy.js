@@ -36,6 +36,10 @@ command.builder = (yargs) => {
     type: 'boolean',
     default: false,
   });
+  yargs.options('skip-unpublish-regex', {
+    describe: 'Skip the unpublish process for specific regex',
+    type: 'string',
+  });
   yargs.options('skip-purge', {
     describe: 'Skip the automatic cache purge process',
     alias: 'sp',
@@ -148,6 +152,14 @@ command.handler = async function(argv) {
       return;
     }
     try {
+      // Skip unpublish process if skip unpublish regex matches.
+      if (argv['skip-unpublish-regex']) {
+        const match = item.url.match(argv['skip-unpublish-regex']);
+        if (match) {
+          console.log(chalk.blue(`Skipping unpublish via regex match: (${item.url})`));
+          return;
+        }
+      }
       await quant.unpublish(item.url);
     } catch (err) {
       return console.log(chalk.yellow(err.message + ` (${item.url})`));
