@@ -27,7 +27,7 @@ command.handler = function(argv) {
   }
 
   client(config).redirect(argv.from, argv.to, argv.author, argv.status)
-    .then((body) => console.log(chalk.green('Success: ') + ` Added redirect ${from} to ${to}`)) // eslint-disable-line
+    .then((body) => console.log(chalk.green('Success: ') + ` Added redirect ${argv.from} to ${argv.to}`)) // eslint-disable-line
       .catch((err) => console.log(chalk.red.bold('Error:') + ` ${err}`));
 };
 
