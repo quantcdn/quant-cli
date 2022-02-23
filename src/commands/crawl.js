@@ -171,7 +171,9 @@ command.handler = async function(argv) {
     hostname,
   ];
 
-  crawl.domainWhitelist.push(argv['extra-domains'].split(',').map((d) => d.trim()));
+  if (argv['extra-domains']) {
+    crawl.domainWhitelist.push(argv['extra-domains'].split(',').map((d) => d.trim()));
+  }
 
   const fetchCallback = async function(queueItem, responseBuffer, response) {
     const extraItems = [];
