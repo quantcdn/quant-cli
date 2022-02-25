@@ -15,7 +15,7 @@ module.exports = {
     const regex = new RegExp(`http[s]?:\/\/${opts.host}(:\\d+)?\/[\/]?`, 'gi');
     let body = dom.replace(regex, '/');
 
-    if ('extra-domains' in argv) {
+    if ('extra-domains' in argv && argv['extra-domains'].split instanceof Function) {
       let r;
       const extraDomains = argv['extra-domains'].split(',').map((d) => d.trim());
 

@@ -98,6 +98,12 @@ command.builder = {
     type: 'boolean',
     default: false,
   },
+  'verbosity': {
+    describe: 'Control log verbosity',
+    alias: 'e',
+    type: 'boolean',
+    default: false,
+  },
 };
 
 /**
@@ -175,7 +181,7 @@ command.handler = async function(argv) {
     crawl.domainWhitelist.push(argv['extra-domains'].split(',').map((d) => d.trim()));
   }
 
-  const fetchCallback = async function(queueItem, responseBuffer, response) {
+  const fetchCallback = async function(queueItem, responseBuffer, response, verbose) {
     const extraItems = [];
 
     // Prepare the detectors - attempt to locate additional requests to add
@@ -242,7 +248,9 @@ command.handler = async function(argv) {
       try {
         await quant.file(tmpfile.name, url, true, extraHeaders);
       } catch (err) {
-        console.log(err);
+        if (verbose) {
+          console.log(err);
+        }
       }
 
       // Remove temporary file immediately.
