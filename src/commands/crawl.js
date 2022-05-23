@@ -100,7 +100,7 @@ command.builder = {
   },
   'verbosity': {
     describe: 'Control log verbosity',
-    alias: 'e',
+    alias: 'v',
     type: 'boolean',
     default: false,
   },
@@ -285,13 +285,13 @@ command.handler = async function(argv) {
   crawl.on('fetch404', async function(queueItem, response) {
     if (argv['seed-notfound']) {
       response.on('data', async function(buffer) {
-        await fetchCallback(queueItem, buffer, response);
+        await fetchCallback(queueItem, buffer, response, argv['verbose']);
       });
     }
   });
 
   crawl.on('fetchcomplete', async function(queueItem, responseBuffer, response) {
-    await fetchCallback(queueItem, responseBuffer, response);
+    await fetchCallback(queueItem, responseBuffer, response, argv['verbose']);
   });
 
   if (!argv['skip-resume']) {

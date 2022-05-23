@@ -89,6 +89,7 @@ describe('Deploy', function() {
         total_records: 3,
         records: [
           {url: 'test/index.html'},
+          {url: 'another/test/index.html'},
         ],
       });
       clientStub = sinon.stub(client, 'client').returns({
@@ -106,7 +107,8 @@ describe('Deploy', function() {
       ]);
 
       await deploy({dir});
-      expect(unpublish.calledOnceWith('test/index.html')).to.be.true;
+      expect(unpublish.calledWith('test/index.html')).to.be.true;
+      expect(unpublish.calledWith('another/test/index.html')).to.be.true;
     });
   });
 });
