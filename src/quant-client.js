@@ -107,7 +107,6 @@ const client = function(config) {
         published: true,
       }, extend);
       const url = `${config.get('endpoint')}/global-meta?${querystring.stringify(query)}`;
-
       const doUnfold = async function(i) {
         const res = await get({
           url: `${url}&page=${i}`,
@@ -142,7 +141,7 @@ const client = function(config) {
 
       if (unfold) {
         page++;
-        while (res.body.global_meta.total_pages > page) {
+        while (res.body.global_meta.total_pages >= page) {
           await doUnfold(page);
           page++;
         }
