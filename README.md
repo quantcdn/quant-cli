@@ -31,11 +31,12 @@ Commands:
   quant info                                         Give info based on current configuration
   quant init                                         Initialise a project in the current directory
   quant page <file> <location>                       Make a local page asset available via Quant
-  quant proxy <path> <origin> [status]               Create a proxy to allow traffic directly to
-  [basicAuthUser] [basicAuthPass]                     origin
-  quant purge <path>                                  Purge the cache for a given url
-  quant redirect <from> <to> [status] [author]        Create a redirect
-  quant unpublish <path>                              Unpublish an asset
+  quant proxy <path> <origin> [status]               Create a proxy to allow traffic directly to origin
+  [basicAuthUser] [basicAuthPass]
+  quant purge <path>                                 Purge the cache for a given url
+  quant redirect <from> <to> [status] [author]       Create a redirect
+  quant search <index|unindex|clear>                 Perform search index operations
+  quant unpublish <path>                             Unpublish an asset
 
 Options:
   --version       Show version number                                                      [boolean]
@@ -67,6 +68,45 @@ Project: dev-docs
 Token: ****
 ✅✅✅ Successfully connected to dev-docs
 ```
+
+## Manage search index
+
+### Basic usage
+
+* Use `quant search status` to retrieve index size and basic configuration.
+* Use `quant search unindex --path=/url/path` to remove an item from the index.
+* Use `quant search clear` to clear the entire index.
+
+### Create and update records
+
+You may index new content or update existing content in the search index directly. Simply provide one or multiple records in JSON files. For example, consider a `search-records.json` file containing the following:
+
+```
+[
+    {
+        "title": "This is a record",
+        "url": "/blog/page",
+        "summary": "The record is small and neat.",
+        "content": "Lots of good content here. But not too much!",
+    },
+    {
+        "title": "Fully featured search record",
+        "url": "/about-us",
+        "summary": "The record contains all the trimmings.",
+        "content": "Lorem ipsum dolor sit amet, consectetur adipiscing elit. Cras id dolor facilisis, ornare erat et, scelerisque odio. Class aptent taciti sociosqu ad litora torquent per conubia nostra, per inceptos himenaeos.",
+        "image": "https://www.example.com/images/about.jpg",
+        "categories": [ "Blog", "Commerce", "Jamstack" ],
+        "tags": [ "Tailwind" , "QuantCDN" ]
+    }
+]
+```
+
+To post these records to the search index:
+```
+quant search index --path=./search-records.json
+```
+
+**Note:** The path may either refer to an individual file or a path on disk containing multiple JSON files.
 
 ## Testing
 
