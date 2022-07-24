@@ -542,7 +542,7 @@ const client = function (config) {
       *
       * @throws Error
       */
-    search_index: async function (filePath) {
+    searchIndex: async function (filePath) {
 
       let data = '';
 
@@ -574,7 +574,7 @@ const client = function (config) {
       *
       * @throws Error
       */
-    search_remove: async function (url) {
+    searchRemove: async function (url) {
 
       const options = {
         url: `${config.get('endpoint')}/search`,
@@ -595,7 +595,7 @@ const client = function (config) {
       *
       * @throws Error
       */
-     search_clear_index: async function () {
+     searchClearIndex: async function () {
 
       const options = {
         url: `${config.get('endpoint')}/search/all`,
@@ -614,7 +614,7 @@ const client = function (config) {
       *
       * @throws Error
       */
-     search_status: async function () {
+     searchStatus: async function () {
 
       const options = {
         url: `${config.get('endpoint')}/search`,

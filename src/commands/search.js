@@ -7,10 +7,8 @@
 const chalk = require('chalk');
 const client = require('../quant-client');
 const config = require('../config');
-const path = require('path');
-const yargs = require('yargs');
-const fs = require("fs");
-const glob = require('glob')
+const fs = require('fs');
+const glob = require('glob');
 
 const command = {};
 
@@ -25,13 +23,13 @@ command.builder = (yargs) => {
       yargs.positional('path', {
         type: 'string',
         describe: 'Path to directory containing JSON files, or an individual JSON file.',
-      })
+      });
     },
     handler: (argv) => {
 
       if (!argv.path) {
-        console.error(chalk.yellow('No path provided. Provide a path on disk, e.g: --path=/path/to/files'))
-        return
+        console.error(chalk.yellow('No path provided. Provide a path on disk, e.g: --path=/path/to/files'));
+        return;
       }
 
       console.log(chalk.bold.green('*** Add/update search records ***'));
@@ -49,7 +47,7 @@ command.builder = (yargs) => {
         }
 
         if (stats.isDirectory()) {
-          jsonFiles = glob.sync(argv.path + '/*.json')
+          jsonFiles = glob.sync(argv.path + '/*.json');
         } else {
           jsonFiles = [argv.path]
         }
@@ -88,7 +86,7 @@ command.builder = (yargs) => {
       }
 
       client(config)
-        .search_remove(argv.path)
+        .searchRemove(argv.path)
         .then(response => console.log(chalk.green('Success:') + ` Successfully removed search record for ${argv.path}`)) // eslint-disable-line
         .catch((err) => console.log(chalk.red.bold('Error:') + ` ${err}`));
 
@@ -110,7 +108,7 @@ command.builder = (yargs) => {
       }
 
       client(config)
-        .search_status()
+        .searchStatus()
         .then(response => {
           console.log(chalk.green('Success:') + ` Successfully retrieved search index status`);
           console.log(response);
@@ -135,7 +133,7 @@ command.builder = (yargs) => {
       }
 
       client(config)
-        .search_clear_index()
+        .searchClearIndex()
         .then(response => console.log(chalk.green('Success:') + ` Successfully cleared search index`)) // eslint-disable-line
         .catch((err) => console.log(chalk.red.bold('Error:') + ` ${err}`));
 
