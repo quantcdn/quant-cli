@@ -9,7 +9,7 @@ const path = require('path');
 const mime = require('mime-types');
 const querystring = require('querystring');
 
-const client = function (config) {
+const client = function(config) {
   const req = util.promisify(request); // eslint-disable-line
   const get = util.promisify(request.get);
   const post = util.promisify(request.post);
@@ -33,7 +33,7 @@ const client = function (config) {
    * @return {object}
    *   The API response.
    */
-  const handleResponse = function (response) {
+  const handleResponse = function(response) {
     const body = typeof response.body == 'string' ? JSON.parse(response.body) : response.body; // eslint-disable-line max-len
 
     if (typeof body.errors != 'undefined') {
@@ -73,7 +73,7 @@ const client = function (config) {
      *
      * @throws Error.
      */
-    ping: async function () {
+    ping: async function() {
       const options = {
         url: `${config.get('endpoint')}/ping`,
         json: true,
@@ -100,14 +100,14 @@ const client = function (config) {
      * @TODO
      *   - Async iterator for memory 21k items ~ 40mb.
      */
-    meta: async function (unfold = false, extend = {}) {
+    meta: async function(unfold = false, extend = {}) {
       const records = [];
       const query = Object.assign({
         page_size: 500,
         published: true,
       }, extend);
       const url = `${config.get('endpoint')}/global-meta?${querystring.stringify(query)}`;
-      const doUnfold = async function (i) {
+      const doUnfold = async function(i) {
         const res = await get({
           url: `${url}&page=${i}`,
           json: true,
@@ -115,7 +115,7 @@ const client = function (config) {
         });
 
         if (res.body.global_meta && res.body.global_meta.records) {
-          res.body.global_meta.records.map((item) => records.push({ url: item.meta.url, md5: item.meta.md5 }));
+          res.body.global_meta.records.map((item) => records.push({url: item.meta.url, md5: item.meta.md5}));
         }
       };
 
@@ -136,7 +136,7 @@ const client = function (config) {
       }
 
       if (res.body.global_meta.records) {
-        res.body.global_meta.records.map((item) => records.push({ url: item.meta.url, md5: item.meta.md5 }));
+        res.body.global_meta.records.map((item) => records.push({url: item.meta.url, md5: item.meta.md5}));
       }
 
       if (unfold) {
@@ -175,7 +175,7 @@ const client = function (config) {
      * @return {object}
      *   The API response.
      */
-    send: async function (file, location, published = true, attachments = false, skipPurge = false, extraHeaders = {}, encoding = 'utf-8') {
+    send: async function(file, location, published = true, attachments = false, skipPurge = false, extraHeaders = {}, encoding = 'utf-8') {
       const mimeType = mime.lookup(file);
       if (mimeType == 'text/html') {
         if (!location) {
@@ -224,7 +224,7 @@ const client = function (config) {
      * @return {object}
      *   The API response.
      */
-    markup: async function (file, location, published = true, attachments = false, extraHeaders = {}, encoding = 'utf-8', skipPurge = false) { // eslint-disable-line max-len
+    markup: async function(file, location, published = true, attachments = false, extraHeaders = {}, encoding = 'utf-8', skipPurge = false) { // eslint-disable-line max-len
       if (!Buffer.isBuffer(file)) {
         if (!location) {
           const p = path.resolve(process.cwd(), config.get('dir'));
@@ -285,7 +285,7 @@ const client = function (config) {
      *
      * @throws Error
      */
-    file: async function (local, location, absolute = false, extraHeaders = {}, skipPurge = false) {
+    file: async function(local, location, absolute = false, extraHeaders = {}, skipPurge = false) {
       if (!Buffer.isBuffer(local)) {
         if (!location) {
           const p = path.resolve(process.cwd(), config.get('dir'));
@@ -341,7 +341,7 @@ const client = function (config) {
      *
      * @throws Error.
      */
-    publish: async function (location, status = true) {
+    publish: async function(location, status = true) {
       // @TODO: this is likely handled by markup().
       throw new Error('Not implemented yet.');
     },
@@ -356,7 +356,7 @@ const client = function (config) {
      *
      * @throws Error.
      */
-    unpublish: async function (url) {
+    unpublish: async function(url) {
       // Ensure that we don't have index.html in the URL as Quant
       // expects to obfuscate this.
       url = url.replace('/index.html', '');
@@ -390,7 +390,7 @@ const client = function (config) {
      *
      * @throws Error.
      */
-    redirect: async function (from, to, author, status = 302) {
+    redirect: async function(from, to, author, status = 302) {
       const options = {
         url: `${config.get('endpoint')}/redirect`,
         headers: {
@@ -410,7 +410,7 @@ const client = function (config) {
       }
 
       if (author) {
-        options.body.info = { author_user: author };
+        options.body.info = {author_user: author};
       }
 
       const res = await post(options);
@@ -436,7 +436,7 @@ const client = function (config) {
      *
      * @throws Error.
      */
-    proxy: async function (url, destination, published = true, username, password) { // eslint-disable-line max-len
+    proxy: async function(url, destination, published = true, username, password) { // eslint-disable-line max-len
       const options = {
         url: `${config.get('endpoint')}/proxy`,
         headers: {
@@ -469,7 +469,7 @@ const client = function (config) {
      *
      * @throw Error.
      */
-    delete: async function (path) {
+    delete: async function(path) {
       path = path.replace('index.html', '');
 
       const options = {
@@ -497,7 +497,7 @@ const client = function (config) {
      *
      * @throws Error.
      */
-    revisions: async function (url, revision = false) {
+    revisions: async function(url, revision = false) {
       const path = revision ? revision : 'published';
 
       url = url.indexOf('/') == 0 ? url : `/${url}`;
@@ -523,7 +523,7 @@ const client = function (config) {
      *
      * @throws Error
      */
-    purge: async function (urlPattern) {
+    purge: async function(urlPattern) {
       const options = {
         url: `${config.get('endpoint')}/purge`,
         headers: {
@@ -542,8 +542,7 @@ const client = function (config) {
       *
       * @throws Error
       */
-    searchIndex: async function (filePath) {
-
+    searchIndex: async function(filePath) {
       let data = '';
 
       // filePath is a JSON file we send the raw content of.
@@ -560,7 +559,7 @@ const client = function (config) {
           ...headers,
         },
         json: true,
-        body: data
+        body: data,
       };
       const res = await post(options);
 
@@ -574,8 +573,7 @@ const client = function (config) {
       *
       * @throws Error
       */
-    searchRemove: async function (url) {
-
+    searchRemove: async function(url) {
       const options = {
         url: `${config.get('endpoint')}/search`,
         headers: {
@@ -595,8 +593,7 @@ const client = function (config) {
       *
       * @throws Error
       */
-     searchClearIndex: async function () {
-
+    searchClearIndex: async function() {
       const options = {
         url: `${config.get('endpoint')}/search/all`,
         headers: {
@@ -614,8 +611,7 @@ const client = function (config) {
       *
       * @throws Error
       */
-     searchStatus: async function () {
-
+    searchStatus: async function() {
       const options = {
         url: `${config.get('endpoint')}/search`,
         headers: {
@@ -630,7 +626,7 @@ const client = function (config) {
   };
 };
 
-module.exports = function () {
+module.exports = function() {
   return module.exports.client.apply(this, arguments); // eslint-disable-line
 };
 
