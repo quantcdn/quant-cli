@@ -56,7 +56,7 @@ const client = function(config) {
     }
 
     if (body.error || (typeof body.errorMsg != 'undefined' && body.errorMsg.length > 0)) { // eslint-disable-line max-len
-      const msg = typeof body.errorMsg != 'undefined' ? body.errorMsg: body.msg;
+      const msg = typeof body.errorMsg != 'undefined' ? body.errorMsg : body.msg;
       throw new Error(msg);
     }
 
@@ -532,6 +532,95 @@ const client = function(config) {
         },
       };
       const res = await post(options);
+      return handleResponse(res);
+    },
+
+    /**
+      * Add/update items in search index.
+      *
+      * @param {string} filePath
+      *
+      * @throws Error
+      */
+    searchIndex: async function(filePath) {
+      let data = '';
+
+      // filePath is a JSON file we send the raw content of.
+      try {
+        data = JSON.parse(fs.readFileSync(filePath, 'utf8'));
+      } catch (err) {
+        console.error(err);
+        return;
+      }
+
+      const options = {
+        url: `${config.get('endpoint')}/search`,
+        headers: {
+          ...headers,
+        },
+        json: true,
+        body: data,
+      };
+      const res = await post(options);
+
+      return handleResponse(res);
+    },
+
+    /**
+      * Remove item from search index.
+      *
+      * @param {string} url
+      *
+      * @throws Error
+      */
+    searchRemove: async function(url) {
+      const options = {
+        url: `${config.get('endpoint')}/search`,
+        headers: {
+          ...headers,
+          'Quant-Url': url,
+        },
+        json: true,
+      };
+      const res = await del(options);
+
+      return handleResponse(res);
+    },
+
+
+    /**
+      * Clear search index.
+      *
+      * @throws Error
+      */
+    searchClearIndex: async function() {
+      const options = {
+        url: `${config.get('endpoint')}/search/all`,
+        headers: {
+          ...headers,
+        },
+        json: true,
+      };
+      const res = await del(options);
+
+      return handleResponse(res);
+    },
+
+    /**
+      * Retrieve search index status.
+      *
+      * @throws Error
+      */
+    searchStatus: async function() {
+      const options = {
+        url: `${config.get('endpoint')}/search`,
+        headers: {
+          ...headers,
+        },
+        json: true,
+      };
+      const res = await get(options);
+
       return handleResponse(res);
     },
   };
