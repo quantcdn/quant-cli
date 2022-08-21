@@ -36,7 +36,7 @@ command.handler = function(argv) {
     yargs.exit(1);
   }
 
-  io.title('Quant file');
+  io.title('file');
 
   client(config).file(filepath, location)
       .then((body) => io.update(`Added [${filepath}]`)) // eslint-disable-line

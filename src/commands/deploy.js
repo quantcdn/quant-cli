@@ -64,7 +64,7 @@ command.handler = async function(argv) {
     yargs.exit(1);
   }
 
-  io.title('Quant deploy');
+  io.title('deploy');
 
   const dir = argv.dir || config.get('dir');
   const p = path.resolve(process.cwd(), dir);

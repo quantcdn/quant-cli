@@ -22,7 +22,7 @@ command.handler = function(argv) { // eslint-disable-line
     yargs.exit(1);
   }
 
-  io.title('Quant info');
+  io.title('info');
 
   io.update(`Endpoint: ${config.get('endpoint')}`, io.status.nil);
   io.update(`Customer: ${config.get('clientid')}`, io.status.nil);
