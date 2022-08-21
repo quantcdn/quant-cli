@@ -7,6 +7,7 @@
 const chalk = require('chalk');
 const client = require('../quant-client');
 const config = require('../config');
+const io = require('../io');
 
 const command = {};
 
@@ -15,37 +16,39 @@ command.describe = 'Give info based on current configuration';
 command.builder = {};
 
 command.handler = function(argv) { // eslint-disable-line
-  console.log(chalk.bold.green('*** Quant info ***'));
-
+  // Make sure configuration is loaded.
   if (!config.fromArgs(argv)) {
-    return console.error(chalk.yellow('Quant is not configured, run init.'));
+    io.login();
+    yargs.exit(1);
   }
 
-  console.log(`Endpoint: ${config.get('endpoint')}`);
-  console.log(`Customer: ${config.get('clientid')}`);
-  console.log(`Project: ${config.get('project')}`);
-  console.log(`Token: ****`);
+  io.title('Quant info');
+
+  io.update(`Endpoint: ${config.get('endpoint')}`, io.status.nil);
+  io.update(`Customer: ${config.get('clientid')}`, io.status.nil);
+  io.update(`Project: ${config.get('project')}`, io.status.nil);
+  io.update(`Token: ****`, io.status.nil);
 
   const quant = client(config);
 
   quant.ping()
       .then(async (data) => {
-        console.log(chalk.bold.green(`✅✅✅ Successfully connected to ${config.get('project')}`)); // eslint-disable-line max-len
+        io.success(`Successfully connected to ${config.get('project')}`);
 
         quant.meta()
             .then((data) => {
-              console.log(chalk.yellow('\nInfo:'));
+              io.info('\nInfo:');
               if (data && data.total_records) {
-                console.log(`Total records: ${data.total_records}`);
+                io.update(`Total records: ${data.total_records}`, io.status.nil);
               } else {
-                console.log('Use deploy to start seeding!');
+                io.update('Use deploy to start seeding!', io.status.nil);
               }
             })
             .catch((err) => {
-              console.error(chalk.red(err.message));
+              io.critical(err.message);
             });
       })
-      .catch((err) => console.log(chalk.bold.red(`Unable to connect to quant ${err.message}`))); // eslint-disable-line max-len
+      .catch((err) => io.critical(`Unable to connect to quant ${err.message}`)); // eslint-disable-line max-len
 };
 
 module.exports = command;

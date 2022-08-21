@@ -13,6 +13,7 @@ const path = require('path');
 const yargs = require('yargs');
 const md5File = require('md5-file');
 const {chunk} = require('../helper/array');
+const io = require('../io');
 
 const command = {};
 
@@ -57,31 +58,29 @@ command.builder = (yargs) => {
 command.handler = async function(argv) {
   let files;
 
-  console.log(chalk.bold.green('*** Quant deploy ***'));
-
   // Make sure configuration is loaded.
   if (!config.fromArgs(argv)) {
-    console.log(chalk.yellow('Quant is not configured, run init.'));
+    io.login();
     yargs.exit(1);
   }
 
+  io.title('Quant deploy');
+
   const dir = argv.dir || config.get('dir');
-
   const p = path.resolve(process.cwd(), dir);
-
   const quant = client(config);
 
   try {
     await quant.ping();
   } catch (err) {
-    console.log('Unable to connect to Quant\n' + chalk.red(err.message));
+    io.critical('Unable to connect to Quant: ' + err.message);
     yargs.exit(1);
   }
 
   try {
     files = await getFiles(p);
   } catch (err) {
-    console.log(chalk.red(err.message));
+    io.critical(err.message);
     yargs.exit(1);
   }
 
@@ -106,29 +105,29 @@ command.handler = async function(argv) {
       if (revision) {
         const md5 = md5File.sync(file);
         if (md5 == revision.md5) {
-          console.log(chalk.blue(`Published version is up-to-date (${filepath})`));
+          io.notice(`Published version is up-to-date (${filepath})`);
           return;
         }
       }
       try {
         await quant.send(file, filepath, true, argv.attachments, argv['skip-purge']);
       } catch (err) {
-        console.log(chalk.yellow(err.message + ` (${filepath})`));
+        io.info(err.message + ` (${filepath})`);
         return;
       }
-      console.log(chalk.bold.green('✅') + ` ${filepath}`);
+      io.update(filepath);
     }));
   }
 
   if (argv['skip-unpublish']) {
-    console.log(chalk.yellow(' -> Skipping the automatic unpublish process'));
+    io.info(' -> Skipping the automatic unpublish process');
     yargs.exit(0);
   }
 
   try {
     data = await quant.meta(true);
   } catch (err) {
-    console.log(chalk.yellow(err.message));
+    io.info(err.message);
   }
 
   // Quant meta returns relative paths, so we map our local filesystem
@@ -156,15 +155,16 @@ command.handler = async function(argv) {
       if (argv['skip-unpublish-regex']) {
         const match = item.url.match(argv['skip-unpublish-regex']);
         if (match) {
-          console.log(chalk.blue(`Skipping unpublish via regex match: (${item.url})`));
+          io.notice(`Skipping unpublish via regex match: (${item.url})`);
           return;
         }
       }
       await quant.unpublish(item.url);
     } catch (err) {
-      return console.log(chalk.yellow(err.message + ` (${item.url})`));
+      io.info(err.message + ` (${item.url})`);
+      return;
     }
-    console.log(chalk.bold.green('✅') + ` ${item.url} unpublished.`);
+    io.update(`${item.url} unpublished`);
   });
 
   /* eslint-enable guard-for-in */

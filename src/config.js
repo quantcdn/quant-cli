@@ -1,13 +1,20 @@
 const fs = require('fs');
 
-const filename = 'quant.json';
+const filename = '.quant.json';
+const os = require('os');
 
 const config = {
-  dir: 'build',
-  endpoint: 'https://api.quantcdn.io',
-  clientid: null,
-  project: null,
-  token: null,
+  endpoint: 'https://api.quantcdn.io/v1',
+  deploy: {
+    dir: 'build',
+    organization: null,
+    project: null,
+    token: null,
+  },
+  tokens: [],
+  activeToken: false,
+  activeOrg: false,
+  activeProject: false,
 };
 
 /**
@@ -33,11 +40,17 @@ const set = function(results) {
  *   The configuration value.
  */
 const get = function(key) {
-  let value = config[key];
-  if (key == 'endpoint') {
-    value += '/v1';
-  }
-  return value;
+  return key.split('.').reduce((a, b) => a[b], config);
+};
+
+/**
+ * Get the active API token.
+ *
+ * @return {string}
+ */
+const getApiToken = function() {
+  const idx = config.activeToken ? config.activeToken : 0;
+  return config.tokens[idx];
 };
 
 /**
@@ -49,7 +62,7 @@ const get = function(key) {
  * @return {boolean}
  *   If the file was saved.
  */
-const save = function(dir = '.') {
+const save = function(dir = os.homedir) {
   const data = JSON.stringify(config, null, 2);
   try {
     fs.writeFileSync(`${dir}/${filename}`, data);
@@ -62,14 +75,29 @@ const save = function(dir = '.') {
 /**
  * Validate the loaded configuration.
  *
+ * @param {string} type
+ *   The type of configuration to validate.
+ *
  * @return {boolean}
  *   If the configuration is valid.
  */
-const validate = function() {
-  // Dir is optional as this can be an optional arg to relevant commands.
-  const reqKeys = ['clientid', 'project', 'endpoint', 'token'];
-  const diff = reqKeys.filter((i) => ! Object.keys(config).includes(i));
-  return diff.length == 0;
+const validate = function(type = 'deploy') {
+  let valid = false;
+
+  switch (type) {
+    case 'tokens':
+      // Validate the schema of all tokens that are added to the configuration object.
+      valid = true;
+      break;
+    default:
+      // Validate the deployer configuration.
+      const reqKeys = ['organization', 'project', 'token'];
+      const diff = reqKeys.filter((i) => ! Object.keys(config.deploy).includes(i));
+      valid = diff.length == 0;
+      break;
+  }
+
+  return valid;
 };
 
 /**
@@ -81,7 +109,7 @@ const validate = function() {
  * @return {boolean}
  *   If the file was loaded.
  */
-const load = function(dir = '.') {
+const load = function(dir = os.homedir) {
   let data;
 
   try {
@@ -93,7 +121,7 @@ const load = function(dir = '.') {
   data = JSON.parse(data);
   Object.assign(config, data);
 
-  if (!validate()) {
+  if (!validate('deploy')) {
     return false;
   }
 
@@ -113,15 +141,17 @@ const fromArgs = function(argv) {
   load();
 
   if (argv.clientid) {
-    config.clientid = argv.clientid;
+    config.deploy.organization = argv.clientid;
+  } else if (argv.organization) {
+    config.deploy.organization = argv.organization;
   }
 
   if (argv.project) {
-    config.project = argv.project;
+    config.deploy.project = argv.project;
   }
 
   if (argv.token) {
-    config.token = argv.token;
+    config.deploy.token = argv.token;
   }
 
   if (argv.endpoint) {
@@ -141,4 +171,5 @@ module.exports = {
   set,
   get,
   fromArgs,
+  getApiToken,
 };

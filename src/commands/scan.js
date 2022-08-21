@@ -12,6 +12,7 @@ const yargs = require('yargs');
 const getFiles = require('../helper/getFiles');
 const path = require('path');
 const md5File = require('md5-file');
+const io = require('../io');
 
 const command = {};
 
@@ -35,7 +36,12 @@ command.builder = (yargs) => {
 };
 
 command.handler = async function(argv) {
-  config.fromArgs(argv);
+  // Make sure configuration is loaded.
+  if (!config.fromArgs(argv)) {
+    io.login();
+    yargs.exit(1);
+  }
+
   const quant = client(config);
 
   // Determine local file path.

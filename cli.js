@@ -8,7 +8,12 @@ require('yargs/yargs')(process.argv.slice(2))
     // options provided will be used over quant.json.
     .option('clientid', {
       alias: 'c',
-      describe: 'Project customer id for QuantCDN',
+      describe: '[deprecated] Project customer id for QuantCDN',
+      type: 'string',
+    })
+    .option('organization', {
+      alias: 'o',
+      describe: 'A valid QuantCDN organization',
       type: 'string',
     })
     .option('project', {

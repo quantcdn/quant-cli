@@ -6,6 +6,7 @@
  */
 const chalk = require('chalk');
 const config = require('../config');
+const io = require('../io');
 const client = require('../quant-client');
 
 const command = {};
@@ -51,9 +52,10 @@ command.handler = function(argv) {
   const user = argv.basicAuthUser;
   const pass = argv.basicAuthPass;
 
-  // @TODO: Accept argv.dir.
+  // Make sure configuration is loaded.
   if (!config.fromArgs(argv)) {
-    return console.error(chalk.yellow('Quant is not configured, run init.'));
+    io.login();
+    yargs.exit(1);
   }
 
   console.log(chalk.bold.green('*** Quant proxy ***'));

@@ -5,11 +5,11 @@
  *   quant delete <url>
  */
 
-const chalk = require('chalk');
 const config = require('../config');
 const client = require('../quant-client');
 const yargs = require('yargs');
-const prompt = require('prompt');
+const io = require('../io');
+const inquirer = require('inquirer');
 
 const command = {};
 
@@ -30,30 +30,24 @@ command.builder = (yargs) => {
 command.handler = async (argv) => {
   const path = argv.path;
 
-  console.log(chalk.bold.green('*** Quant delete ***'));
-
+  // Make sure configuration is loaded.
   if (!config.fromArgs(argv)) {
-    console.log(chalk.yellow('Quant is not configured, run init.'));
+    io.login();
     yargs.exit(1);
   }
 
-  if (!argv.force) {
-    prompt.start();
-    const schema = {
-      properties: {
-        force: {
-          required: true,
-          description: 'This will delete all revisions of an asset from QuantCDN',
-          pattern: /(y|yes|n|no)/,
-          default: 'no',
-          message: 'Only yes or no is allowed.',
-        },
-      },
-    };
+  io.title('delete');
 
-    const {force} = await prompt.get(schema);
-    if (!force) {
-      console.log(chalk.yellow('[skip]:') + ` delete skipped for (${path})`);
+  if (!argv.force) {
+    const accept = await inquirer.prompt({
+      type: 'confirm',
+      name: 'delete',
+      default: false,
+      message: 'This will delete all revisions of an asset from QuantCDN',
+    });
+
+    if (!accept.delete) {
+      io.skip(`delete skipped for (${path})`);
       yargs.exit(0);
     }
   }
@@ -63,11 +57,11 @@ command.handler = async (argv) => {
   try {
     await quant.delete(path);
   } catch (err) {
-    console.log(chalk.red('[error]:') + ` Cannot delete path (${path})\n` + err.message);
+    io.critical(`Cannot delete path (${path})\n` + err.message);
     yargs.exit(1);
   }
 
-  console.log(chalk.green(`Successfully removed [${path}]`));
+  io.success(`Successfully removed [${path}]`);
 };
 
 module.exports = command;

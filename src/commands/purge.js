@@ -7,6 +7,7 @@
 const chalk = require('chalk');
 const client = require('../quant-client');
 const config = require('../config');
+const io = require('../io');
 
 const command = {};
 
@@ -15,12 +16,13 @@ command.describe = 'Purge the cache for a given url';
 command.builder = {};
 
 command.handler = function(argv) {
-  console.log(chalk.bold.green('*** Quant purge ***'));
-
-  // config.fromArgs(argv);
+  // Make sure configuration is loaded.
   if (!config.fromArgs(argv)) {
-    return console.error(chalk.yellow('Quant is not configured, run init.'));
+    io.login();
+    yargs.exit(1);
   }
+
+  console.log(chalk.bold.green('*** Quant purge ***'));
 
   client(config)
       .purge(argv.path)
