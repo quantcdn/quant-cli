@@ -16,11 +16,19 @@ const client = function(config) {
   const patch = util.promisify(request.patch);
   const del = util.promisify(request.delete);
 
+  /**
+   * Base URL configuration.
+   *
+   * This will be used if the active configuration does not
+   * define the API endpoint.
+   */
+  const BASE_URL = 'https://api.quantcdn.io/v1';
+
   const headers = {
     'User-Agent': 'Quant (+http://api.quantcdn.io)',
-    'Quant-Token': config.get('token'),
-    'Quant-Customer': config.get('clientid'),
-    'Quant-Project': config.get('project'),
+    'Quant-Token': config.get('deploy.token'),
+    'Quant-Customer': config.get('deploy.organization'),
+    'Quant-Project': config.get('deploy.project'),
     'Content-Type': 'application/json',
   };
 
@@ -79,7 +87,6 @@ const client = function(config) {
         json: true,
         headers,
       };
-
       const res = await get(options);
       return handleResponse(res);
     },
@@ -179,7 +186,7 @@ const client = function(config) {
       const mimeType = mime.lookup(file);
       if (mimeType == 'text/html') {
         if (!location) {
-          const p = path.resolve(process.cwd(), config.get('dir'));
+          const p = path.resolve(process.cwd(), config.get('deploy.dir'));
           // If a location isn't given, calculate it.
           location = path.relative(p, file);
         }
@@ -227,7 +234,7 @@ const client = function(config) {
     markup: async function(file, location, published = true, attachments = false, extraHeaders = {}, encoding = 'utf-8', skipPurge = false) { // eslint-disable-line max-len
       if (!Buffer.isBuffer(file)) {
         if (!location) {
-          const p = path.resolve(process.cwd(), config.get('dir'));
+          const p = path.resolve(process.cwd(), config.get('deploy.dir'));
           // If a location isn't given, calculate it.
           location = path.relative(p, file);
         }
@@ -623,6 +630,81 @@ const client = function(config) {
 
       return handleResponse(res);
     },
+
+    /**
+     * List a users organisations.
+     *
+     * @throws Error
+     */
+    organizations: async function() {
+      const options = {
+        url: `http://localhost:8001/api/v1/organisations`,
+        auth: {
+          bearer: config.getApiToken(),
+        },
+      };
+
+      const res = await get(options);
+      return handleResponse(res);
+    },
+
+    /**
+     * List a users projects.
+     *
+     * @param {string} org
+     *   The name of an organization for which project is in.
+     *
+     * @throws Error
+     */
+    projects: async function(org) {
+      if (!org) {
+        org = config.get('activeOrg');
+      }
+
+      const options = {
+        url: `http://localhost:8001/api/v1/projects`,
+        headers: {
+          'quant-organisation': org,
+        },
+        auth: {
+          bearer: config.getApiToken(),
+        },
+      };
+
+      const res = await get(options);
+      return handleResponse(res);
+    },
+
+    /**
+     * Fetch a project by name.
+     *
+     * @param {string} name
+     *   The project name.
+     *
+     * @return {object}
+     *   Project details.
+     */
+    project: async function(name) {
+      if (!name) {
+        name = config.get('activeProject');
+      }
+
+      const options = {
+        // url: `${config.get('endpoint')}/test/project`,
+        url: 'http://localhost:8001/api/v1/test/project',
+        headers: {
+          'quant-organisation': 'stevetest2',
+          'quant-project': name,
+        },
+        auth: {
+          bearer: config.tokens[config.active_token].token,
+        },
+      };
+
+      const res = await get(options);
+      return handleResponse(res);
+    },
+
   };
 };
 

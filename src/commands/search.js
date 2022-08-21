@@ -9,6 +9,7 @@ const client = require('../quant-client');
 const config = require('../config');
 const fs = require('fs');
 const glob = require('glob');
+const io = require('../io');
 
 const command = {};
 
@@ -32,8 +33,10 @@ command.builder = (yargs) => {
 
       console.log(chalk.bold.green('*** Add/update search records ***'));
 
+      // Make sure configuration is loaded.
       if (!config.fromArgs(argv)) {
-        return console.error(chalk.yellow('Quant is not configured, run init.'));
+        io.login();
+        yargs.exit(1);
       }
 
       let jsonFiles = [];
@@ -78,8 +81,10 @@ command.builder = (yargs) => {
 
       console.log(chalk.bold.green('*** Remove search record ***'));
 
+      // Make sure configuration is loaded.
       if (!config.fromArgs(argv)) {
-        return console.error(chalk.yellow('Quant is not configured, run init.'));
+        io.login();
+        yargs.exit(1);
       }
 
       client(config)
@@ -96,11 +101,13 @@ command.builder = (yargs) => {
     builder: (yargs) => {
     },
     handler: (argv) => {
-      console.log(chalk.bold.green('*** Search index status ***'));
-
+      // Make sure configuration is loaded.
       if (!config.fromArgs(argv)) {
-        return console.error(chalk.yellow('Quant is not configured, run init.'));
+        io.login();
+        yargs.exit(1);
       }
+
+      console.log(chalk.bold.green('*** Search index status ***'));
 
       client(config)
           .searchStatus()
@@ -119,11 +126,13 @@ command.builder = (yargs) => {
     builder: (yargs) => {
     },
     handler: (argv) => {
-      console.log(chalk.bold.green('*** Clear search index ***'));
-
+      // Make sure configuration is loaded.
       if (!config.fromArgs(argv)) {
-        return console.error(chalk.yellow('Quant is not configured, run init.'));
+        io.login();
+        yargs.exit(1);
       }
+
+      console.log(chalk.bold.green('*** Clear search index ***'));
 
       client(config)
           .searchClearIndex()

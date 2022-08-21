@@ -9,16 +9,16 @@
  *   quant init
  *   quant init -t <token> -c <client> -e <url> -d <build dir>
  */
-const chalk = require('chalk');
-const prompt = require('prompt');
-
+const inquirer = require('inquirer');
+const yargs = require('yargs');
 const config = require('../config');
+const io = require('../io');
 const client = require('../quant-client');
 
 const command = {};
 
 command.command = 'init';
-command.describe = 'Initialise a project in the current directory';
+command.describe = 'Initialize a project in the current directory';
 
 command.builder = (yargs) => {
   yargs.option('dir', {
@@ -31,62 +31,67 @@ command.builder = (yargs) => {
   return yargs;
 };
 
-command.handler = function(argv) {
-  const token = Array.isArray(argv.token) ? argv.token.pop() : argv.token;
-  const clientid = Array.isArray(argv.clientid) ? argv.clientid.pop() : argv.clientid;
+command.handler = async function(argv) {
   const endpoint = Array.isArray(argv.endpoint) ? argv.endpoint.pop() : argv.endpoint;
-  const project = Array.isArray(argv.project) ? argv.project.pop() : argv.project;
-  const dir = Array.isArray(argv.dir) ? argv.dir.pop() : argv.dir;
+  let token = Array.isArray(argv.token) ? argv.token.pop() : argv.token;
+  let organization = Array.isArray(argv.organization) ? argv.organization.pop() : argv.organization;
+  let project = Array.isArray(argv.project) ? argv.project.pop() : argv.project;
+  let dir = Array.isArray(argv.dir) ? argv.dir.pop() : argv.dir;
 
-  console.log(chalk.bold.green('*** Initialise Quant ***'));
+  io.title('Initialize project deployment');
 
-  if (!token || !clientid || !project) {
-    const schema = {
-      properties: {
-        endpoint: {
-          required: true,
-          description: 'Enter QuantCDN endpoint',
-          default: 'https://api.quantcdn.io',
-        },
-        clientid: {
-          pattern: /^[a-zA-Z0-9\-\_]+$/,
-          message: 'Client id must be only letters, numbers, underscores or dashes',
-          required: true,
-          description: 'Enter QuantCDN client id',
-        },
-        project: {
-          pattern: /^[a-zA-Z0-9\-]+$/,
-          message: 'Project must be only letters, numbers or dashes',
-          required: true,
-          description: 'Enter QuantCDN project',
-        },
-        token: {
-          hidden: true,
-          replace: '*',
-          required: true,
-          description: 'Enter QuantCDN token',
-        },
-        dir: {
-          required: true,
-          description: 'Directory containing static assets',
-          default: 'build',
-        },
-      },
-    };
-    prompt.start();
-    prompt.get(schema, function(err, result) {
-      config.set(result);
-      config.save();
-      client(config).ping(config)
-          .then((message) => console.log(chalk.bold.green(`✅✅✅ Successfully connected to ${message.project}`))) // eslint-disable-line max-len
-          .catch((message) => console.log(chalk.bold.red(`Unable to connect to quant ${message.project}`))); // eslint-disable-line max-len
+  if (argv.clientid) {
+    io.dimmed('Client ID option is deprecated please use --organization use --help for more information.');
+    organization = argv.clientid;
+  } else if (!organization) {
+    const clientIdAnswer = await inquirer.prompt({
+      name: 'value',
+      message: 'Enter the organization name',
     });
-  } else {
-    config.set({clientid, project, token, endpoint, dir});
-    config.save();
-    client(config).ping(config)
-        .then((message) => console.log(chalk.bold.green(`✅✅✅ Successfully connected to ${message.project}`))) // eslint-disable-line max-len
-        .catch((message) => console.log(chalk.bold.red(`Unable to connect to quant ${message.project}`))); // eslint-disable-line max-len
+    organization = clientIdAnswer.value;
+  }
+
+  if (!project) {
+    const projectAnswer = await inquirer.prompt({
+      name: 'value',
+      message: 'Enter the project name',
+    });
+    project = projectAnswer.value;
+  }
+
+  if (!token) {
+    const tokenAnswer = await inquirer.prompt({
+      type: 'password',
+      name: 'value',
+      message: 'Enter the project token',
+    });
+    token = tokenAnswer.value;
+  }
+
+  if (!dir) {
+    const dirAnswer = await inquirer.prompt({
+      name: 'value',
+      message: 'Enter the build directory for your project',
+    });
+    dir = dirAnswer.value;
+  }
+
+  const cfg = {
+    deploy: {token, project, organization, dir},
+  };
+
+  if (endpoint) {
+    cfg.endpoint = endpoint;
+  }
+
+  config.set(cfg);
+  config.save();
+
+  try {
+    const res = await client(config).ping();
+    io.success(`Successfully connected to ${res.project}`);
+  } catch (err) {
+    io.critical(err);
   }
 };
 

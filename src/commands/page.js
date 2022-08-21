@@ -10,6 +10,7 @@
 const config = require('../config');
 const client = require('../quant-client');
 const chalk = require('chalk');
+const io = require('../io');
 
 const command = {};
 
@@ -30,12 +31,13 @@ command.handler = function(argv) {
   const filepath = argv.file;
   const location = argv.location;
 
-  console.log(chalk.bold.green('*** Quant page ***'));
-
-  // @TODO: add dir support.
+  // Make sure configuration is loaded.
   if (!config.fromArgs(argv)) {
-    return console.error(chalk.yellow('Quant is not configured, run init.'));
+    io.login();
+    yargs.exit(1);
   }
+
+  console.log(chalk.bold.green('*** Quant page ***'));
 
   client(config).markup(filepath, location)
     .then((body) => console.log(chalk.green('Success: ') + ` Added [${filepath}]`)) // eslint-disable-line

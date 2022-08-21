@@ -6,6 +6,7 @@
  */
 const chalk = require('chalk');
 const config = require('../config');
+const io = require('../io');
 const client = require('../quant-client');
 
 const command = {};
@@ -19,6 +20,12 @@ command.builder = (yargs) => {
 };
 
 command.handler = function(argv) {
+  // Make sure configuration is loaded.
+  if (!config.fromArgs(argv)) {
+    io.login();
+    yargs.exit(1);
+  }
+
   console.log(chalk.bold.green('*** Quant redirect ***'));
 
   // @TODO: Accept argv.dir.
