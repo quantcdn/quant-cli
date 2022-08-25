@@ -52,6 +52,12 @@ command.builder = (yargs) => {
     type: 'integer',
     default: 10,
   });
+  yargs.option('force', {
+    describe: 'Force the deployment',
+    alias: 'f',
+    type: 'boolean',
+    default: false,
+  });
 };
 
 command.handler = async function(argv) {
@@ -105,8 +111,8 @@ command.handler = async function(argv) {
 
       if (revision) {
         const md5 = md5File.sync(file);
-        if (md5 == revision.md5) {
-          console.log(chalk.blue(`Published version is up-to-date (${filepath})`));
+        if (md5 == revision.md5 && !argv.force) {
+          io.notice(`Published version is up-to-date (${filepath})`);
           return;
         }
       }
