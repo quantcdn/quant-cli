@@ -107,7 +107,7 @@ const client = function(config) {
         published: true,
         deleted: false,
         sort_field: 'last_modified',
-        sort_direction: 'desc'
+        sort_direction: 'desc',
       }, extend);
       const url = `${config.get('endpoint')}/global-meta?${querystring.stringify(query)}`;
       const doUnfold = async function(i) {
