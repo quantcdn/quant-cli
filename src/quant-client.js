@@ -105,6 +105,9 @@ const client = function(config) {
       const query = Object.assign({
         page_size: 500,
         published: true,
+        deleted: false,
+        sort_field: 'last_modified',
+        sort_direction: 'desc',
       }, extend);
       const url = `${config.get('endpoint')}/global-meta?${querystring.stringify(query)}`;
       const doUnfold = async function(i) {

@@ -12,6 +12,7 @@ const normalizePaths = require('../helper/normalizePaths');
 const path = require('path');
 const yargs = require('yargs');
 const md5File = require('md5-file');
+const mime = require('mime-types');
 const {chunk} = require('../helper/array');
 
 const command = {};
@@ -51,6 +52,12 @@ command.builder = (yargs) => {
     alias: 'cs',
     type: 'integer',
     default: 10,
+  });
+  yargs.option('force', {
+    describe: 'Force the deployment (ignore md5 match)',
+    alias: 'f',
+    type: 'boolean',
+    default: false,
   });
 };
 
@@ -99,13 +106,17 @@ command.handler = async function(argv) {
 
       let revision = false;
 
-      try {
-        revision = await quant.revisions(filepath);
-      } catch (err) {}
+      // Only perform a revision lookup for non-content files.
+      const mimeType = mime.lookup(filepath);
+      if (mimeType != 'text/html') {
+        try {
+          revision = await quant.revisions(filepath);
+        } catch (err) {}
+      }
 
       if (revision) {
         const md5 = md5File.sync(file);
-        if (md5 == revision.md5) {
+        if (md5 == revision.md5 && !argv.force) {
           console.log(chalk.blue(`Published version is up-to-date (${filepath})`));
           return;
         }
