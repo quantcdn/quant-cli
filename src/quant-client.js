@@ -329,17 +329,31 @@ const client = function(config) {
      *
      * @param {string} location
      *   The URL location of the content.
-     * @param {bool} status
-     *   Published status of a node.
+     * @param {string} revision
+     *   The revision to publish.
      *
      * @return {object}
      *   API payload.
      *
      * @throws Error.
      */
-    publish: async function(location, status = true) {
-      // @TODO: this is likely handled by markup().
-      throw new Error('Not implemented yet.');
+    publish: async function(location, revision) {
+      const url = quantURL.prepare(location);
+
+      if (!revision) {
+        throw Error('Invalid revision ID provided.');
+      }
+
+      const options = {
+        url: `${config.get('endpoint')}/publish/${revision}`,
+        headers: {
+          ...headers,
+          'Quant-Url': url,
+        },
+        json: true,
+      };
+      const res = await patch(options);
+      return handleResponse(res);
     },
 
     /**
@@ -353,9 +367,7 @@ const client = function(config) {
      * @throws Error.
      */
     unpublish: async function(url) {
-      // Ensure that we don't have index.html in the URL as Quant
-      // expects to obfuscate this.
-      url = url.replace('/index.html', '');
+      url = quantURL.prepare(url);
 
       const options = {
         url: `${config.get('endpoint')}/unpublish`,
