@@ -90,6 +90,8 @@ const client = function(config) {
      *
      * @param {bool} unfold
      *   Unfold the record set.
+     * @param {bool} exclude
+     *   Exclude delete objects from the meta result.
      * @param {object} extend
      *   Additional query parameters to send.
      *
@@ -101,7 +103,7 @@ const client = function(config) {
      * @TODO
      *   - Async iterator for memory 21k items ~ 40mb.
      */
-    meta: async function(unfold = false, extend = {}) {
+    meta: async function(unfold = false, exclude=true, extend = {}) {
       const records = [];
       const query = Object.assign({
         page_size: 500,
@@ -192,7 +194,7 @@ const client = function(config) {
 
         location = quantURL.prepare(location);
 
-        if (includeIndex) {
+        if (!location.endsWith('.html') && includeIndex) {
           location = `${location}/index.html`;
         }
 
