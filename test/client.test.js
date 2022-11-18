@@ -134,20 +134,27 @@ describe('Quant Client', function() {
             .stub(request, 'post')
             .yields(null, response, response.body);
 
-        await client(config).send('test/fixtures/index.html');
+        await client(config)
+            .send('test/fixtures/index.html', false, true, false, true, true);
 
         expect(
             requestPost.calledOnceWith({
               url: 'http://localhost:8081',
               json: true,
-              body: {url: '/index.html', content: '', published: true, find_attachments: false},
+              body: {
+                url: '/index.html',
+                find_attachments: false,
+                content: '',
+                published: true
+              },
               headers: {
                 'User-Agent': 'Quant (+http://api.quantcdn.io)',
                 'Quant-Token': 'test',
                 'Quant-Customer': 'dev',
                 'Quant-Project': 'test',
                 'Content-Type': 'application/json',
-              },
+                'Quant-Skip-Purge': 'true'
+              }
             }),
         ).to.be.true;
       });
@@ -168,7 +175,8 @@ describe('Quant Client', function() {
             .stub(request, 'post')
             .yields(null, response, response.body);
 
-        await client(config).send('test/fixtures/index.html', 'test/fixtures', true, false, false, {test: 'headers'});
+        await client(config)
+            .send('test/fixtures/index.html', 'test/fixtures', true, false, false, false, {test: 'headers'});
 
         expect(
             requestPost.calledOnceWith({
@@ -215,7 +223,7 @@ describe('Quant Client', function() {
               url: 'http://localhost:8081',
               json: true,
               body: {
-                url: '/test/fixtures/index.html',
+                url: '/test/fixtures',
                 find_attachments: true,
                 content: '',
                 published: true,
@@ -254,57 +262,18 @@ describe('Quant Client', function() {
               url: 'http://localhost:8081',
               json: true,
               body: {
-                url: '/test/index.html',
+                url: '/test',
                 find_attachments: false,
                 content: '',
-                published: true,
+                published: true
               },
               headers: {
                 'User-Agent': 'Quant (+http://api.quantcdn.io)',
                 'Quant-Token': 'test',
                 'Quant-Customer': 'dev',
                 'Quant-Project': 'test',
-                'Content-Type': 'application/json',
-              },
-            }),
-        ).to.be.true;
-      });
-
-      it('should accept a location', async function() {
-        const response = {
-          statusCode: 200,
-          body: {
-            quant_revision: 1,
-            md5: 'da697d6f9a318fe26d2dd75a6b123df0',
-            quant_filename: 'index.html',
-            errorMsg: '',
-            error: false,
-          },
-        };
-
-        requestPost = sinon
-            .stub(request, 'post')
-            .yields(null, response, response.body);
-
-        await client(config).send('test/fixtures/index.html', 'test/index.html');
-
-        expect(
-            requestPost.calledOnceWith({
-              url: 'http://localhost:8081',
-              json: true,
-              body: {
-                url: '/test/index.html',
-                find_attachments: false,
-                content: '',
-                published: true,
-              },
-              headers: {
-                'User-Agent': 'Quant (+http://api.quantcdn.io)',
-                'Quant-Token': 'test',
-                'Quant-Customer': 'dev',
-                'Quant-Project': 'test',
-                'Content-Type': 'application/json',
-              },
+                'Content-Type': 'application/json'
+              }
             }),
         ).to.be.true;
       });
@@ -332,7 +301,7 @@ describe('Quant Client', function() {
               url: 'http://localhost:8081',
               json: true,
               body: {
-                url: '/test/index.html',
+                url: '/test',
                 find_attachments: false,
                 content: '',
                 published: false,
@@ -369,42 +338,21 @@ describe('Quant Client', function() {
         // Expect the post for the redirect.
         expect(
             requestPost.calledWith({
-              url: 'http://localhost:8081/redirect',
-              headers: {
-                'User-Agent': 'Quant (+http://api.quantcdn.io)',
-                'Quant-Token': 'test',
-                'Quant-Customer': 'dev',
-                'Quant-Project': 'test',
-                'Content-Type': 'application/json',
-              },
-              json: true,
-              body: {
-                url: '/some-file-path.html',
-                redirect_url: '/some-file-path',
-                redirect_http_code: 302,
-                published: true,
-              },
-            }),
-        ).to.be.true;
-
-        // Expect the post for the content.
-        expect(
-            requestPost.calledWith({
               url: 'http://localhost:8081',
               json: true,
               body: {
-                url: '/some-file-path/index.html',
-                content: '',
-                published: true,
+                url: '/some-file-path.html',
                 find_attachments: false,
+                content: '',
+                published: true
               },
               headers: {
                 'User-Agent': 'Quant (+http://api.quantcdn.io)',
                 'Quant-Token': 'test',
                 'Quant-Customer': 'dev',
                 'Quant-Project': 'test',
-                'Content-Type': 'application/json',
-              },
+                'Content-Type': 'application/json'
+              }
             }),
         ).to.be.true;
       });

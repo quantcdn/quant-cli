@@ -21,6 +21,7 @@ describe('helpers::url', () => {
     });
     it('should return / for only index', () => {
       expect(url.prepare('/index.html')).to.eql('/');
+      expect(url.prepare('index.html')).to.eql('/');
     });
     it('should respect nested structures', () => {
       expect(url.prepare('/nested/directory/index.html')).to.eql('/nested/directory');

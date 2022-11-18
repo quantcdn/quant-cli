@@ -196,6 +196,7 @@ const client = function(config) {
 
         if (!location.endsWith('.html') && includeIndex) {
           location = `${location}/index.html`;
+          location = location.replace(/^\/\//, '/');
         }
 
         return await this.markup(file, location, published, attachments, extraHeaders, encoding, skipPurge);

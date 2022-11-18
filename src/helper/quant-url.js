@@ -16,6 +16,7 @@ module.exports = {
   prepare: (uri) => {
     uri = uri.startsWith('/') ? uri : `/${uri}`;
     uri = uri.toLowerCase();
+    uri = uri.replace(/^\/\//, '/');
     uri = uri.replace(/(\/)index\.html/, '$1');
 
     if (uri.length > 1) {
