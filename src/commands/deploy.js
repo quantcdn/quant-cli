@@ -59,6 +59,12 @@ command.builder = (yargs) => {
     type: 'boolean',
     default: false,
   });
+  yargs.option('enable-index-html', {
+    describe: 'Push index.html files with page assets',
+    alias: 'h',
+    type: 'boolean',
+    default: false,
+  });
 };
 
 command.handler = async function(argv) {
@@ -122,7 +128,7 @@ command.handler = async function(argv) {
         }
       }
       try {
-        await quant.send(file, filepath, true, argv.attachments, argv['skip-purge']);
+        await quant.send(file, filepath, true, argv.attachments, argv['skip-purge'], argv['enable-index-html']);
       } catch (err) {
         console.log(chalk.yellow(err.message + ` (${filepath})`));
         return;

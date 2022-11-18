@@ -8,6 +8,7 @@ const fs = require('fs');
 const path = require('path');
 const mime = require('mime-types');
 const querystring = require('querystring');
+const quantURL = require('./helper/quant-url');
 
 const client = function(config) {
   const req = util.promisify(request); // eslint-disable-line
@@ -170,6 +171,8 @@ const client = function(config) {
      *   Should quant find attachments.
      * @param {bool} skipPurge
      *   Skip CDN cache purge.
+     * @param {bool} includeIndex
+     *   Include index.html suffix on HTML assets.
      * @param {object} extraHeaders
      *   Additional HTTP headers.
      * @param {string} encoding
@@ -178,7 +181,7 @@ const client = function(config) {
      * @return {object}
      *   The API response.
      */
-    send: async function(file, location, published = true, attachments = false, skipPurge = false, extraHeaders = {}, encoding = 'utf-8') {
+    send: async function(file, location, published = true, attachments = false, skipPurge = false, includeIndex = false, extraHeaders = {}, encoding = 'utf-8') {
       const mimeType = mime.lookup(file);
       if (mimeType == 'text/html') {
         if (!location) {
@@ -186,20 +189,13 @@ const client = function(config) {
           // If a location isn't given, calculate it.
           location = path.relative(p, file);
         }
-        if (!file.endsWith('index.html')) {
-          // Some static site generators don't output files
-          // in the way that Quant is expecting to handle them
-          // this forces the location to a quant valid path
-          // and creates a redirect form the file location.
-          from = location.startsWith('/') ? location : `/${location}`;
-          location = location.replace('.html', '/index.html');
-          to = location.startsWith('/') ? location : `/${location}`;
-          try {
-            await this.redirect(from, to.replace('/index.html', ''));
-          } catch (err) {
-            // Fail silently if this has been created already.
-          };
+
+        location = quantURL.prepare(location);
+
+        if (includeIndex) {
+          location = `${location}/index.html`;
         }
+
         return await this.markup(file, location, published, attachments, extraHeaders, encoding, skipPurge);
       } else {
         return await this.file(file, location, false, extraHeaders, skipPurge);
@@ -210,9 +206,9 @@ const client = function(config) {
      * Upload markup.
      *
      * @param {string} file
-     *   The path to the file.
+     *   Filepath on disk.
      * @param {string} location
-     *   The path the location.
+     *   The web accessible destination.
      * @param {bool} published
      *   The status.
      * @param {bool} attachments
@@ -233,9 +229,6 @@ const client = function(config) {
           const p = path.resolve(process.cwd(), config.get('dir'));
           // If a location isn't given, calculate it.
           location = path.relative(p, file);
-        }
-        if (!file.endsWith('index.html') && !location.endsWith('index.html')) {
-          throw new Error('Can only upload an index.html file.');
         }
         file = fs.readFileSync(file, [encoding]);
       }

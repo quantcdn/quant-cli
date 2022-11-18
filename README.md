@@ -1,6 +1,6 @@
 # QuantCDN cli
 
-[![Codefresh build status]( https://g.codefresh.io/api/badges/pipeline/quantcdn/QuantCDN%2Fquant-cli?key=eyJhbGciOiJIUzI1NiJ9.NWU5ZDVmZmE1MWJmOTZjYTU0NWRiNTBk.2vLiCtkYTfWcwAbwbzuL5KlwSrZRXetNTXgpWn5ZMag&type=cf-1)]( https%3A%2F%2Fg.codefresh.io%2Fpipelines%2Fquant-cli%2Fbuilds%3Ffilter%3Dtrigger%3Abuild~Build%3Bpipeline%3A5ea3dca2e2365774c68179e7~quant-cli)
+![Unit tests](https://github.com/quantcdn/quant-cli/actions/workflows/ci.yml/badge.svg)
 
 Simplify deployments and interactions with the QuantCDN API by using the support cli tool.
 
