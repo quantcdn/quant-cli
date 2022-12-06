@@ -8,6 +8,7 @@ const fs = require('fs');
 const path = require('path');
 const mime = require('mime-types');
 const querystring = require('querystring');
+const quantURL = require('./helper/quant-url');
 
 const client = function(config) {
   const req = util.promisify(request); // eslint-disable-line
@@ -89,6 +90,8 @@ const client = function(config) {
      *
      * @param {bool} unfold
      *   Unfold the record set.
+     * @param {bool} exclude
+     *   Exclude delete objects from the meta result.
      * @param {object} extend
      *   Additional query parameters to send.
      *
@@ -100,7 +103,7 @@ const client = function(config) {
      * @TODO
      *   - Async iterator for memory 21k items ~ 40mb.
      */
-    meta: async function(unfold = false, extend = {}) {
+    meta: async function(unfold = false, exclude=true, extend = {}) {
       const records = [];
       const query = Object.assign({
         page_size: 500,
@@ -170,6 +173,8 @@ const client = function(config) {
      *   Should quant find attachments.
      * @param {bool} skipPurge
      *   Skip CDN cache purge.
+     * @param {bool} includeIndex
+     *   Include index.html suffix on HTML assets.
      * @param {object} extraHeaders
      *   Additional HTTP headers.
      * @param {string} encoding
@@ -178,7 +183,7 @@ const client = function(config) {
      * @return {object}
      *   The API response.
      */
-    send: async function(file, location, published = true, attachments = false, skipPurge = false, extraHeaders = {}, encoding = 'utf-8') {
+    send: async function(file, location, published = true, attachments = false, skipPurge = false, includeIndex = false, extraHeaders = {}, encoding = 'utf-8') {
       const mimeType = mime.lookup(file);
       if (mimeType == 'text/html') {
         if (!location) {
@@ -186,20 +191,14 @@ const client = function(config) {
           // If a location isn't given, calculate it.
           location = path.relative(p, file);
         }
-        if (!file.endsWith('index.html')) {
-          // Some static site generators don't output files
-          // in the way that Quant is expecting to handle them
-          // this forces the location to a quant valid path
-          // and creates a redirect form the file location.
-          from = location.startsWith('/') ? location : `/${location}`;
-          location = location.replace('.html', '/index.html');
-          to = location.startsWith('/') ? location : `/${location}`;
-          try {
-            await this.redirect(from, to.replace('/index.html', ''));
-          } catch (err) {
-            // Fail silently if this has been created already.
-          };
+
+        location = quantURL.prepare(location);
+
+        if (!location.endsWith('.html') && includeIndex) {
+          location = `${location}/index.html`;
+          location = location.replace(/^\/\//, '/');
         }
+
         return await this.markup(file, location, published, attachments, extraHeaders, encoding, skipPurge);
       } else {
         return await this.file(file, location, false, extraHeaders, skipPurge);
@@ -210,9 +209,9 @@ const client = function(config) {
      * Upload markup.
      *
      * @param {string} file
-     *   The path to the file.
+     *   Filepath on disk.
      * @param {string} location
-     *   The path the location.
+     *   The web accessible destination.
      * @param {bool} published
      *   The status.
      * @param {bool} attachments
@@ -233,9 +232,6 @@ const client = function(config) {
           const p = path.resolve(process.cwd(), config.get('dir'));
           // If a location isn't given, calculate it.
           location = path.relative(p, file);
-        }
-        if (!file.endsWith('index.html') && !location.endsWith('index.html')) {
-          throw new Error('Can only upload an index.html file.');
         }
         file = fs.readFileSync(file, [encoding]);
       }
@@ -336,17 +332,31 @@ const client = function(config) {
      *
      * @param {string} location
      *   The URL location of the content.
-     * @param {bool} status
-     *   Published status of a node.
+     * @param {string} revision
+     *   The revision to publish.
      *
      * @return {object}
      *   API payload.
      *
      * @throws Error.
      */
-    publish: async function(location, status = true) {
-      // @TODO: this is likely handled by markup().
-      throw new Error('Not implemented yet.');
+    publish: async function(location, revision) {
+      const url = quantURL.prepare(location);
+
+      if (!revision) {
+        throw Error('Invalid revision ID provided.');
+      }
+
+      const options = {
+        url: `${config.get('endpoint')}/publish/${revision}`,
+        headers: {
+          ...headers,
+          'Quant-Url': url,
+        },
+        json: true,
+      };
+      const res = await patch(options);
+      return handleResponse(res);
     },
 
     /**
@@ -360,9 +370,7 @@ const client = function(config) {
      * @throws Error.
      */
     unpublish: async function(url) {
-      // Ensure that we don't have index.html in the URL as Quant
-      // expects to obfuscate this.
-      url = url.replace('/index.html', '');
+      url = quantURL.prepare(url);
 
       const options = {
         url: `${config.get('endpoint')}/unpublish`,

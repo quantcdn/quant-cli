@@ -14,6 +14,7 @@ const yargs = require('yargs');
 const md5File = require('md5-file');
 const mime = require('mime-types');
 const {chunk} = require('../helper/array');
+const quantUrl = require('../helper/quant-url');
 
 const command = {};
 
@@ -56,6 +57,12 @@ command.builder = (yargs) => {
   yargs.option('force', {
     describe: 'Force the deployment (ignore md5 match)',
     alias: 'f',
+    type: 'boolean',
+    default: false,
+  });
+  yargs.option('enable-index-html', {
+    describe: 'Push index.html files with page assets',
+    alias: 'h',
     type: 'boolean',
     default: false,
   });
@@ -122,7 +129,7 @@ command.handler = async function(argv) {
         }
       }
       try {
-        await quant.send(file, filepath, true, argv.attachments, argv['skip-purge']);
+        await quant.send(file, filepath, true, argv.attachments, argv['skip-purge'], argv['enable-index-html']);
       } catch (err) {
         console.log(chalk.yellow(err.message + ` (${filepath})`));
         return;
@@ -148,7 +155,10 @@ command.handler = async function(argv) {
   const relativeFiles = [];
   for (let i = 0; i < files.length; i++) {
     // Quant URLs are all lowercase, relative paths need to be made lc for comparison.
-    await Promise.all(files[i].map((item) => relativeFiles.push(`/${path.relative(p, item).toLowerCase()}`)));
+    await Promise.all(files[i].map((item) => {
+      relativeFile = argv['enable-index-html'] ? `/${path.relative(p, item).toLowerCase()}` : quantUrl.prepare(path.relative(p, item));
+      relativeFiles.push(relativeFile);
+    }));
   }
 
   if (!data || ! 'records' in data) {
@@ -158,7 +168,7 @@ command.handler = async function(argv) {
   }
 
   data.records.map(async (item) => {
-    const f = item.url.replace('/index.html', '.html');
+    const f = quantUrl.prepare(item.url);
     if (relativeFiles.includes(item.url) || relativeFiles.includes(f)) {
       return;
     }
