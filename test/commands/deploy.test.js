@@ -14,6 +14,7 @@ const path = require('path');
 const getFiles = require('../../src/helper/getFiles');
 const config = require('../../src/config');
 const client = require('../../src/quant-client');
+const revisions = require('../../src/helper/revisions');
 
 describe('Deploy', function() {
   let getFilesStub;
@@ -22,6 +23,7 @@ describe('Deploy', function() {
   let meta;
   let unpublish;
   let ping;
+  let send;
 
   // Disable console log for neater test output.
   before(() => sinon.stub(console, 'log'));
@@ -58,9 +60,8 @@ describe('Deploy', function() {
     });
 
     it('should deploy built html files', async function() {
-      const dir = process.cwd() + 'test/fixtures';
-      const f = `${dir}/test/index.html`;
-
+      const dir = path.resolve(process.cwd(), 'test/fixtures');
+      const f = `${dir}/index.html`;
       getFilesStub
           .withArgs(dir)
           .returns([f]);
@@ -70,9 +71,8 @@ describe('Deploy', function() {
     });
 
     it('should deploy built css files', async function() {
-      const dir = process.cwd() + 'test/fixtures';
-      const f = `${dir}/test/test.css`;
-
+      const dir = path.resolve(process.cwd(), 'test/fixtures');
+      const f = `${dir}/test.css`;
       getFilesStub
           .withArgs(dir)
           .returns([f]);
@@ -102,11 +102,57 @@ describe('Deploy', function() {
     it('should unpublish missing files', async function() {
       const dir = path.resolve(process.cwd(), 'test/fixtures');
       getFilesStub.withArgs(dir).returns([
-        'index.html',
+        `${dir}/index.html`,
       ]);
 
       await deploy({dir});
       expect(unpublish.calledOnceWith('test/index.html')).to.be.true;
+    });
+  });
+
+  describe('Local meta', function() {
+    let enabled;
+    let store;
+    let save;
+    beforeEach(function() {
+      meta = sinon.stub().returns();
+      send.returns({
+        'url': '/test.html',
+        'md5': 'test',
+      });
+      clientStub = sinon.stub(client, 'client').returns({
+        meta,
+        unpublish,
+        send,
+        ping,
+      });
+      enabled = sinon.stub(revisions, 'enabled');
+      store = sinon.stub(revisions, 'store');
+      save = sinon.stub(revisions, 'save');
+    });
+
+    afterEach(function() {
+      enabled.restore();
+      store.restore();
+      save.restore();
+    });
+
+    it('should build the local md5 cache', async function() {
+      const dir = path.resolve(process.cwd(), 'test/fixtures');
+      getFilesStub.withArgs(dir).returns([
+        `${dir}/index.html`,
+      ]);
+      await deploy({
+        'dir': dir,
+        'revision-log': '/tmp/test-log.json',
+        'r': '/tmp/test-log.json',
+      });
+      expect(enabled.firstCall.calledWith(true)).to.be.true;
+      expect(store.firstCall.calledWith({
+        'url': '/test.html',
+        'md5': 'test',
+      })).to.be.true;
+      expect(save.calledOnce).to.be.true;
     });
   });
 });
