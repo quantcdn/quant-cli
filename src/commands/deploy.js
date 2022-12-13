@@ -12,9 +12,10 @@ const normalizePaths = require('../helper/normalizePaths');
 const path = require('path');
 const yargs = require('yargs');
 const md5File = require('md5-file');
-const mime = require('mime-types');
 const {chunk} = require('../helper/array');
 const quantUrl = require('../helper/quant-url');
+const revisions = require('../helper/revisions');
+const {sep} = require('path');
 
 const command = {};
 
@@ -66,6 +67,11 @@ command.builder = (yargs) => {
     type: 'boolean',
     default: false,
   });
+  yargs.option('revision-log', {
+    describe: 'Directory for the revision log file',
+    alias: 'r',
+    type: 'string',
+  });
 };
 
 command.handler = async function(argv) {
@@ -80,10 +86,12 @@ command.handler = async function(argv) {
   }
 
   const dir = argv.dir || config.get('dir');
-
   const p = path.resolve(process.cwd(), dir);
-
   const quant = client(config);
+
+  // Prepare local revision support.
+  revisions.enabled(argv.r !== undefined);
+  revisions.load(argv.r + sep + config.get('project'));
 
   try {
     await quant.ping();
@@ -105,38 +113,41 @@ command.handler = async function(argv) {
     argv['chunk-size'] = 20;
   }
   files = chunk(files, argv['chunk-size']);
-
   for (let i = 0; i < files.length; i++) {
     await Promise.all(files[i].map(async (file) => {
+      const md5 = md5File.sync(file);
       let filepath = path.relative(p, file);
+      let revision = false;
       filepath = normalizePaths(filepath);
 
-      let revision = false;
-
-      // Only perform a revision lookup for non-content files.
-      const mimeType = mime.lookup(filepath);
-      if (mimeType != 'text/html') {
+      if (revisions.enabled()) {
+        if (revisions.has(filepath, md5)) {
+          console.log(chalk.blue(`Published version is up-to-date (${filepath})`));
+          return;
+        }
+      } else {
         try {
           revision = await quant.revisions(filepath);
         } catch (err) {}
-      }
-
-      if (revision) {
-        const md5 = md5File.sync(file);
-        if (md5 == revision.md5 && !argv.force) {
+        if (revision && revision.md5 == md5) {
           console.log(chalk.blue(`Published version is up-to-date (${filepath})`));
           return;
         }
       }
+
       try {
-        await quant.send(file, filepath, true, argv.attachments, argv['skip-purge'], argv['enable-index-html']);
+        const meta = await quant.send(file, filepath, true, argv.attachments, argv['skip-purge'], argv['enable-index-html']);
+        revisions.store(meta);
       } catch (err) {
+        revisions.store({url: filepath, md5});
         console.log(chalk.yellow(err.message + ` (${filepath})`));
         return;
       }
       console.log(chalk.bold.green('✅') + ` ${filepath}`);
     }));
   }
+
+  revisions.save();
 
   if (argv['skip-unpublish']) {
     console.log(chalk.yellow(' -> Skipping the automatic unpublish process'));
