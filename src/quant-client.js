@@ -121,7 +121,7 @@ const client = function(config) {
         });
 
         if (res.body.global_meta && res.body.global_meta.records) {
-          res.body.global_meta.records.map((item) => records.push({url: item.meta.url, md5: item.meta.md5}));
+          res.body.global_meta.records.map((item) => records.push({url: item.meta.url, md5: item.meta.md5, type: item.meta.type}));
         }
       };
 
@@ -142,7 +142,7 @@ const client = function(config) {
       }
 
       if (res.body.global_meta.records) {
-        res.body.global_meta.records.map((item) => records.push({url: item.meta.url, md5: item.meta.md5}));
+        res.body.global_meta.records.map((item) => records.push({url: item.meta.url, md5: item.meta.md5, type: item.meta.type}));
       }
 
       if (unfold) {

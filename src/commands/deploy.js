@@ -178,11 +178,18 @@ command.handler = async function(argv) {
     return;
   }
 
-  data.records.map(async (item) => {
+  data.records.map(async (item) => {    
     const f = quantUrl.prepare(item.url);
+    
     if (relativeFiles.includes(item.url) || relativeFiles.includes(f)) {
       return;
     }
+    
+    if (item.type && item.type == "redirect") {
+      // @todo: support redirects with deploy.
+      return;
+    }
+    
     try {
       // Skip unpublish process if skip unpublish regex matches.
       if (argv['skip-unpublish-regex']) {
