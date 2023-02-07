@@ -52,7 +52,7 @@ command.builder = (yargs) => {
 
         for (let i = 0; i < jsonFiles.length; i++) {
           client(config)
-              .search_index(jsonFiles[i])
+              .searchIndex(jsonFiles[i])
               .then(response => console.log(chalk.green('Success:') + ` Successfully posted search records in ${jsonFiles[i]}`)) // eslint-disable-line
               .catch((err) => console.log(chalk.red.bold('Error:') + ` ${err}`));
         }
