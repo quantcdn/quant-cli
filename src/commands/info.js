@@ -37,6 +37,19 @@ command.handler = function(argv) { // eslint-disable-line
               console.log(chalk.yellow('\nInfo:'));
               if (data && data.total_records) {
                 console.log(`Total records: ${data.total_records}`);
+                const totals = {'content': 0, 'redirects': 0};
+
+                if (data.records) {
+                  data.records.map(async (item) => {
+                    if (item.type && item.type == 'redirect') {
+                      totals.redirects++;
+                    } else {
+                      totals.content++;
+                    }
+                  });
+                  console.log(`  - content: ${totals.content}`);
+                  console.log(`  - redirects: ${totals.redirects}`);
+                }
               } else {
                 console.log('Use deploy to start seeding!');
               }

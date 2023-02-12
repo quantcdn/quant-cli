@@ -97,6 +97,11 @@ command.handler = async function(argv) {
     if (relativeFiles.includes(item.url) || relativeFiles.includes(f)) {
       return;
     }
+
+    if (item.type && item.type == 'redirect') {
+      return;
+    }
+
     // Skip unpublish process if skip unpublish regex matches.
     if (argv['skip-unpublish-regex']) {
       const match = item.url.match(argv['skip-unpublish-regex']);
