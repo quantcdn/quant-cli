@@ -64,7 +64,13 @@ command.handler = function(argv) {
           hidden: true,
           replace: '*',
           required: true,
-          description: 'Enter QuantCDN token',
+          description: 'Enter QuantCDN project token',
+        },
+        bearer: {
+          hidden: true,
+          replace: '*',
+          required: false,
+          description: 'Enter an optional QuantCDN API token',
         },
         dir: {
           required: true,

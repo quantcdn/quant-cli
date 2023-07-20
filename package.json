@@ -37,6 +37,7 @@
     "html-entities": "^2.3.2",
     "md5-file": "^5.0.0",
     "mime-types": "^2.1.27",
+    "papaparse": "^5.4.1",
     "prompt": "^1.1.0",
     "request": "^2.88.2",
     "simplecrawler": "^1.1.9",

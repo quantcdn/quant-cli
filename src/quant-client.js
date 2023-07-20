@@ -21,9 +21,14 @@ const client = function(config) {
     'User-Agent': 'Quant (+http://api.quantcdn.io)',
     'Quant-Token': config.get('token'),
     'Quant-Customer': config.get('clientid'),
+    'Quant-Organisation': config.get('clientid'),
     'Quant-Project': config.get('project'),
     'Content-Type': 'application/json',
   };
+
+  if (config.get('bearer')) {
+    headers.Authorization = `Bearer ${config.get('bearer')}`;
+  }
 
   /**
    * Handle the response.
@@ -633,6 +638,70 @@ const client = function(config) {
       const res = await get(options);
 
       return handleResponse(res);
+    },
+
+    /**
+     * Access WAF logs for the project.
+     *
+     * @param {bool} unfold
+     *   Unfold the record set.
+     * @param {object} extend
+     *   Additional query parameters to set for the request.
+     *
+     * @return {object}
+     *   A list of all WAF logs.
+     */
+    wafLogs: async function(unfold = false, extend = {}) {
+      const logs = [];
+      const url = `${config.get('endpoint')}/waf/logs`;
+      const query = Object.assign({
+        per_page: 10,
+      }, extend);
+      const doUnfold = async function(i) {
+        let res;
+        query.page = i;
+        try {
+          res = await get({
+            url: `${url}?${querystring.stringify(query)}`,
+            headers,
+            json: true,
+          });
+        } catch (err) {
+          console.log(err);
+          return false;
+        }
+        if (res.body.data) {
+          logs.push(...res.body.data);
+        }
+        return res.body.next != '';
+      };
+
+      const options = {
+        url: `${url}?${querystring.stringify(query)}`,
+        headers,
+        json: true,
+      };
+
+      const res = await get(options);
+
+      if (res.statusCode == 403) {
+        return -1;
+      }
+
+      if (typeof res.body == 'undefined' || typeof res.body.data == 'undefined') {
+        return logs;
+      }
+
+      logs.push(...res.body.data);
+      let page = 1;
+      if (unfold && res.body.next != '') {
+        let more;
+        do {
+          page++;
+          more = await doUnfold(page);
+        } while (more && page <= 100);
+      }
+      return logs;
     },
   };
 };

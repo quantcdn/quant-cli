@@ -8,6 +8,7 @@ const config = {
   clientid: null,
   project: null,
   token: null,
+  bearer: null,
 };
 
 /**
@@ -126,6 +127,10 @@ const fromArgs = function(argv) {
 
   if (argv.endpoint) {
     config.endpoint = argv.endpoint;
+  }
+
+  if (argv.bearer) {
+    config.bearer = argv.bearer;
   }
 
   if (!validate()) {
