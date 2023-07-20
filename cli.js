@@ -26,6 +26,10 @@ require('yargs/yargs')(process.argv.slice(2))
       describe: 'API endpoint for QuantCDN',
       type: 'string',
     })
+    .option('bearer', {
+      describe: 'Scoped API berarer token',
+      type: 'string',
+    })
     .demandCommand()
     .wrap(100)
     .argv;

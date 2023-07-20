@@ -1,3 +1,7 @@
 node_modules
 build
 quant.json
+report
+quant*.json
+yarn.lock
+.DS_store
