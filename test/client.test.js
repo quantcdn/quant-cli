@@ -19,6 +19,7 @@ const headers = {
   'User-Agent': 'Quant (+http://api.quantcdn.io)',
   'Quant-Token': 'test',
   'Quant-Customer': 'dev',
+  'Quant-Organisation': 'dev',
   'Quant-Project': 'test',
   'Content-Type': 'application/json',
 };
@@ -151,6 +152,7 @@ describe('Quant Client', function() {
                 'User-Agent': 'Quant (+http://api.quantcdn.io)',
                 'Quant-Token': 'test',
                 'Quant-Customer': 'dev',
+                'Quant-Organisation': 'dev',
                 'Quant-Project': 'test',
                 'Content-Type': 'application/json',
                 'Quant-Skip-Purge': 'true'
@@ -193,6 +195,7 @@ describe('Quant Client', function() {
                 'User-Agent': 'Quant (+http://api.quantcdn.io)',
                 'Quant-Token': 'test',
                 'Quant-Customer': 'dev',
+                'Quant-Organisation': 'dev',
                 'Quant-Project': 'test',
                 'Content-Type': 'application/json',
               },
@@ -232,6 +235,7 @@ describe('Quant Client', function() {
                 'User-Agent': 'Quant (+http://api.quantcdn.io)',
                 'Quant-Token': 'test',
                 'Quant-Customer': 'dev',
+                'Quant-Organisation': 'dev',
                 'Quant-Project': 'test',
                 'Content-Type': 'application/json',
               },
@@ -271,6 +275,7 @@ describe('Quant Client', function() {
                 'User-Agent': 'Quant (+http://api.quantcdn.io)',
                 'Quant-Token': 'test',
                 'Quant-Customer': 'dev',
+                'Quant-Organisation': 'dev',
                 'Quant-Project': 'test',
                 'Content-Type': 'application/json'
               }
@@ -310,6 +315,7 @@ describe('Quant Client', function() {
                 'User-Agent': 'Quant (+http://api.quantcdn.io)',
                 'Quant-Token': 'test',
                 'Quant-Customer': 'dev',
+                'Quant-Organisation': 'dev',
                 'Quant-Project': 'test',
                 'Content-Type': 'application/json',
               },
@@ -350,6 +356,7 @@ describe('Quant Client', function() {
                 'User-Agent': 'Quant (+http://api.quantcdn.io)',
                 'Quant-Token': 'test',
                 'Quant-Customer': 'dev',
+                'Quant-Organisation': 'dev',
                 'Quant-Project': 'test',
                 'Content-Type': 'application/json'
               }
@@ -417,6 +424,7 @@ describe('Quant Client', function() {
                 'User-Agent': 'Quant (+http://api.quantcdn.io)',
                 'Quant-Token': 'test',
                 'Quant-Customer': 'dev',
+                'Quant-Organisation': 'dev',
                 'Quant-Project': 'test',
                 'Content-Type': 'application/json',
               },
@@ -477,6 +485,7 @@ describe('Quant Client', function() {
                 'User-Agent': 'Quant (+http://api.quantcdn.io)',
                 'Quant-Token': 'test',
                 'Quant-Customer': 'dev',
+                'Quant-Organisation': 'dev',
                 'Quant-Project': 'test',
                 'Content-Type': 'application/json',
               },
@@ -541,6 +550,7 @@ describe('Quant Client', function() {
                 'User-Agent': 'Quant (+http://api.quantcdn.io)',
                 'Quant-Token': 'test',
                 'Quant-Customer': 'dev',
+                'Quant-Organisation': 'dev',
                 'Quant-Project': 'test',
                 'Content-Type': 'multipart/form-data',
                 'Quant-File-Url': '/nala.jpg',
@@ -576,6 +586,7 @@ describe('Quant Client', function() {
                 'User-Agent': 'Quant (+http://api.quantcdn.io)',
                 'Quant-Token': 'test',
                 'Quant-Customer': 'dev',
+                'Quant-Organisation': 'dev',
                 'Quant-Project': 'test',
                 'Content-Type': 'multipart/form-data',
                 'Quant-File-Url': '/nala.jpg',
