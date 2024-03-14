@@ -21,7 +21,7 @@ jobs:
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v1
         with:
-          use: linux/amd64,linux/arm64,linux/arm/v
+          use: linux/amd64,linux/arm64,linux/arm/v7
       - name: Docker meta
         id: meta
         uses: docker/metadata-action@v3
