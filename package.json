@@ -1,6 +1,6 @@
 {
   "name": "@quantcdn/quant-cli",
-  "version": "2.1.0",
+  "version": "3.0.0",
   "description": "Deploy tools for QuantCDN",
   "main": "cli.js",
   "packageManager": "npm",
@@ -19,7 +19,9 @@
     "url": "git+https://github.com/quantcdn/node-cli.git"
   },
   "author": "Stuart Rowlands <stuart@quantcdn.io>",
-  "contributors": ["Steven Worley <steve@quantcdn.io>"],
+  "contributors": [
+    "Steven Worley <steve@quantcdn.io>"
+  ],
   "license": "ISC",
   "bugs": {
     "url": "https://github.com/quantcdn/node-cli/issues"
@@ -28,7 +30,10 @@
   "bin": {
     "quant": "cli.js"
   },
-  "files": ["cli.js", "/src"],
+  "files": [
+    "cli.js",
+    "/src"
+  ],
   "dependencies": {
     "@sinonjs/referee": "^11.0.1",
     "big-json": "^3.1.0",
