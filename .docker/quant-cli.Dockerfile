@@ -1,7 +1,8 @@
-FROM node:14-alpine3.10
+FROM node:20
 
 COPY . /quant-cli
 RUN npm i -g ./quant-cli
+RUN npm i --prefix /quant-cli
 
 ENV NODE_OPTIONS=--max-old-space-size=8192
 
