@@ -1,4 +1,4 @@
-FROM node:20
+FROM node:20-alpine
 
 COPY . /quant-cli
 RUN npm i -g ./quant-cli
