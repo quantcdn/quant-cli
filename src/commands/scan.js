@@ -70,7 +70,7 @@ command.handler = async function(argv) {
     }
 
     try {
-      revision = await quant.revisions(filepath);
+      revision = await quant.revision(filepath);
     } catch (err) {}
 
     if (!revision) {

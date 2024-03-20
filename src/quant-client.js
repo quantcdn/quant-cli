@@ -513,7 +513,7 @@ const client = function(config) {
      *
      * @throws Error.
      */
-    revisions: async function(url, revision = false) {
+    revision: async function(url, revision = false) {
       const path = revision ? revision : 'published';
 
       url = url.indexOf('/') == 0 ? url : `/${url}`;
@@ -522,6 +522,36 @@ const client = function(config) {
 
       const options = {
         url: `${config.get('endpoint')}/revisions/${path}`,
+        headers: {
+          ...headers,
+          'Quant-Url': url,
+        },
+        json: true,
+      };
+      const res = await get(options);
+      return handleResponse(res);
+    },
+
+    /**
+     * Get the revision history from Quant.
+     *
+     * @param {string} url
+     *   The URL path to get revisions for.
+     * @param {string|bool} revision
+     *   Retrieve a specific revision.
+     *
+     * @return {object}
+     *   The response.
+     *
+     * @throws Error.
+     */
+    revisions: async function(url) {
+      url = url.indexOf('/') == 0 ? url : `/${url}`;
+      url = url.toLowerCase();
+      url = url.replace(/\/?index\.html/, '');
+
+      const options = {
+        url: `${config.get('endpoint')}/revisions`,
         headers: {
           ...headers,
           'Quant-Url': url,
