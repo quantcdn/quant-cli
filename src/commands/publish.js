@@ -29,7 +29,7 @@ command.handler = function(argv) {
     return console.error(chalk.yellow('Quant is not configured, run init.'));
   }
 
-  const _client = client(config)
+  const _client = client(config);
 
   if (argv.revision == 'latest') {
     _client.revisions(argv.path)
@@ -40,7 +40,7 @@ command.handler = function(argv) {
               .then((res) => console.log(chalk.green('Success:') + ` Published successfully`)) // eslint-disable-line
               .catch((err) => console.log(chalk.red.bold('Error:') + ` ${err}`));
         })
-        .catch((err) => console.log(chalk.red.bold('Error:') + ` ${err}`))
+        .catch((err) => console.log(chalk.red.bold('Error:') + ` ${err}`));
   } else {
     _client.publish(argv.path, argv.revision)
         .then((res) => console.log(chalk.green('Success:') + ` Published successfully`)) // eslint-disable-line
