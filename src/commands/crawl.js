@@ -101,8 +101,8 @@ command.builder = {
   'user-agent': {
     describe: 'The user-agent to send with the request',
     type: 'string',
-    default: 'Quant (+http://api.quantcdn.io)'
-  }
+    default: 'Quant (+http://api.quantcdn.io)',
+  },
 };
 
 /**
@@ -157,8 +157,8 @@ command.handler = async function(argv) {
   crawl.respectRobotsTxt = argv.robots;
   crawl.acceptCookies = argv.cookies;
   crawl.customHeaders = {
-    'User-Agent': argv['user-agent']
-  }
+    'User-Agent': argv['user-agent'],
+  };
 
   const quant = client(config);
 
