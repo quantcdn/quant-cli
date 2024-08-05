@@ -36,6 +36,6 @@ const getFiles = async function(dir, exclusions = []) {
 };
 
 module.exports = function() {
-  return module.exports.getFiles.apply(this, arguments); // eslint-disable-line
+  return module.exports.getFiles.apply(this, arguments);  
 };
 module.exports.getFiles = getFiles;

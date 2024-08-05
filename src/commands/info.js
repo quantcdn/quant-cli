@@ -14,7 +14,7 @@ command.command = 'info';
 command.describe = 'Give info based on current configuration';
 command.builder = {};
 
-command.handler = function(argv) { // eslint-disable-line
+command.handler = function(argv) {  
   console.log(chalk.bold.green('*** Quant info ***'));
 
   if (!config.fromArgs(argv)) {
@@ -30,7 +30,7 @@ command.handler = function(argv) { // eslint-disable-line
 
   quant.ping()
       .then(async (data) => {
-        console.log(chalk.bold.green(`✅✅✅ Successfully connected to ${config.get('project')}`)); // eslint-disable-line max-len
+        console.log(chalk.bold.green(`✅✅✅ Successfully connected to ${config.get('project')}`));  
 
         quant.meta()
             .then((data) => {
@@ -58,7 +58,7 @@ command.handler = function(argv) { // eslint-disable-line
               console.error(chalk.red(err.message));
             });
       })
-      .catch((err) => console.log(chalk.bold.red(`Unable to connect to quant ${err.message}`))); // eslint-disable-line max-len
+      .catch((err) => console.log(chalk.bold.red(`Unable to connect to quant ${err.message}`)));  
 };
 
 module.exports = command;

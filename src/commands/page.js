@@ -38,7 +38,7 @@ command.handler = function(argv) {
   }
 
   client(config).markup(filepath, location)
-    .then((body) => console.log(chalk.green('Success: ') + ` Added [${filepath}]`)) // eslint-disable-line
+    .then((body) => console.log(chalk.green('Success: ') + ` Added [${filepath}]`))  
       .catch((err) => console.log(chalk.red.bold('Error:') + ` ${err}`));
 };
 

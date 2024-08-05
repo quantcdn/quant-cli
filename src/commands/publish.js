@@ -37,13 +37,13 @@ command.handler = function(argv) {
           const revisionIds = Object.keys(res.revisions);
           const latestRevision = Math.max(...revisionIds);
           _client.publish(argv.path, latestRevision)
-              .then((res) => console.log(chalk.green('Success:') + ` Published successfully`)) // eslint-disable-line
+              .then((res) => console.log(chalk.green('Success:') + ` Published successfully`))  
               .catch((err) => console.log(chalk.red.bold('Error:') + ` ${err}`));
         })
         .catch((err) => console.log(chalk.red.bold('Error:') + ` ${err}`));
   } else {
     _client.publish(argv.path, argv.revision)
-        .then((res) => console.log(chalk.green('Success:') + ` Published successfully`)) // eslint-disable-line
+        .then((res) => console.log(chalk.green('Success:') + ` Published successfully`))  
         .catch((err) => console.log(chalk.red.bold('Error:') + ` ${err}`));
   }
 };

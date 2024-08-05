@@ -24,7 +24,7 @@ command.handler = function(argv) {
 
   client(config)
       .unpublish(argv.path)
-      .then(response => console.log(chalk.green('Success:') + ` Unpublished successfully`)) // eslint-disable-line
+      .then(response => console.log(chalk.green('Success:') + ` Unpublished successfully`))  
       .catch((err) => console.log(chalk.red.bold('Error:') + ` ${err}`));
 };
 

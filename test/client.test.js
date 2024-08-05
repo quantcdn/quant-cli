@@ -766,7 +766,7 @@ describe('Quant Client', function() {
         statusCode: 200,
         body: {project: 'test'},
       };
-      requestPatch = sinon.stub(request, 'patch').yields(null, response, response.body); // eslint-disable-line max-len
+      requestPatch = sinon.stub(request, 'patch').yields(null, response, response.body);  
 
       await client(config).unpublish('/path/to/index.html');
       expect(
@@ -797,7 +797,7 @@ describe('Quant Client', function() {
           error: false,
         },
       };
-      requestPost = sinon.stub(request, 'post').yields(null, response, response.body); // eslint-disable-line max-len
+      requestPost = sinon.stub(request, 'post').yields(null, response, response.body);  
 
       await client(config).redirect('/a', '/b');
 
@@ -826,9 +826,9 @@ describe('Quant Client', function() {
           error: false,
         },
       };
-      requestPost = sinon.stub(request, 'post').yields(null, response, response.body); // eslint-disable-line max-len
+      requestPost = sinon.stub(request, 'post').yields(null, response, response.body);  
 
-      await client(config).redirect('/a', '/b', 'test', 301); // eslint-disable-line max-len
+      await client(config).redirect('/a', '/b', 'test', 301);  
 
       expect(
           requestPost.calledOnceWith({
