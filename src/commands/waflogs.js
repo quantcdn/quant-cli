@@ -38,7 +38,7 @@ command.builder = (yargs) => {
   });
 };
 
-command.handler = async function(argv) { // eslint-disable-line
+command.handler = async function(argv) {  
   console.log(chalk.bold.green('*** Quant WAF Logs***'));
 
   if (!config.fromArgs(argv)) {

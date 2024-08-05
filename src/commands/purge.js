@@ -24,7 +24,7 @@ command.handler = function(argv) {
 
   client(config)
       .purge(argv.path)
-      .then(response => console.log(chalk.green('Success:') + ` Purged ${argv.path}`)) // eslint-disable-line
+      .then(response => console.log(chalk.green('Success:') + ` Purged ${argv.path}`))  
       .catch((err) => console.log(chalk.red.bold('Error:') + ` ${err}`));
 };
 

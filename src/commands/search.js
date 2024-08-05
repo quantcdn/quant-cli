@@ -53,7 +53,7 @@ command.builder = (yargs) => {
         for (let i = 0; i < jsonFiles.length; i++) {
           client(config)
               .searchIndex(jsonFiles[i])
-              .then(response => console.log(chalk.green('Success:') + ` Successfully posted search records in ${jsonFiles[i]}`)) // eslint-disable-line
+              .then(response => console.log(chalk.green('Success:') + ` Successfully posted search records in ${jsonFiles[i]}`))  
               .catch((err) => console.log(chalk.red.bold('Error:') + ` ${err}`));
         }
       });
@@ -84,7 +84,7 @@ command.builder = (yargs) => {
 
       client(config)
           .searchRemove(argv.path)
-          .then(response => console.log(chalk.green('Success:') + ` Successfully removed search record for ${argv.path}`)) // eslint-disable-line
+          .then(response => console.log(chalk.green('Success:') + ` Successfully removed search record for ${argv.path}`))  
           .catch((err) => console.log(chalk.red.bold('Error:') + ` ${err}`));
     },
   });
@@ -104,7 +104,7 @@ command.builder = (yargs) => {
 
       client(config)
           .searchStatus()
-          .then(response => { // eslint-disable-line
+          .then(response => {  
             console.log(chalk.green('Success:') + ` Successfully retrieved search index status`);
             console.log(response);
           })
@@ -127,7 +127,7 @@ command.builder = (yargs) => {
 
       client(config)
           .searchClearIndex()
-          .then(response => console.log(chalk.green('Success:') + ` Successfully cleared search index`)) // eslint-disable-line
+          .then(response => console.log(chalk.green('Success:') + ` Successfully cleared search index`))  
           .catch((err) => console.log(chalk.red.bold('Error:') + ` ${err}`));
     },
   });

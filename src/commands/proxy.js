@@ -59,7 +59,7 @@ command.handler = function(argv) {
   console.log(chalk.bold.green('*** Quant proxy ***'));
 
   client(config).proxy(url, dest, status, user, pass)
-    .then((body) => console.log(chalk.green('Success: ') + ` Added proxy for ${url} to ${dest}`)) // eslint-disable-line
+    .then((body) => console.log(chalk.green('Success: ') + ` Added proxy for ${url} to ${dest}`))  
       .catch((err) => console.log(chalk.red.bold('Error:') + ` ${err}`));
 };
 

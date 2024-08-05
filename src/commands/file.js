@@ -39,9 +39,9 @@ command.handler = function(argv) {
   console.log(chalk.bold.green('*** Quant file ***'));
 
   client(config).file(filepath, location)
-      .then((body) => console.log(chalk.green('Success: ') + ` Added [${filepath}]`)) // eslint-disable-line
+      .then((body) => console.log(chalk.green('Success: ') + ` Added [${filepath}]`))  
       .catch((err) => {
-        msg = util.format(chalk.yellow('File [%s] exists at location (%s)'), filepath, location); // eslint-disable-line max-len
+        msg = util.format(chalk.yellow('File [%s] exists at location (%s)'), filepath, location);  
         console.log(msg);
       });
 };

@@ -84,15 +84,15 @@ command.handler = function(argv) {
       config.set(result);
       config.save();
       client(config).ping(config)
-          .then((message) => console.log(chalk.bold.green(`✅✅✅ Successfully connected to ${message.project}`))) // eslint-disable-line max-len
-          .catch((message) => console.log(chalk.bold.red(`Unable to connect to quant ${message.project}`))); // eslint-disable-line max-len
+          .then((message) => console.log(chalk.bold.green(`✅✅✅ Successfully connected to ${message.project}`)))  
+          .catch((message) => console.log(chalk.bold.red(`Unable to connect to quant ${message.project}`)));  
     });
   } else {
     config.set({clientid, project, token, endpoint, dir});
     config.save();
     client(config).ping(config)
-        .then((message) => console.log(chalk.bold.green(`✅✅✅ Successfully connected to ${message.project}`))) // eslint-disable-line max-len
-        .catch((message) => console.log(chalk.bold.red(`Unable to connect to quant ${message.project}`))); // eslint-disable-line max-len
+        .then((message) => console.log(chalk.bold.green(`✅✅✅ Successfully connected to ${message.project}`)))  
+        .catch((message) => console.log(chalk.bold.red(`Unable to connect to quant ${message.project}`)));  
   }
 };
 

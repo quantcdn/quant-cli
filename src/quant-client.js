@@ -11,7 +11,7 @@ const querystring = require('querystring');
 const quantURL = require('./helper/quant-url');
 
 const client = function(config) {
-  const req = util.promisify(request); // eslint-disable-line
+  const req = util.promisify(request);  
   const get = util.promisify(request.get);
   const post = util.promisify(request.post);
   const patch = util.promisify(request.patch);
@@ -40,11 +40,11 @@ const client = function(config) {
    *   The API response.
    */
   const handleResponse = function(response) {
-    const body = typeof response.body == 'string' ? JSON.parse(response.body) : response.body; // eslint-disable-line max-len
+    const body = typeof response.body == 'string' ? JSON.parse(response.body) : response.body;  
 
     if (typeof body.errors != 'undefined') {
       let msg = '';
-      for (i in body.errors) { // eslint-disable-line
+      for (i in body.errors) {  
         msg += body.errors[i].errorMsg + '\n';
       }
       throw new Error(msg);
@@ -61,7 +61,7 @@ const client = function(config) {
       throw new Error('Critical error...');
     }
 
-    if (body.error || (typeof body.errorMsg != 'undefined' && body.errorMsg.length > 0)) { // eslint-disable-line max-len
+    if (body.error || (typeof body.errorMsg != 'undefined' && body.errorMsg.length > 0)) {  
       const msg = typeof body.errorMsg != 'undefined' ? body.errorMsg : body.msg;
       throw new Error(msg);
     }
@@ -231,7 +231,7 @@ const client = function(config) {
      * @return {object}
      *   The API response.
      */
-    markup: async function(file, location, published = true, attachments = false, extraHeaders = {}, encoding = 'utf-8', skipPurge = false) { // eslint-disable-line max-len
+    markup: async function(file, location, published = true, attachments = false, extraHeaders = {}, encoding = 'utf-8', skipPurge = false) {  
       if (!Buffer.isBuffer(file)) {
         if (!location) {
           const p = path.resolve(process.cwd(), config.get('dir'));
@@ -452,7 +452,7 @@ const client = function(config) {
      *
      * @throws Error.
      */
-    proxy: async function(url, destination, published = true, username, password) { // eslint-disable-line max-len
+    proxy: async function(url, destination, published = true, username, password) {  
       const options = {
         url: `${config.get('endpoint')}/proxy`,
         headers: {
@@ -737,7 +737,7 @@ const client = function(config) {
 };
 
 module.exports = function() {
-  return module.exports.client.apply(this, arguments); // eslint-disable-line
+  return module.exports.client.apply(this, arguments);  
 };
 
 module.exports.client = client;

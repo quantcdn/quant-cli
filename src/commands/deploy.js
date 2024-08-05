@@ -206,7 +206,7 @@ command.handler = async function(argv) {
     console.log(chalk.bold.green('✅') + ` ${item.url} unpublished.`);
   });
 
-  /* eslint-enable guard-for-in */
+   
 };
 
 module.exports = command;

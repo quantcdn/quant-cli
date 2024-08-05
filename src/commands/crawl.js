@@ -188,7 +188,7 @@ command.handler = async function(argv) {
 
     // Prepare the detectors - attempt to locate additional requests to add
     // to the queue based on patterns in the DOMString.
-    // eslint-disable-next-line no-unused-vars
+     
     for (const [n, detector] of Object.entries(detectors)) {
       if (detector.applies(response)) {
         await detector.handler(responseBuffer, queueItem.host, queueItem.protocol).map((i) => extraItems.push(i));
@@ -204,7 +204,7 @@ command.handler = async function(argv) {
     if (response.headers['content-type'] && response.headers['content-type'].includes('text/html')) {
       let content = buffer.toString();
 
-      // eslint-disable-next-line no-unused-vars
+       
       for (const [name, filter] of Object.entries(filters)) {
         if (!argv.hasOwnProperty(filter.option)) {
           // Filters must have an option to toggle them - if the option is
@@ -324,7 +324,7 @@ command.handler = async function(argv) {
 
       // Defrost is async and supports non-existent files.
       crawl.queue.defrost(`${os.homedir()}/.quant/${filename}`, (err) => {
-        console.log(chalk.bold.green('✅ DONE: Loaded resume state from ' + `${os.homedir()}/.quant/${filename}`)); // eslint-disable-line max-len
+        console.log(chalk.bold.green('✅ DONE: Loaded resume state from ' + `${os.homedir()}/.quant/${filename}`));  
       });
     }
   } else {
