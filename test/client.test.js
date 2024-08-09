@@ -468,7 +468,7 @@ describe('Quant Client', function () {
       it('should accept custom headers', async function () {
         const response = {
           statusCode: 200,
-          body: {
+          data: {
             quant_revision: 1,
             md5: 'da697d6f9a318fe26d2dd75a6b123df0',
             quant_filename: 'index.html',
@@ -582,7 +582,7 @@ describe('Quant Client', function () {
       it('should accept empty object', async function () {
         const response = {
           status: 200,
-          body: {
+          data: {
             quant_revision: 1,
             md5: 'da697d6f9a318fe26d2dd75a6b123df0',
             quant_filename: 'nala.jpg',
@@ -797,7 +797,7 @@ describe('Quant Client', function () {
     it('should remove index.html', async function () {
       const response = {
         status: 200,
-        body: { project: 'test' },
+        data: { project: 'test' },
         headers: {},
         config: {},
         request: {},
