@@ -45,7 +45,7 @@ const client = function (config) {
         ? JSON.parse(response.data)
         : response.data;
 
-    if (typeof body?.errors != "undefined") {
+    if (typeof body.errors != "undefined") {
       let msg = "";
       for (i in body.errors) {
         msg += body.errors[i].errorMsg + "\n";
@@ -64,8 +64,8 @@ const client = function (config) {
       throw new Error("Critical error...");
     }
 
-    if (body?.error || (typeof body?.errorMsg != "undefined" && body.errorMsg.length > 0)) {
-      const msg = typeof body?.errorMsg != "undefined" ? body?.errorMsg : body?.msg;
+    if (body.error || (typeof body.errorMsg != "undefined" && body.errorMsg.length > 0)) {
+      const msg = typeof body.errorMsg != "undefined" ? body.errorMsg : body.msg;
       throw new Error(msg);
     }
 
