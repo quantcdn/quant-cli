@@ -9,7 +9,7 @@ const config = require('../config');
 const client = require('../quant-client');
 const crawler = require('simplecrawler');
 const {write} = require('../helper/resumeState');
-const request = require('request');
+const axios = require('axios')
 const util = require('util');
 const fs = require('fs');
 const tmp = require('tmp');
@@ -27,7 +27,6 @@ let writingState = false;
 let filename;
 
 const failures = [];
-const get = util.promisify(request.get);
 
 const command = {};
 
@@ -188,7 +187,7 @@ command.handler = async function(argv) {
 
     // Prepare the detectors - attempt to locate additional requests to add
     // to the queue based on patterns in the DOMString.
-     
+
     for (const [n, detector] of Object.entries(detectors)) {
       if (detector.applies(response)) {
         await detector.handler(responseBuffer, queueItem.host, queueItem.protocol).map((i) => extraItems.push(i));
@@ -204,7 +203,7 @@ command.handler = async function(argv) {
     if (response.headers['content-type'] && response.headers['content-type'].includes('text/html')) {
       let content = buffer.toString();
 
-       
+
       for (const [name, filter] of Object.entries(filters)) {
         if (!argv.hasOwnProperty(filter.option)) {
           // Filters must have an option to toggle them - if the option is
@@ -226,15 +225,14 @@ command.handler = async function(argv) {
       // not all files.
       const tmpfile = tmp.fileSync();
       const file = fs.createWriteStream(tmpfile.name);
-      const opts = {url: queueItem.url, encoding: null};
-      const response = await get(opts);
+      const response = await axios.get(queueItem.url, { responseBuffer: 'arrayBuffer' });
 
-      if (!response.body || response.body.byteLength < 50) {
+      if (!response.data || response.data.byteLength < 50) {
         queueItem.status = 'failed';
         file.close();
       }
 
-      const asset = Buffer.from(response.body, 'utf8');
+      const asset = Buffer.from(response.data, 'utf8');
       const extraHeaders = {};
 
       fs.writeFileSync(tmpfile.name, asset);
@@ -324,7 +322,7 @@ command.handler = async function(argv) {
 
       // Defrost is async and supports non-existent files.
       crawl.queue.defrost(`${os.homedir()}/.quant/${filename}`, (err) => {
-        console.log(chalk.bold.green('✅ DONE: Loaded resume state from ' + `${os.homedir()}/.quant/${filename}`));  
+        console.log(chalk.bold.green('✅ DONE: Loaded resume state from ' + `${os.homedir()}/.quant/${filename}`));
       });
     }
   } else {
