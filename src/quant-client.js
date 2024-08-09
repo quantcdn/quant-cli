@@ -2,7 +2,7 @@
  * A quant client.
  */
 
-const request = require('request');
+const axios = require('axios')
 const util = require('util');
 const fs = require('fs');
 const path = require('path');
@@ -11,11 +11,11 @@ const querystring = require('querystring');
 const quantURL = require('./helper/quant-url');
 
 const client = function(config) {
-  const req = util.promisify(request);  
-  const get = util.promisify(request.get);
-  const post = util.promisify(request.post);
-  const patch = util.promisify(request.patch);
-  const del = util.promisify(request.delete);
+  const req = axios;
+  const get = axios.get;
+  const post = axios.post;
+  const patch = axios.patch;
+  const del = axios.delete;
 
   const headers = {
     'User-Agent': 'Quant (+http://api.quantcdn.io)',
@@ -40,11 +40,11 @@ const client = function(config) {
    *   The API response.
    */
   const handleResponse = function(response) {
-    const body = typeof response.body == 'string' ? JSON.parse(response.body) : response.body;  
+    const body = typeof response.data == 'string' ? JSON.parse(response.data) : response.data;
 
     if (typeof body.errors != 'undefined') {
       let msg = '';
-      for (i in body.errors) {  
+      for (i in body.errors) {
         msg += body.errors[i].errorMsg + '\n';
       }
       throw new Error(msg);
@@ -61,7 +61,7 @@ const client = function(config) {
       throw new Error('Critical error...');
     }
 
-    if (body.error || (typeof body.errorMsg != 'undefined' && body.errorMsg.length > 0)) {  
+    if (body.error || (typeof body.errorMsg != 'undefined' && body.errorMsg.length > 0)) {
       const msg = typeof body.errorMsg != 'undefined' ? body.errorMsg : body.msg;
       throw new Error(msg);
     }
@@ -80,13 +80,8 @@ const client = function(config) {
      * @throws Error.
      */
     ping: async function() {
-      const options = {
-        url: `${config.get('endpoint')}/ping`,
-        json: true,
-        headers,
-      };
-
-      const res = await get(options);
+      const url = `${config.get('endpoint')}/ping`;
+      const res = await get(url, { headers });
       return handleResponse(res);
     },
 
@@ -119,48 +114,37 @@ const client = function(config) {
       }, extend);
       const url = `${config.get('endpoint')}/global-meta?${querystring.stringify(query)}`;
       const doUnfold = async function(i) {
-        const res = await get({
-          url: `${url}&page=${i}`,
-          json: true,
-          headers,
-        });
-
-        if (res.body.global_meta && res.body.global_meta.records) {
-          res.body.global_meta.records.map((item) => records.push({url: item.meta.url, md5: item.meta.md5, type: item.meta.type}));
+        const res = await get(`${url}&page=${i}`, { headers });
+        if (res.data.global_meta && res.data.global_meta.records) {
+          res.data.global_meta.records.map((item) => records.push({url: item.meta.url, md5: item.meta.md5, type: item.meta.type}));
         }
       };
 
       let page = 1;
-      const options = {
-        url: `${url}&page=${page}`,
-        json: true,
-        headers,
-      };
-
       // Seed the record set.
-      const res = await get(options);
+      const res = await get(`${url}&page=${page}`, { headers });
 
-      if (!res.body.global_meta) {
+      if (!res.data.global_meta) {
         // If no records have been published then global_meta is not
         // present in the response.
         return;
       }
 
-      if (res.body.global_meta.records) {
-        res.body.global_meta.records.map((item) => records.push({url: item.meta.url, md5: item.meta.md5, type: item.meta.type}));
+      if (res.data.global_meta.records) {
+        res.data.global_meta.records.map((item) => records.push({url: item.meta.url, md5: item.meta.md5, type: item.meta.type}));
       }
 
       if (unfold) {
         page++;
-        while (res.body.global_meta.total_pages >= page) {
+        while (res.data.global_meta.total_pages >= page) {
           await doUnfold(page);
           page++;
         }
       }
 
       return {
-        total_pages: res.body.global_meta.total_pages,
-        total_records: res.body.global_meta.total_records,
+        total_pages: res.data.global_meta.total_pages,
+        total_records: res.data.global_meta.total_records,
         records,
       };
     },
@@ -231,7 +215,7 @@ const client = function(config) {
      * @return {object}
      *   The API response.
      */
-    markup: async function(file, location, published = true, attachments = false, extraHeaders = {}, encoding = 'utf-8', skipPurge = false) {  
+    markup: async function(file, location, published = true, attachments = false, extraHeaders = {}, encoding = 'utf-8', skipPurge = false) {
       if (!Buffer.isBuffer(file)) {
         if (!location) {
           const p = path.resolve(process.cwd(), config.get('dir'));
@@ -266,7 +250,7 @@ const client = function(config) {
         options.body.headers = extraHeaders;
       }
 
-      const res = await post(options);
+      const res = await post(options.url, options.body, options.headers);
       return handleResponse(res);
     },
 
@@ -328,7 +312,7 @@ const client = function(config) {
         options.headers['Quant-File-Headers'] = JSON.stringify(extraHeaders);
       }
 
-      const res = await post(options);
+      const res = await post(options.url, options.formData, options.headers);
       return handleResponse(res);
     },
 
@@ -360,7 +344,7 @@ const client = function(config) {
         },
         json: true,
       };
-      const res = await patch(options);
+      const res = await patch(options.url, {}, options.headers);
       return handleResponse(res);
     },
 
@@ -386,7 +370,7 @@ const client = function(config) {
         json: true,
       };
 
-      const res = await patch(options);
+      const res = await patch(options.url, {}, options.headers);
       return handleResponse(res);
     },
 
@@ -429,7 +413,7 @@ const client = function(config) {
         options.body.info = {author_user: author};
       }
 
-      const res = await post(options);
+      const res = await post(options.url, options.body, options.headers);
       return handleResponse(res);
     },
 
@@ -452,7 +436,7 @@ const client = function(config) {
      *
      * @throws Error.
      */
-    proxy: async function(url, destination, published = true, username, password) {  
+    proxy: async function(url, destination, published = true, username, password) {
       const options = {
         url: `${config.get('endpoint')}/proxy`,
         headers: {
@@ -471,7 +455,7 @@ const client = function(config) {
         options.body.basic_auth_pass = password;
       }
 
-      const res = await post(options);
+      const res = await post(options.url, options.body, options.headers);
       return handleResponse(res);
     },
 
@@ -496,7 +480,7 @@ const client = function(config) {
         },
       };
 
-      const res = await del(options);
+      const res = await del(options.url, options.headers);
       return handleResponse(res);
     },
 
@@ -526,9 +510,8 @@ const client = function(config) {
           ...headers,
           'Quant-Url': url,
         },
-        json: true,
       };
-      const res = await get(options);
+      const res = await get(options.url, options.headers);
       return handleResponse(res);
     },
 
@@ -556,9 +539,8 @@ const client = function(config) {
           ...headers,
           'Quant-Url': url,
         },
-        json: true,
       };
-      const res = await get(options);
+      const res = await get(options.url, options.headers);
       return handleResponse(res);
     },
 
@@ -577,7 +559,7 @@ const client = function(config) {
           'Quant-Url': urlPattern,
         },
       };
-      const res = await post(options);
+      const res = await post(options.url, {}, options.headers);
       return handleResponse(res);
     },
 
@@ -604,10 +586,9 @@ const client = function(config) {
         headers: {
           ...headers,
         },
-        json: true,
         body: data,
       };
-      const res = await post(options);
+      const res = await post(options.url, options.body, options.headers);
 
       return handleResponse(res);
     },
@@ -626,9 +607,8 @@ const client = function(config) {
           ...headers,
           'Quant-Url': url,
         },
-        json: true,
       };
-      const res = await del(options);
+      const res = await del(options.url, options.headers);
 
       return handleResponse(res);
     },
@@ -647,7 +627,7 @@ const client = function(config) {
         },
         json: true,
       };
-      const res = await del(options);
+      const res = await del(options.url, options.headers);
 
       return handleResponse(res);
     },
@@ -665,7 +645,7 @@ const client = function(config) {
         },
         json: true,
       };
-      const res = await get(options);
+      const res = await get(options.url, options.headers);
 
       return handleResponse(res);
     },
@@ -691,40 +671,35 @@ const client = function(config) {
         let res;
         query.page = i;
         try {
-          res = await get({
-            url: `${url}?${querystring.stringify(query)}`,
-            headers,
-            json: true,
-          });
+          res = await get(`${url}?${querystring.stringify(query)}`, { headers });
         } catch (err) {
           console.log(err);
           return false;
         }
-        if (res.body.data) {
-          logs.push(...res.body.data);
+        if (res.data.data) {
+          logs.push(...res.data.data);
         }
-        return res.body.next != '';
+        return res.data.next != '';
       };
 
       const options = {
         url: `${url}?${querystring.stringify(query)}`,
         headers,
-        json: true,
       };
 
-      const res = await get(options);
+      const res = await get(options,url, options.headers);
 
       if (res.statusCode == 403) {
         return -1;
       }
 
-      if (typeof res.body == 'undefined' || typeof res.body.data == 'undefined') {
+      if (typeof res.data == 'undefined' || typeof res.data.data == 'undefined') {
         return logs;
       }
 
-      logs.push(...res.body.data);
+      logs.push(...res.data.data);
       let page = 1;
-      if (unfold && res.body.next != '') {
+      if (unfold && res.data.next != '') {
         let more;
         do {
           page++;
@@ -737,7 +712,7 @@ const client = function(config) {
 };
 
 module.exports = function() {
-  return module.exports.client.apply(this, arguments);  
+  return module.exports.client.apply(this, arguments);
 };
 
 module.exports.client = client;
