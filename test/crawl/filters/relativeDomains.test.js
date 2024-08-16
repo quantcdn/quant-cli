@@ -3,15 +3,17 @@
  */
 const {relativeDomains} = require('../../../src/crawl/filters');
 
-const chai = require('chai');
-const sinon = require('sinon');
-
 describe('crawl:filters:relativeDomains', function() {
+  let chai, sinon;
 
   const opts = {host: 'localhost', port: 3000};
 
   // Disable console log for neater test output.
-  before(() => sinon.stub(console, 'log'));
+  before(async () => {
+    chai = await import('chai');
+    sinon = await import('sinon');
+    sinon.stub(console, 'log');
+  });
   after(() => sinon.restore());
 
   it('should define an option', () => {

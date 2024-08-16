@@ -3,15 +3,22 @@
  */
 
 const config = require('../src/config.js');
-const chai = require('chai');
-
-const assert = chai.assert;
-const expect = chai.expect;
-
-const sinon = require('sinon');
 const fs = require('fs');
 
 describe('Config', function() {
+  let chai, sinon, assert, expect
+
+  beforeEach(async() => {
+    chai = await import('chai')
+    sinon = (await import('sinon')).default
+    assert = chai.assert
+    expect = chai.expect
+  })
+
+  afterEach(async () => {
+    sinon.restore();
+  })
+
   describe('defaults', function() {
     it('should have a default endpoint', function() {
       assert.equal(config.get('endpoint'), 'https://api.quantcdn.io/v1');
@@ -35,6 +42,7 @@ describe('Config', function() {
   describe('save()', function() {
     let writeFileSync;
     beforeEach(function() {
+      sinon.restore();
       writeFileSync = sinon.stub(fs, 'writeFileSync').returns({});
       config.set({
         dir: 'build',
@@ -55,7 +63,7 @@ describe('Config', function() {
         clientid: null,
         project: null,
         token: null,
-        bearer: null,
+        bearer: "",
       }, null, 2);
       expect(writeFileSync.calledOnceWith('./quant.json', data)).to.be.true;
     });
@@ -69,7 +77,7 @@ describe('Config', function() {
         clientid: 'test',
         project: null,
         token: null,
-        bearer: null,
+        bearer: "",
       }, null, 2);
       expect(writeFileSync.calledOnceWith('./quant.json', data)).to.be.true;
     });
@@ -81,7 +89,7 @@ describe('Config', function() {
         clientid: null,
         project: null,
         token: null,
-        bearer: null,
+        bearer: "",
       }, null, 2);
       expect(writeFileSync.calledOnceWith('/tmp/quant.json', data)).to.be.true;
     });

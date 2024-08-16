@@ -2,13 +2,8 @@
  * Test the deploy command.
  */
 
-const deploy = require('../../src/commands/deploy').handler;
-
-// Testers.
-const chai = require('chai');
-const sinon = require('sinon');
-const expect = chai.expect;
 const path = require('path');
+const deploy = require('../../src/commands/deploy').handler;
 
 // Stubs
 const getFiles = require('../../src/helper/getFiles');
@@ -25,8 +20,15 @@ describe('Deploy', function() {
   let ping;
   let send;
 
+  let chai, sinon, expect;
+
   // Disable console log for neater test output.
-  before(() => sinon.stub(console, 'log'));
+  before(async () => {
+    chai = await import('chai');
+    sinon = await import('sinon');
+    expect = chai.expect;
+    sinon.stub(console, 'log')
+  });
   after(() => sinon.restore());
 
   beforeEach(function() {

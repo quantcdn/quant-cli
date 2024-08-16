@@ -1,17 +1,20 @@
 /**
  * Test the get files helper.
  */
-
-const chaiAsPromied = require('chai-as-promised');
-const chai = require('chai');
-
 const getFiles = require('../../src/helper/getFiles');
 
-chai.use(chaiAsPromied);
-const assert = chai.assert;
-const expect = chai.expect;
-
 describe('helpers::getFiles', function() {
+  let chai, cap, assert, expect;
+
+  beforeEach(async () => {
+    chai = await import('chai');
+    cap = (await import('chai-as-promised')).default;
+
+    chai.use(cap);
+    assert = chai.assert;
+    expect = chai.expect;
+  });
+
   it('should return a promise', function() {
     return getFiles('test/fixtures')
         .then((files) => {
