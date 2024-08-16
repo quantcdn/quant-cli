@@ -3,22 +3,24 @@
  */
 const {redirectHandler} = require('../../src/crawl/callbacks');
 
-const chai = require('chai');
-const sinon = require('sinon');
-const sinonChai = require('sinon-chai');
-
-chai.should();
-chai.use(sinonChai);
-
 // Stubs
 const client = require('../../src/quant-client');
 
 describe('crawl::redirectHandler', function() {
-
   let quant;
+  let chai, sinon, sinonChai;
 
   // Disable console log for neater test output.
-  before(() => sinon.stub(console, 'log'));
+  before(async () => {
+    chai = await import('chai')
+    sinon = await import('sinon')
+    sinonChai = (await import('sinon-chai')).default;
+
+    chai.should()
+    chai.use(sinonChai)
+
+    sinon.stub(console, 'log');
+  });
   after(() => sinon.restore());
 
   beforeEach(() => {

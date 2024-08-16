@@ -2,22 +2,24 @@
  * Test the image detection.
  */
 
-const chaiAsPromied = require("chai-as-promised");
-const chai = require("chai");
-
 const detector = require('../../../src/crawl/detectors/images');
 const getFiles = require("../../../src/helper/getFiles");
 
 const fs = require('fs');
 
-chai.use(chaiAsPromied);
-const assert = chai.assert;
-const expect = chai.expect;
-
 const cssString = fs.readFileSync('test/fixtures/test.css').toString();
 const htmlString = fs.readFileSync("test/fixtures/index.html").toString();
 
 describe('crawl:detectors:images', function() {
+  let chai, cap, expect, assert;
+
+  beforeEach(async () => {
+    chai = await import('chai');
+    cap = (await import('chai-as-promised')).default;
+    chai.use(cap);
+    assert = chai.assert;
+    expect = chai.expect;
+  })
 
   describe('applies', () => {
     it('should apply to HTML', () => {

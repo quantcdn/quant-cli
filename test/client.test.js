@@ -5,12 +5,6 @@
 const client = require('../src/quant-client');
 const config = require('../src/config');
 
-// Testers.
-const chai = require('chai');
-const sinon = require('sinon');
-const assert = chai.assert;
-const expect = chai.expect;
-
 // Stubbable.
 const axios = require('axios');
 const fs = require('fs');
@@ -30,7 +24,14 @@ describe('Quant Client', function () {
   let requestPost;
   let requestPatch;
 
-  beforeEach(function () {
+  let chai, sinon, assert, expect;
+
+  beforeEach(async () => {
+    chai = await import('chai');
+    sinon = await import('sinon');
+    assert = chai.assert;
+    expect = chai.expect;
+
     cget = sinon.stub(config, 'get');
     cget.withArgs('endpoint').returns('http://localhost:8081');
     cget.withArgs('clientid').returns('dev');
@@ -40,6 +41,7 @@ describe('Quant Client', function () {
 
   afterEach(function () {
     cget.restore();
+    sinon.restore();
   });
 
   describe('GET /ping', function () {

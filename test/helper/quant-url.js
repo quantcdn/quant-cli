@@ -1,17 +1,18 @@
 /**
  * Test the URL helpers.
  */
-
-const chaiAsPromised = require('chai-as-promised');
-const chai = require('chai');
-
 const url = require('../../src/helper/quant-url');
 
-chai.use(chaiAsPromised);
-
-const expect = chai.expect;
-
 describe('helpers::url', () => {
+  let chai, cap, expect;
+
+  beforeEach(async () => {
+    chai = await import('chai');
+    cap = (await import('chai-as-promised')).default;
+    chai.use(cap);
+    expect = chai.expect;
+  });
+
   describe('prepare', () => {
     it('should remove index.html', () => {
       expect(url.prepare('/test/index.html')).to.eql('/test');

@@ -2,19 +2,21 @@
  * Test the image detection.
  */
 
-const chaiAsPromied = require("chai-as-promised");
-const chai = require("chai");
-
 const detector = require("../../../src/crawl/detectors/responsiveImg");
 const fs = require('fs');
-
-chai.use(chaiAsPromied);
-const assert = chai.assert;
-const expect = chai.expect;
 
 const htmlString = fs.readFileSync("test/fixtures/responsive-images.html").toString();
 
 describe('crawl:detectors:responsiveImg', function() {
+  let chai, cap, expect;
+
+  beforeEach(async () => {
+    chai = await import('chai');
+    cap = (await import('chai-as-promised')).default;
+    chai.use(cap);
+    expect = chai.expect;
+  })
+
   describe('applies', () => {
     it('should apply to HTML', () => {
       const res = {};
