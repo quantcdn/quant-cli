@@ -5,67 +5,116 @@
  *   quant waf-logs
  */
 
-const chalk = require('chalk');
-const client = require('../quant-client');
+const { text, confirm, isCancel, select } = require('@clack/prompts');
+const color = require('picocolors');
 const config = require('../config');
+const client = require('../quant-client');
 const papa = require('papaparse');
 const fs = require('fs');
 
-const command = {};
+const command = {
+  command: 'waf-logs',
+  describe: 'Access project WAF logs',
+  
+  builder: (yargs) => {
+    return yargs
+      .option('fields', {
+        alias: 'f',
+        describe: 'CSV of field names to show for the logs',
+        type: 'string'
+      })
+      .option('output', {
+        alias: 'o',
+        describe: 'Location to write CSV output',
+        type: 'string'
+      })
+      .option('all', {
+        describe: 'Fetch all logs from the server',
+        type: 'boolean',
+        default: false
+      })
+      .option('size', {
+        describe: 'Number of logs to return per request',
+        type: 'number',
+        default: 10
+      });
+  },
 
-command.command = 'waf:logs';
-command.describe = 'Access a projects WAF logs';
-command.builder = (yargs) => {
-  yargs.option('fields', {
-    alias: 'f',
-    describe: 'CSV of field names to show for the logs',
-    type: 'string',
-  });
-  yargs.option('output', {
-    alias: 'o',
-    describe: 'Location to write CSV output',
-    type: 'string',
-  });
-  yargs.option('all', {
-    describe: 'Fetch all logs from the server',
-    type: 'boolean',
-    default: false,
-  });
-  yargs.option('size', {
-    describe: 'Number of logs to return per request',
-    type: 'integer',
-    default: 10,
-  });
-};
+  async promptArgs() {
+    const fetchAll = await confirm({
+      message: 'Fetch all logs from the server?',
+      initialValue: false
+    });
 
-command.handler = async function(argv) {  
-  console.log(chalk.bold.green('*** Quant WAF Logs***'));
+    if (isCancel(fetchAll)) return null;
 
-  if (!config.fromArgs(argv)) {
-    return console.error(chalk.yellow('Quant is not configured, run init.'));
-  }
+    const size = await text({
+      message: 'Number of logs to return per request',
+      defaultValue: '10',
+      validate: value => {
+        const num = parseInt(value);
+        if (isNaN(num) || num < 1) {
+          return 'Please enter a valid number';
+        }
+      }
+    });
 
-  const quant = client(config);
-  let fields = argv.fields;
+    if (isCancel(size)) return null;
 
-  if (fields) {
-    fields = fields.split(',');
-  }
+    const fields = await text({
+      message: 'Enter comma-separated field names to show (optional)',
+    });
 
-  console.log(chalk.gray('Fetching log data...'));
+    if (isCancel(fields)) return null;
 
-  logs = await quant.wafLogs(argv.all, {per_page: argv.size});
+    const outputFile = await text({
+      message: 'Location to write CSV output (optional)',
+    });
 
-  if (logs === -1) {
-    console.log(chalk.red('Invalid credentials provided, please check your token has access.'));
-    return;
-  }
+    if (isCancel(outputFile)) return null;
 
-  console.table(logs, fields);
+    return {
+      all: fetchAll,
+      size: parseInt(size),
+      fields: fields ? fields.split(',') : undefined,
+      output: outputFile || undefined
+    };
+  },
 
-  if (argv.output) {
-    fs.writeFileSync(argv.output, papa.unparse(logs));
-    console.log(`Saved output to ${argv.output}`);
+  async handler(args) {
+    if (!args) {
+      throw new Error('Operation cancelled');
+    }
+
+    // Check for optional arguments and prompt if not provided
+    if (!args.fields && !args.output && !args.all && !args.size) {
+      const promptedArgs = await this.promptArgs();
+      if (!promptedArgs) {
+        throw new Error('Operation cancelled');
+      }
+      args = { ...args, ...promptedArgs };
+    }
+
+    if (!await config.fromArgs(args)) {
+      process.exit(1);
+    }
+
+    const quant = client(config);
+    const logs = await quant.wafLogs(args.all, { per_page: args.size });
+
+    if (logs === -1) {
+      throw new Error('Invalid credentials provided, please check your token has access');
+    }
+
+    if (args.output) {
+      fs.writeFileSync(args.output, papa.unparse(logs));
+    }
+
+    return {
+      logs,
+      fields: args.fields,
+      savedTo: args.output
+    };
   }
 };
 

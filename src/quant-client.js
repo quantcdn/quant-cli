@@ -471,56 +471,6 @@ const client = function (config) {
     },
 
     /**
-     * Create a proxy with the Quant API.
-     *
-     * @param {string} url
-     *   The relative URL to proxy.
-     * @param {string} destination
-     *   The absolute FQDN/path to proxy to.
-     * @param {bool} published
-     *   If the proxy is published
-     * @param {string} username
-     *   Basic auth user.
-     * @param {string} password
-     *   Basic auth password.
-     *
-     * @return {object}
-     *   The response.
-     *
-     * @throws Error.
-     */
-    proxy: async function (
-      url,
-      destination,
-      published = true,
-      username,
-      password,
-    ) {
-      const options = {
-        url: `${config.get("endpoint")}/proxy`,
-        headers: {
-          ...headers,
-        },
-        json: true,
-        body: {
-          url,
-          destination,
-          published,
-        },
-      };
-
-      if (username) {
-        options.body.basic_auth_user = username;
-        options.body.basic_auth_pass = password;
-      }
-
-      const res = await post(options.url, options.body, {
-        headers: options.headers,
-      });
-      return handleResponse(res);
-    },
-
-    /**
      * Delete a path from Quant.
      *
      * @param {string} path

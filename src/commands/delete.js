@@ -2,72 +2,73 @@
  * Delete content from the Quant API.
  *
  * @usage
- *   quant delete <url>
+ *   quant delete <path>
  */
 
-const chalk = require('chalk');
+const { text, confirm, isCancel } = require('@clack/prompts');
+const color = require('picocolors');
 const config = require('../config');
 const client = require('../quant-client');
-const yargs = require('yargs');
-const prompt = require('prompt');
 
-const command = {};
+const command = {
+  command: 'delete <path>',
+  describe: 'Delete a deployed path from Quant',
+  
+  builder: (yargs) => {
+    return yargs
+      .positional('path', {
+        describe: 'Deployed asset path to remove',
+        type: 'string'
+      })
+      .option('force', {
+        alias: 'f',
+        type: 'boolean',
+        description: 'Delete the asset without confirmation'
+      });
+  },
 
-command.command = 'delete <path> [force]';
-command.describe = 'Delete a deployed path from Quant';
-command.builder = (yargs) => {
-  yargs.positional('path', {
-    describe: 'Deployed asset path to remove',
-    type: 'string',
-  });
-  yargs.option('force', {
-    alias: 'f',
-    type: 'boolean',
-    description: 'Delete the asset without interaction.',
-  });
-};
+  async promptArgs() {
+    const path = await text({
+      message: 'Enter the deployed asset path to remove',
+      validate: value => !value ? 'Path is required' : undefined
+    });
 
-command.handler = async (argv) => {
-  const path = argv.path;
+    if (isCancel(path)) return null;
 
-  console.log(chalk.bold.green('*** Quant delete ***'));
+    const shouldDelete = await confirm({
+      message: 'This will delete all revisions of this asset from QuantCDN. Are you sure?',
+      initialValue: false
+    });
 
-  if (!config.fromArgs(argv)) {
-    console.log(chalk.yellow('Quant is not configured, run init.'));
-    yargs.exit(1);
-  }
+    if (isCancel(shouldDelete) || !shouldDelete) return null;
 
-  if (!argv.force) {
-    prompt.start();
-    const schema = {
-      properties: {
-        force: {
-          required: true,
-          description: 'This will delete all revisions of an asset from QuantCDN',
-          pattern: /(y|yes|n|no)/,
-          default: 'no',
-          message: 'Only yes or no is allowed.',
-        },
-      },
-    };
+    return { path };
+  },
 
-    const {force} = await prompt.get(schema);
-    if (!force) {
-      console.log(chalk.yellow('[skip]:') + ` delete skipped for (${path})`);
-      yargs.exit(0);
+  async handler(args) {
+    if (!args) {
+      throw new Error('Operation cancelled');
+    }
+
+    if (!await config.fromArgs(args)) {
+      process.exit(1);
+    }
+
+    // If not in force mode and not coming from interactive prompt, confirm
+    if (!args.force && !args._interactiveMode) {
+      console.log(color.yellow('This will delete all revisions of this asset from QuantCDN'));
+      console.log(color.yellow('Use --force to skip this warning'));
+      process.exit(0);
+    }
+
+    const quant = client(config);
+    try {
+      await quant.delete(args.path);
+      return `Successfully removed [${args.path}]`;
+    } catch (err) {
+      throw new Error(`Cannot delete path (${args.path}): ${err.message}`);
     }
   }
-
-  const quant = client(config);
-
-  try {
-    await quant.delete(path);
-  } catch (err) {
-    console.log(chalk.red('[error]:') + ` Cannot delete path (${path})\n` + err.message);
-    yargs.exit(1);
-  }
-
-  console.log(chalk.green(`Successfully removed [${path}]`));
 };
 
 module.exports = command;

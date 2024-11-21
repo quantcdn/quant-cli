@@ -4,61 +4,64 @@
  * @usage
  *    quant info
  */
-const chalk = require('chalk');
-const client = require('../quant-client');
+const { isCancel } = require('@clack/prompts');
+const color = require('picocolors');
 const config = require('../config');
+const client = require('../quant-client');
 
-const command = {};
+const command = {
+  describe: 'Show information about current configuration',
+  
+  async promptArgs() {
+    // No arguments needed for info command
+    return {};
+  },
 
-command.command = 'info';
-command.describe = 'Give info based on current configuration';
-command.builder = {};
+  async handler(args) {
+    if (!await config.fromArgs(args)) {
+      process.exit(1);
+    }
 
-command.handler = function(argv) {  
-  console.log(chalk.bold.green('*** Quant info ***'));
+    const quant = client(config);
+    
+    try {
+      await quant.ping();
+    } catch (err) {
+      throw new Error(`Unable to connect to quant: ${err.message}`);
+    }
 
-  if (!config.fromArgs(argv)) {
-    return console.error(chalk.yellow('Quant is not configured, run init.'));
+    const info = {
+      endpoint: config.get('endpoint'),
+      customer: config.get('clientid'),
+      project: config.get('project'),
+      token: '****'
+    };
+
+    try {
+      const meta = await quant.meta();
+      if (meta && meta.total_records) {
+        const totals = { content: 0, redirects: 0 };
+        
+        if (meta.records) {
+          meta.records.forEach(item => {
+            if (item.type && item.type === 'redirect') {
+              totals.redirects++;
+            } else {
+              totals.content++;
+            }
+          });
+        }
+
+        info.totalRecords = meta.total_records;
+        info.contentItems = totals.content;
+        info.redirects = totals.redirects;
+      }
+    } catch (err) {
+      info.error = 'Could not fetch metadata';
+    }
+
+    return info;
   }
-
-  console.log(`Endpoint: ${config.get('endpoint')}`);
-  console.log(`Customer: ${config.get('clientid')}`);
-  console.log(`Project: ${config.get('project')}`);
-  console.log(`Token: ****`);
-
-  const quant = client(config);
-
-  quant.ping()
-      .then(async (data) => {
-        console.log(chalk.bold.green(`✅✅✅ Successfully connected to ${config.get('project')}`));  
-
-        quant.meta()
-            .then((data) => {
-              console.log(chalk.yellow('\nInfo:'));
-              if (data && data.total_records) {
-                console.log(`Total records: ${data.total_records}`);
-                const totals = {'content': 0, 'redirects': 0};
-
-                if (data.records) {
-                  data.records.map(async (item) => {
-                    if (item.type && item.type == 'redirect') {
-                      totals.redirects++;
-                    } else {
-                      totals.content++;
-                    }
-                  });
-                  console.log(`  - content: ${totals.content}`);
-                  console.log(`  - redirects: ${totals.redirects}`);
-                }
-              } else {
-                console.log('Use deploy to start seeding!');
-              }
-            })
-            .catch((err) => {
-              console.error(chalk.red(err.message));
-            });
-      })
-      .catch((err) => console.log(chalk.bold.red(`Unable to connect to quant ${err.message}`)));  
 };
 
 module.exports = command;

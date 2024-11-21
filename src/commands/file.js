@@ -7,43 +7,70 @@
  * @usage
  *   quant file <file> <location>
  */
+const { text, confirm, isCancel } = require('@clack/prompts');
+const color = require('picocolors');
 const config = require('../config');
 const client = require('../quant-client');
-const chalk = require('chalk');
-const util = require('util');
 
-const command = {};
-
-command.command = 'file <file> <location>';
-command.describe = 'Deploy a single asset';
-command.builder = (yargs) => {
-  yargs.positional('file', {
-    describe: 'Path to local file',
-    type: 'string',
-  });
-  yargs.positional('location', {
-    describe: 'The access URI',
-    type: 'string',
-  });
-};
-
-command.handler = function(argv) {
-  const filepath = argv.file;
-  const location = argv.location;
-
-  // @TODO: Support dir.
-  if (!config.fromArgs(argv)) {
-    return console.error(chalk.yellow('Quant is not configured, run init.'));
-  }
-
-  console.log(chalk.bold.green('*** Quant file ***'));
-
-  client(config).file(filepath, location)
-      .then((body) => console.log(chalk.green('Success: ') + ` Added [${filepath}]`))  
-      .catch((err) => {
-        msg = util.format(chalk.yellow('File [%s] exists at location (%s)'), filepath, location);  
-        console.log(msg);
+const command = {
+  command: 'file <file> <location>',
+  describe: 'Deploy a single asset',
+  
+  builder: (yargs) => {
+    return yargs
+      .positional('file', {
+        describe: 'Path to local file',
+        type: 'string'
+      })
+      .positional('location', {
+        describe: 'The access URI',
+        type: 'string'
       });
+  },
+
+  async promptArgs() {
+    const file = await text({
+      message: 'Enter path to local file',
+      validate: value => !value ? 'File path is required' : undefined
+    });
+
+    if (isCancel(file)) return null;
+
+    const location = await text({
+      message: 'Enter the access URI (where the file will be available)',
+      validate: value => !value ? 'Location is required' : undefined
+    });
+
+    if (isCancel(location)) return null;
+
+    return { file, location };
+  },
+
+  async handler(args) {
+    if (!args) {
+      throw new Error('Operation cancelled');
+    }
+
+    if (!args.file || !args.location) {
+      const promptedArgs = await this.promptArgs();
+      if (!promptedArgs) {
+        throw new Error('Operation cancelled');
+      }
+      args = { ...args, ...promptedArgs };
+    }
+
+    if (!await config.fromArgs(args)) {
+      process.exit(1);
+    }
+
+    const quant = client(config);
+    try {
+      await quant.file(args.file, args.location);
+      return `Added [${args.file}]`;
+    } catch (err) {
+      throw new Error(`File [${args.file}] exists at location (${args.location})`);
+    }
+  }
 };
 
 module.exports = command;

@@ -1,98 +1,137 @@
-/**
- * Prepare the QuantCDN configuration file.
- *
- * This uses a wizard or allows you to pass in with options.
- *
- * @TODO: allow partial options/wizard.
- *
- * @usage
- *   quant init
- *   quant init -t <token> -c <client> -e <url> -d <build dir>
- */
-const chalk = require('chalk');
-const prompt = require('prompt');
-
+const { text, password, confirm, isCancel } = require('@clack/prompts');
+const color = require('picocolors');
 const config = require('../config');
 const client = require('../quant-client');
+const fs = require('fs');
 
-const command = {};
+const command = {
+  command: 'init',
+  describe: 'Initialize a project in the current directory',
+  
+  builder: (yargs) => {
+    return yargs
+      .option('dir', {
+        alias: 'd',
+        describe: 'Directory containing static assets',
+        type: 'string',
+        default: 'build'
+      })
+      .option('clientid', {
+        alias: 'c',
+        describe: 'Project customer id for QuantCDN',
+        type: 'string'
+      })
+      .option('project', {
+        alias: 'p',
+        describe: 'Project name for QuantCDN',
+        type: 'string'
+      })
+      .option('token', {
+        alias: 't',
+        describe: 'Project token for QuantCDN',
+        type: 'string'
+      });
+  },
 
-command.command = 'init';
-command.describe = 'Initialise a project in the current directory';
-
-command.builder = (yargs) => {
-  yargs.option('dir', {
-    alias: 'd',
-    describe: 'Built asset directory',
-    type: 'string',
-    default: 'build',
-  });
-
-  return yargs;
-};
-
-command.handler = function(argv) {
-  const token = Array.isArray(argv.token) ? argv.token.pop() : argv.token;
-  const clientid = Array.isArray(argv.clientid) ? argv.clientid.pop() : argv.clientid;
-  const endpoint = Array.isArray(argv.endpoint) ? argv.endpoint.pop() : argv.endpoint;
-  const project = Array.isArray(argv.project) ? argv.project.pop() : argv.project;
-  const dir = Array.isArray(argv.dir) ? argv.dir.pop() : argv.dir;
-
-  console.log(chalk.bold.green('*** Initialise Quant ***'));
-
-  if (!token || !clientid || !project) {
-    const schema = {
-      properties: {
-        endpoint: {
-          required: true,
-          description: 'Enter QuantCDN endpoint',
-          default: 'https://api.quantcdn.io',
-        },
-        clientid: {
-          pattern: /^[a-zA-Z0-9\-\_]+$/,
-          message: 'Client id must be only letters, numbers, underscores or dashes',
-          required: true,
-          description: 'Enter QuantCDN client id',
-        },
-        project: {
-          pattern: /^[a-zA-Z0-9\-]+$/,
-          message: 'Project must be only letters, numbers or dashes',
-          required: true,
-          description: 'Enter QuantCDN project',
-        },
-        token: {
-          hidden: true,
-          replace: '*',
-          required: true,
-          description: 'Enter QuantCDN project token',
-        },
-        bearer: {
-          hidden: true,
-          replace: '*',
-          required: false,
-          description: 'Enter an optional QuantCDN API token',
-        },
-        dir: {
-          required: true,
-          description: 'Directory containing static assets',
-          default: 'build',
-        },
-      },
-    };
-    prompt.start();
-    prompt.get(schema, function(err, result) {
-      config.set(result);
-      config.save();
-      client(config).ping(config)
-          .then((message) => console.log(chalk.bold.green(`✅✅✅ Successfully connected to ${message.project}`)))  
-          .catch((message) => console.log(chalk.bold.red(`Unable to connect to quant ${message.project}`)));  
+  async promptArgs() {
+    const clientid = await text({
+      message: 'Enter QuantCDN client id',
+      validate: value => {
+        if (!value) return 'Client ID is required';
+        if (!/^[a-zA-Z0-9\-\_]+$/.test(value)) {
+          return 'Client ID must contain only letters, numbers, underscores or dashes';
+        }
+      }
     });
-  } else {
-    config.set({clientid, project, token, endpoint, dir});
+
+    if (isCancel(clientid)) return null;
+
+    const project = await text({
+      message: 'Enter QuantCDN project',
+      validate: value => {
+        if (!value) return 'Project is required';
+        if (!/^[a-zA-Z0-9\-]+$/.test(value)) {
+          return 'Project must contain only letters, numbers or dashes';
+        }
+      }
+    });
+
+    if (isCancel(project)) return null;
+
+    const token = await password({
+      message: 'Enter QuantCDN project token',
+      validate: value => !value ? 'Token is required' : undefined
+    });
+
+    if (isCancel(token)) return null;
+
+    const bearer = await password({
+      message: 'Enter an optional QuantCDN API token (press Enter to skip)',
+    });
+
+    if (isCancel(bearer)) return null;
+
+    const dir = await text({
+      message: 'Directory containing static assets',
+      defaultValue: 'build'
+    });
+
+    if (isCancel(dir)) return null;
+
+    return {
+      endpoint: 'https://api.quantcdn.io',
+      clientid,
+      project,
+      token,
+      bearer: bearer || undefined,
+      dir
+    };
+  },
+
+  async handler(args) {
+    if (!args) {
+      throw new Error('Operation cancelled');
+    }
+
+    // If any required fields are missing, go into interactive mode
+    if (!args.clientid || !args.project || !args.token) {
+      const promptedArgs = await this.promptArgs();
+      if (!promptedArgs) {
+        throw new Error('Operation cancelled');
+      }
+      args = { ...args, ...promptedArgs };
+    }
+
+    const config_args = {
+      endpoint: 'https://api.quantcdn.io',
+      clientid: args.clientid,
+      project: args.project,
+      token: args.token,
+      bearer: args.bearer,
+      dir: args.dir || 'build'
+    };
+
+    // Validate we have all required fields before saving
+    if (!config_args.clientid || !config_args.project || !config_args.token) {
+      throw new Error('Missing required configuration fields');
+    }
+
+    config.set(config_args);
     config.save();
-    client(config).ping(config)
-        .then((message) => console.log(chalk.bold.green(`✅✅✅ Successfully connected to ${message.project}`)))  
-        .catch((message) => console.log(chalk.bold.red(`Unable to connect to quant ${message.project}`)));  
+
+    const _client = client(config);
+    try {
+      const message = await _client.ping(config);
+      return `Successfully connected to ${message.project}`;
+    } catch (error) {
+      // If save failed, clean up the incomplete config file
+      try {
+        fs.unlinkSync('quant.json');
+      } catch (e) {
+        // Ignore error if file doesn't exist
+      }
+      throw new Error(`Unable to connect to quant: ${error.message}`);
+    }
   }
 };
 

@@ -1,149 +1,111 @@
 const fs = require('fs');
+const os = require('os');
+const path = require('path');
+const { confirm } = require('@clack/prompts');
+const color = require('picocolors');
 
-const filename = 'quant.json';
-
-const config = {
-  dir: 'build',
-  endpoint: 'https://api.quantcdn.io',
-  clientid: null,
-  project: null,
-  token: null,
-  bearer: null,
-};
+let config = {};
 
 /**
- * Set the configuration values.
- *
- * @param {object} results
- *
- * @return {boolean}
- *   If the configuration was updated.
+ * Load configuration from various sources in order of precedence:
+ * 1. Command line arguments
+ * 2. Environment variables
+ * 3. quant.json file
  */
-const set = function(results) {
-  Object.assign(config, results);
-  return true;
-};
+async function fromArgs(args = {}) {
+  // First check environment variables
+  const envConfig = {
+    clientid: process.env.QUANT_CLIENT_ID,
+    project: process.env.QUANT_PROJECT,
+    token: process.env.QUANT_TOKEN,
+    endpoint: process.env.QUANT_ENDPOINT,
+    bearer: process.env.QUANT_BEARER
+  };
 
-/**
- * Getter for the configuration.
- *
- * @param {string} key
- *   The configuration key.
- *
- * @return {string}
- *   The configuration value.
- */
-const get = function(key) {
-  let value = config[key];
-  if (key == 'endpoint') {
-    value += '/v1';
-  }
-  return value;
-};
-
-/**
- * Save the configuration to file.
- *
- * @param {string} dir
- *   The directory to save to.
- *
- * @return {boolean}
- *   If the file was saved.
- */
-const save = function(dir = '.') {
-  const data = JSON.stringify(config, null, 2);
+  // Then try to load from quant.json
+  let fileConfig = {};
   try {
-    fs.writeFileSync(`${dir}/${filename}`, data);
+    fileConfig = JSON.parse(fs.readFileSync('quant.json'));
   } catch (err) {
-    return false;
-  }
-  return true;
-};
-
-/**
- * Validate the loaded configuration.
- *
- * @return {boolean}
- *   If the configuration is valid.
- */
-const validate = function() {
-  // Dir is optional as this can be an optional arg to relevant commands.
-  const reqKeys = ['clientid', 'project', 'endpoint', 'token'];
-  const diff = reqKeys.filter((i) => ! Object.keys(config).includes(i));
-  return diff.length == 0;
-};
-
-/**
- * Load the configuration to memory.
- *
- * @param {string} dir
- *   The directory to load from.
- *
- * @return {boolean}
- *   If the file was loaded.
- */
-const load = function(dir = '.') {
-  let data;
-
-  try {
-    data = fs.readFileSync(`${dir}/${filename}`);
-  } catch (err) {
-    return false;
+    // File doesn't exist or is invalid JSON - that's ok
   }
 
-  data = JSON.parse(data);
-  Object.assign(config, data);
+  // Merge configs with precedence: args > env > file
+  config = {
+    ...fileConfig,
+    ...Object.fromEntries(
+      Object.entries(envConfig).filter(([_, v]) => v !== undefined)
+    ),
+    ...Object.fromEntries(
+      Object.entries(args).filter(([_, v]) => v !== undefined)
+    )
+  };
 
-  if (!validate()) {
-    return false;
-  }
+  // Check if we have required configuration
+  const hasConfig = (
+    config.clientid !== undefined &&
+    config.project !== undefined &&
+    (config.token !== undefined || config.bearer !== undefined)
+  );
 
-  return true;
-};
+  // If no config is found and this isn't the init command
+  if (!hasConfig && args._[0] !== 'init') {
+    console.log(color.yellow('No configuration found.'));
+    
+    const shouldInit = await confirm({
+      message: 'Would you like to initialize a new project?',
+      initialValue: true
+    });
 
-/**
- * Load a configuration object from argv.
- *
- * @param {yargs} argv
- *   yargs argv object.
- *
- * @return {boolean}
- *   If config is valid.
- */
-const fromArgs = function(argv) {
-  load();
+    if (shouldInit) {
+      // Load and execute the init command
+      const initCommand = require('./commands/init');
+      const initArgs = await initCommand.promptArgs();
+      if (initArgs) {
+        await initCommand.handler(initArgs);
+        // Reload config after init
+        return fromArgs(args);
+      }
+    }
 
-  if (argv.clientid) {
-    config.clientid = argv.clientid;
-  }
-
-  if (argv.project) {
-    config.project = argv.project;
-  }
-
-  if (argv.token) {
-    config.token = argv.token;
-  }
-
-  if (argv.endpoint) {
-    config.endpoint = argv.endpoint;
-  }
-
-  if (argv.bearer) {
-    config.bearer = argv.bearer;
-  }
-
-  if (!validate()) {
+    console.log(color.yellow('\nConfiguration required to continue. You can:'));
+    console.log(color.yellow('1. Run "quant init" to create a new configuration'));
+    console.log(color.yellow('2. Create a quant.json file in this directory'));
+    console.log(color.yellow('3. Set environment variables (QUANT_CLIENT_ID, QUANT_PROJECT, QUANT_TOKEN)'));
+    console.log(color.yellow('4. Provide configuration via command line arguments\n'));
+    
     return false;
   }
 
-  return true;
-};
+  return hasConfig;
+}
+
+function get(key) {
+  return config[key];
+}
+
+function set(values) {
+  config = {...config, ...values};
+}
+
+function save() {
+  const configDir = `${os.homedir()}/.quant`;
+  if (!fs.existsSync(configDir)) {
+    fs.mkdirSync(configDir, {recursive: true});
+  }
+
+  // Save to both global and local config
+  fs.writeFileSync(
+    path.join(configDir, 'config.json'),
+    JSON.stringify(config, null, 2)
+  );
+
+  fs.writeFileSync('quant.json', JSON.stringify(config, null, 2));
+}
 
 module.exports = {
-  save,
-  load,
-  set,
-  get,
   fromArgs,
+  get,
+  set,
+  save,
 };
