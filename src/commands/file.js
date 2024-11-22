@@ -13,7 +13,7 @@ const config = require('../config');
 const client = require('../quant-client');
 
 const command = {
-  command: 'file <file> <location>',
+  command: 'file [file] [location]',
   describe: 'Deploy a single asset',
   
   builder: (yargs) => {
@@ -28,20 +28,26 @@ const command = {
       });
   },
 
-  async promptArgs() {
-    const file = await text({
-      message: 'Enter path to local file',
-      validate: value => !value ? 'File path is required' : undefined
-    });
+  async promptArgs(providedArgs = {}) {
+    // If file is provided, skip that prompt
+    let file = providedArgs.file;
+    if (!file) {
+      file = await text({
+        message: 'Enter path to local file',
+        validate: value => !value ? 'File path is required' : undefined
+      });
+      if (isCancel(file)) return null;
+    }
 
-    if (isCancel(file)) return null;
-
-    const location = await text({
-      message: 'Enter the access URI (where the file will be available)',
-      validate: value => !value ? 'Location is required' : undefined
-    });
-
-    if (isCancel(location)) return null;
+    // If location is provided, skip that prompt
+    let location = providedArgs.location;
+    if (!location) {
+      location = await text({
+        message: 'Enter the access URI (where the file will be available)',
+        validate: value => !value ? 'Location is required' : undefined
+      });
+      if (isCancel(location)) return null;
+    }
 
     return { file, location };
   },

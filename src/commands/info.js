@@ -10,8 +10,13 @@ const config = require('../config');
 const client = require('../quant-client');
 
 const command = {
+  command: 'info',
   describe: 'Show information about current configuration',
   
+  builder: (yargs) => {
+    return yargs;
+  },
+
   async promptArgs() {
     // No arguments needed for info command
     return {};
@@ -30,12 +35,11 @@ const command = {
       throw new Error(`Unable to connect to quant: ${err.message}`);
     }
 
-    const info = {
-      endpoint: config.get('endpoint'),
-      customer: config.get('clientid'),
-      project: config.get('project'),
-      token: '****'
-    };
+    let output = '';
+    output += `Endpoint: ${config.get('endpoint')}\n`;
+    output += `Customer: ${config.get('clientid')}\n`;
+    output += `Project: ${config.get('project')}\n`;
+    output += `Token: ****\n`;
 
     try {
       const meta = await quant.meta();
@@ -52,15 +56,15 @@ const command = {
           });
         }
 
-        info.totalRecords = meta.total_records;
-        info.contentItems = totals.content;
-        info.redirects = totals.redirects;
+        output += `\nTotal records: ${meta.total_records}\n`;
+        output += `  - content: ${totals.content}\n`;
+        output += `  - redirects: ${totals.redirects}\n`;
       }
     } catch (err) {
-      info.error = 'Could not fetch metadata';
+      output += '\nCould not fetch metadata';
     }
 
-    return info;
+    return output;
   }
 };
 

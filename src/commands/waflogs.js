@@ -13,7 +13,7 @@ const papa = require('papaparse');
 const fs = require('fs');
 
 const command = {
-  command: 'waf-logs',
+  command: 'waf:logs',
   describe: 'Access project WAF logs',
   
   builder: (yargs) => {
@@ -40,44 +40,57 @@ const command = {
       });
   },
 
-  async promptArgs() {
-    const fetchAll = await confirm({
-      message: 'Fetch all logs from the server?',
-      initialValue: false
-    });
+  async promptArgs(providedArgs = {}) {
+    // If all is provided, skip that prompt
+    let fetchAll = providedArgs.all;
+    if (typeof fetchAll !== 'boolean') {
+      fetchAll = await confirm({
+        message: 'Fetch all logs from the server?',
+        initialValue: false
+      });
+      if (isCancel(fetchAll)) return null;
+    }
 
-    if (isCancel(fetchAll)) return null;
-
-    const size = await text({
-      message: 'Number of logs to return per request',
-      defaultValue: '10',
-      validate: value => {
-        const num = parseInt(value);
-        if (isNaN(num) || num < 1) {
-          return 'Please enter a valid number';
+    // If size is provided, skip that prompt
+    let size = providedArgs.size;
+    if (!size) {
+      const sizeInput = await text({
+        message: 'Number of logs to return per request',
+        defaultValue: '10',
+        validate: value => {
+          const num = parseInt(value);
+          if (isNaN(num) || num < 1) {
+            return 'Please enter a valid number';
+          }
         }
-      }
-    });
+      });
+      if (isCancel(sizeInput)) return null;
+      size = parseInt(sizeInput);
+    }
 
-    if (isCancel(size)) return null;
+    // If fields is provided, skip that prompt
+    let fields = providedArgs.fields;
+    if (!fields) {
+      fields = await text({
+        message: 'Enter comma-separated field names to show (optional)',
+      });
+      if (isCancel(fields)) return null;
+    }
 
-    const fields = await text({
-      message: 'Enter comma-separated field names to show (optional)',
-    });
-
-    if (isCancel(fields)) return null;
-
-    const outputFile = await text({
-      message: 'Location to write CSV output (optional)',
-    });
-
-    if (isCancel(outputFile)) return null;
+    // If output is provided, skip that prompt
+    let output = providedArgs.output;
+    if (!output) {
+      output = await text({
+        message: 'Location to write CSV output (optional)',
+      });
+      if (isCancel(output)) return null;
+    }
 
     return {
       all: fetchAll,
-      size: parseInt(size),
-      fields: fields ? fields.split(',') : undefined,
-      output: outputFile || undefined
+      size,
+      fields: fields ? (typeof fields === 'string' ? fields.split(',') : fields) : undefined,
+      output: output || undefined
     };
   },
 
@@ -87,8 +100,8 @@ const command = {
     }
 
     // Check for optional arguments and prompt if not provided
-    if (!args.fields && !args.output && !args.all && !args.size) {
-      const promptedArgs = await this.promptArgs();
+    if (!args.fields && !args.output && args.all === undefined && !args.size) {
+      const promptedArgs = await this.promptArgs(args);
       if (!promptedArgs) {
         throw new Error('Operation cancelled');
       }
@@ -100,21 +113,93 @@ const command = {
     }
 
     const quant = client(config);
-    const logs = await quant.wafLogs(args.all, { per_page: args.size });
+    
+    try {
+      console.log('Fetching WAF logs with params:', {
+        all: args.all,
+        per_page: args.size,
+        endpoint: config.get('endpoint')
+      });
 
-    if (logs === -1) {
-      throw new Error('Invalid credentials provided, please check your token has access');
+      const response = await quant.wafLogs(args.all, { per_page: args.size });
+
+      if (response === -1) {
+        throw new Error('Invalid credentials provided, please check your token has access');
+      }
+
+      if (args.output) {
+        try {
+          fs.writeFileSync(args.output, papa.unparse(response.records));
+          return `Logs saved to ${args.output}`;
+        } catch (err) {
+          throw new Error(`Failed to write output file: ${err.message}`);
+        }
+      }
+
+      // Format the logs output
+      if (!response.records || response.records.length === 0) {
+        return 'No logs found';
+      }
+
+      let output = `Found ${response.total_records} logs (showing page ${response.page} of ${response.total_pages})\n`;
+      
+      if (args.fields) {
+        const fields = typeof args.fields === 'string' ? args.fields.split(',') : args.fields;
+        response.records.forEach(log => {
+          output += '\n---\n';
+          fields.forEach(field => {
+            if (log[field] !== undefined) {
+              output += `${field}: ${log[field]}\n`;
+            }
+          });
+        });
+      } else {
+        response.records.forEach(log => {
+          output += '\n---\n';
+          Object.entries(log).forEach(([key, value]) => {
+            if (key === 'meta') {
+              try {
+                const meta = JSON.parse(value);
+                Object.entries(meta).forEach(([metaKey, metaValue]) => {
+                  output += `${metaKey}: ${metaValue}\n`;
+                });
+              } catch (e) {
+                output += `${key}: ${value}\n`;
+              }
+            } else {
+              output += `${key}: ${value}\n`;
+            }
+          });
+        });
+      }
+
+      return output;
+
+    } catch (err) {
+      console.log('Error details:', {
+        message: err.message,
+        code: err.code,
+        status: err.response && err.response.status,
+        data: err.response && err.response.data,
+        config: {
+          url: err.config && err.config.url,
+          method: err.config && err.config.method,
+          headers: err.config && err.config.headers
+        }
+      });
+
+      // Format a user-friendly error message
+      let errorMessage = 'Failed to fetch WAF logs: ';
+      if (err.code === 'ECONNREFUSED') {
+        errorMessage += 'Could not connect to the API server';
+      } else if (err.response && err.response.data) {
+        errorMessage += `${err.message}\nResponse: ${JSON.stringify(err.response.data, null, 2)}`;
+      } else {
+        errorMessage += err.message;
+      }
+
+      throw new Error(errorMessage);
     }
-
-    if (args.output) {
-      fs.writeFileSync(args.output, papa.unparse(logs));
-    }
-
-    return {
-      logs,
-      fields: args.fields,
-      savedTo: args.output
-    };
   }
 };
 

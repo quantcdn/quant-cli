@@ -10,7 +10,7 @@ const config = require('../config');
 const client = require('../quant-client');
 
 const command = {
-  command: 'unpublish <path>',
+  command: 'unpublish [path]',
   describe: 'Unpublish an asset',
   
   builder: (yargs) => {
@@ -27,22 +27,27 @@ const command = {
       });
   },
 
-  async promptArgs() {
-    const path = await text({
-      message: 'Enter the path to unpublish',
-      validate: value => !value ? 'Path is required' : undefined
-    });
+  async promptArgs(providedArgs = {}) {
+    // If path is provided, skip that prompt
+    let path = providedArgs.path;
+    if (!path) {
+      path = await text({
+        message: 'Enter the path to unpublish',
+        validate: value => !value ? 'Path is required' : undefined
+      });
+      if (isCancel(path)) return null;
+    }
 
-    if (isCancel(path)) return null;
+    // If force is not provided, ask for confirmation
+    if (!providedArgs.force) {
+      const confirmUnpublish = await confirm({
+        message: 'Are you sure you want to unpublish this asset?',
+        initialValue: false
+      });
+      if (isCancel(confirmUnpublish) || !confirmUnpublish) return null;
+    }
 
-    const confirmUnpublish = await confirm({
-      message: 'Are you sure you want to unpublish this asset?',
-      initialValue: false
-    });
-
-    if (isCancel(confirmUnpublish) || !confirmUnpublish) return null;
-
-    return { path };
+    return { path, force: providedArgs.force };
   },
 
   async handler(args) {
@@ -50,9 +55,8 @@ const command = {
       throw new Error('Operation cancelled');
     }
 
-    // Check for required arguments and prompt if missing
     if (!args.path) {
-      const promptedArgs = await this.promptArgs();
+      const promptedArgs = await this.promptArgs(args);
       if (!promptedArgs) {
         throw new Error('Operation cancelled');
       }

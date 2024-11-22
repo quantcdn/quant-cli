@@ -79,7 +79,7 @@ const command = {
     if (isCancel(dir)) return null;
 
     return {
-      endpoint: 'https://api.quantcdn.io',
+      endpoint: endpoint || 'https://api.quantcdn.io',
       clientid,
       project,
       token,
@@ -103,7 +103,7 @@ const command = {
     }
 
     const config_args = {
-      endpoint: 'https://api.quantcdn.io',
+      endpoint: args.endpoint || 'https://api.quantcdn.io',
       clientid: args.clientid,
       project: args.project,
       token: args.token,

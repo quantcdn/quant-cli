@@ -10,7 +10,7 @@ const config = require('../config');
 const client = require('../quant-client');
 
 const command = {
-  command: 'redirect <from> <to> [status] [author]',
+  command: 'redirect [from] [to] [status] [author]',
   describe: 'Create a redirect',
   
   builder: (yargs) => {
@@ -34,44 +34,51 @@ const command = {
       });
   },
 
-  async promptArgs() {
-    const from = await text({
-      message: 'Enter the path to redirect from',
-      validate: value => !value ? 'Source path is required' : undefined
-    });
+  async promptArgs(providedArgs = {}) {
+    // If from is provided, skip that prompt
+    let from = providedArgs.from;
+    if (!from) {
+      from = await text({
+        message: 'Enter the path to redirect from',
+        validate: value => !value ? 'Source path is required' : undefined
+      });
+      if (isCancel(from)) return null;
+    }
 
-    if (isCancel(from)) return null;
+    // If to is provided, skip that prompt
+    let to = providedArgs.to;
+    if (!to) {
+      to = await text({
+        message: 'Enter the path to redirect to',
+        validate: value => !value ? 'Destination path is required' : undefined
+      });
+      if (isCancel(to)) return null;
+    }
 
-    const to = await text({
-      message: 'Enter the path to redirect to',
-      validate: value => !value ? 'Destination path is required' : undefined
-    });
+    // If status is provided, skip that prompt
+    let status = providedArgs.status;
+    if (!status) {
+      status = await select({
+        message: 'Select redirect type',
+        options: [
+          { value: 301, label: '301 - Permanent redirect' },
+          { value: 302, label: '302 - Temporary redirect' }
+        ],
+        initialValue: 302
+      });
+      if (isCancel(status)) return null;
+    }
 
-    if (isCancel(to)) return null;
+    // If author is provided, skip that prompt
+    let author = providedArgs.author;
+    if (!author) {
+      author = await text({
+        message: 'Enter author name (optional)',
+      });
+      if (isCancel(author)) return null;
+    }
 
-    const status = await select({
-      message: 'Select redirect type',
-      options: [
-        { value: 301, label: '301 - Permanent redirect' },
-        { value: 302, label: '302 - Temporary redirect' }
-      ],
-      initialValue: 302
-    });
-
-    if (isCancel(status)) return null;
-
-    const author = await text({
-      message: 'Enter author name (optional)',
-    });
-
-    if (isCancel(author)) return null;
-
-    return { 
-      from, 
-      to, 
-      status: parseInt(status), 
-      author: author || null 
-    };
+    return { from, to, status: parseInt(status), author: author || null };
   },
 
   async handler(args) {

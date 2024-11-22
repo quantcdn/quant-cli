@@ -14,7 +14,7 @@ const path = require('path');
 const md5File = require('md5-file');
 
 const command = {
-  command: 'scan',
+  command: 'scan [options]',
   describe: 'Validate local file checksums',
   
   builder: (yargs) => {
@@ -35,29 +35,35 @@ const command = {
       });
   },
 
-  async promptArgs() {
-    const showDiffOnly = await confirm({
-      message: 'Show only source files different from Quant?',
-      initialValue: false
-    });
+  async promptArgs(providedArgs = {}) {
+    let diffOnly = providedArgs['diff-only'];
+    if (typeof diffOnly !== 'boolean') {
+      diffOnly = await confirm({
+        message: 'Show only source files different from Quant?',
+        initialValue: false
+      });
+      if (isCancel(diffOnly)) return null;
+    }
 
-    if (isCancel(showDiffOnly)) return null;
+    let unpublishOnly = providedArgs['unpublish-only'];
+    if (typeof unpublishOnly !== 'boolean') {
+      unpublishOnly = await confirm({
+        message: 'Show only the unpublished results?',
+        initialValue: false
+      });
+      if (isCancel(unpublishOnly)) return null;
+    }
 
-    const unpublishOnly = await confirm({
-      message: 'Show only the unpublished results?',
-      initialValue: false
-    });
-
-    if (isCancel(unpublishOnly)) return null;
-
-    const skipUnpublishRegex = await text({
-      message: 'Enter regex pattern to skip unpublish (optional)',
-    });
-
-    if (isCancel(skipUnpublishRegex)) return null;
+    let skipUnpublishRegex = providedArgs['skip-unpublish-regex'];
+    if (skipUnpublishRegex === undefined) {
+      skipUnpublishRegex = await text({
+        message: 'Enter regex pattern to skip unpublish (optional)',
+      });
+      if (isCancel(skipUnpublishRegex)) return null;
+    }
 
     return {
-      'diff-only': showDiffOnly,
+      'diff-only': diffOnly,
       'unpublish-only': unpublishOnly,
       'skip-unpublish-regex': skipUnpublishRegex || undefined
     };
@@ -151,7 +157,30 @@ const command = {
       results.toUnpublish.push(item.url);
     });
 
-    return results;
+    // Format the results as a string
+    let output = '';
+    
+    if (results.upToDate.length > 0 && !args['diff-only']) {
+      output += color.green('\nUp to date:') + `\n${results.upToDate.join('\n')}\n`;
+    }
+
+    if (results.different.length > 0) {
+      output += color.yellow('\nDifferent:') + `\n${results.different.join('\n')}\n`;
+    }
+
+    if (results.notFound.length > 0) {
+      output += color.red('\nNot found:') + `\n${results.notFound.join('\n')}\n`;
+    }
+
+    if (results.toUnpublish.length > 0) {
+      output += color.magenta('\nTo be unpublished:') + `\n${results.toUnpublish.join('\n')}\n`;
+    }
+
+    if (!output) {
+      output = 'No changes found';
+    }
+
+    return output;
   }
 };
 

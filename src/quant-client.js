@@ -9,26 +9,43 @@ const path = require("path");
 const mime = require("mime-types");
 const querystring = require("querystring");
 const quantURL = require("./helper/quant-url");
+const config = require('./config');
 
-const client = function (config) {
-  const req = axios;
-  const get = axios.get;
-  const post = axios.post;
-  const patch = axios.patch;
-  const del = axios.delete;
-
+module.exports = function (config) {
+  // Set up headers with correct Quant header names
   const headers = {
-    "User-Agent": "Quant (+http://api.quantcdn.io)",
-    "Quant-Token": config.get("token"),
-    "Quant-Customer": config.get("clientid"),
-    "Quant-Organisation": config.get("clientid"),
-    "Quant-Project": config.get("project"),
-    "Content-Type": "application/json",
+    'Content-Type': 'application/json',
+    'Quant-Customer': config.get('clientid'),
+    'Quant-Project': config.get('project'),
+    'Quant-Token': config.get('token'),
+    'Quant-Organisation': config.get('clientid')
   };
 
-  if (config.get("bearer")) {
-    headers.Authorization = `Bearer ${config.get("bearer")}`;
+  if (config.get('bearer')) {
+    headers['Authorization'] = `Bearer ${config.get('bearer')}`;
   }
+
+  // Create axios instance with dynamic baseURL
+  const client = axios.create({
+    baseURL: config.get('endpoint')
+  });
+
+  // Helper functions for HTTP methods
+  const get = async (url, options = {}) => {
+    return await client.get(url, { ...options, headers: { ...headers, ...options.headers } });
+  };
+
+  const post = async (url, data, options = {}) => {
+    return await client.post(url, data, { ...options, headers: { ...headers, ...options.headers } });
+  };
+
+  const patch = async (url, data, options = {}) => {
+    return await client.patch(url, data, { ...options, headers: { ...headers, ...options.headers } });
+  };
+
+  const del = async (url, options = {}) => {
+    return await client.delete(url, { ...options, headers: { ...headers, ...options.headers } });
+  };
 
   /**
    * Handle the response.
@@ -40,6 +57,12 @@ const client = function (config) {
    *   The API response.
    */
   const handleResponse = function (response) {
+    // If this is an error response, format it
+    if (response.isAxiosError) {
+      const errorData = response.response && response.response.data ? response.response.data : {};
+      throw new Error(formatError(response));
+    }
+
     const body =
       typeof response.data == "string"
         ? JSON.parse(response.data)
@@ -50,27 +73,46 @@ const client = function (config) {
       for (i in body.errors) {
         msg += body.errors[i].errorMsg + "\n";
       }
-      throw new Error(msg);
+      throw new Error(`${msg}\nResponse: ${JSON.stringify(body, null, 2)}`);
     }
 
     if (response.statusCode == 400) {
-      // @TODO: this is generally if the content is
-      // streamed to the endpoint 4xx and 5xx are thrown
-      // similarly, the API should respond with errors
-      // otherwise.
       if (typeof body.errorMsg != "undefined") {
-        throw new Error(body.errorMsg);
+        throw new Error(`${body.errorMsg}\nResponse: ${JSON.stringify(body, null, 2)}`);
       }
-      throw new Error("Critical error...");
+      throw new Error(`Critical error...\nResponse: ${JSON.stringify(body, null, 2)}`);
     }
 
     if (body.error || (typeof body.errorMsg != "undefined" && body.errorMsg.length > 0)) {
       const msg = typeof body.errorMsg != "undefined" ? body.errorMsg : body.msg;
-      throw new Error(msg);
+      throw new Error(`${msg}\nResponse: ${JSON.stringify(body, null, 2)}`);
     }
 
     return body;
   };
+
+  // Helper function to format error message
+  function formatErrorMessage(error) {
+    if (error.response) {
+      // The request was made and the server responded with a status code
+      // that falls out of the range of 2xx
+      return `${error.message}\nResponse: ${JSON.stringify(error.response.data, null, 2)}`;
+    } else if (error.request) {
+      // The request was made but no response was received
+      return `No response received: ${error.message}`;
+    } else {
+      // Something happened in setting up the request that triggered an Error
+      return error.message;
+    }
+  }
+
+  // Add this helper function for consistent error handling
+  function formatError(error) {
+    if (error.response && error.response.data) {
+      return `${error.message}\nResponse: ${JSON.stringify(error.response.data, null, 2)}`;
+    }
+    return error.message;
+  }
 
   return {
     /**
@@ -82,9 +124,12 @@ const client = function (config) {
      * @throws Error.
      */
     ping: async function () {
-      const url = `${config.get("endpoint")}/ping`;
-      const res = await get(url, { headers });
-      return handleResponse(res);
+      try {
+        const res = await get(`/ping`);
+        return handleResponse(res);
+      } catch (error) {
+        throw new Error(formatError(error));
+      }
     },
 
     /**
@@ -117,9 +162,9 @@ const client = function (config) {
         },
         extend,
       );
-      const url = `${config.get("endpoint")}/global-meta?${querystring.stringify(query)}`;
+      const url = `/global-meta?${querystring.stringify(query)}`;
       const doUnfold = async function (i) {
-        const res = await get(`${url}&page=${i}`, { headers });
+        const res = await get(`${url}&page=${i}`);
         if (res.data.global_meta && res.data.global_meta.records) {
           res.data.global_meta.records.map((item) =>
             records.push({
@@ -133,7 +178,7 @@ const client = function (config) {
 
       let page = 1;
       // Seed the record set.
-      const res = await get(`${url}&page=${page}`, { headers });
+      const res = await get(`${url}&page=${page}`);
 
       if (!res.data.global_meta) {
         // If no records have been published then global_meta is not
@@ -599,11 +644,12 @@ const client = function (config) {
         },
         body: data,
       };
-      const res = await post(options.url, options.body, {
-        headers: options.headers,
-      });
-
-      return handleResponse(res);
+      try {
+        const res = await post(options.url, options.body, { headers: options.headers });
+        return handleResponse(res);
+      } catch (error) {
+        throw new Error(formatError(error));
+      }
     },
 
     /**
@@ -621,9 +667,12 @@ const client = function (config) {
           "Quant-Url": url,
         },
       };
-      const res = await del(options.url, { headers: options.headers });
-
-      return handleResponse(res);
+      try {
+        const res = await del(options.url, { headers: options.headers });
+        return handleResponse(res);
+      } catch (error) {
+        throw new Error(formatError(error));
+      }
     },
 
     /**
@@ -639,9 +688,12 @@ const client = function (config) {
         },
         json: true,
       };
-      const res = await del(options.url, { headers: options.headers });
-
-      return handleResponse(res);
+      try {
+        const res = await del(options.url, { headers: options.headers });
+        return handleResponse(res);
+      } catch (error) {
+        throw new Error(formatError(error));
+      }
     },
 
     /**
@@ -657,9 +709,12 @@ const client = function (config) {
         },
         json: true,
       };
-      const res = await get(options.url, { headers: options.headers });
-
-      return handleResponse(res);
+      try {
+        const res = await get(options.url, { headers: options.headers });
+        return handleResponse(res);
+      } catch (error) {
+        throw new Error(formatError(error));
+      }
     },
 
     /**
@@ -673,66 +728,22 @@ const client = function (config) {
      * @return {object}
      *   A list of all WAF logs.
      */
-    wafLogs: async function (unfold = false, extend = {}) {
-      const logs = [];
-      const url = `${config.get("endpoint")}/waf/logs`;
-      const query = Object.assign(
-        {
-          per_page: 10,
-        },
-        extend,
-      );
-      const doUnfold = async function (i) {
-        let res;
-        query.page = i;
-        try {
-          res = await get(`${url}?${querystring.stringify(query)}`, {
-            headers,
-          });
-        } catch (err) {
-          console.log(err);
-          return false;
-        }
-        if (res.data.data) {
-          logs.push(...res.data.data);
-        }
-        return res.data.next != "";
-      };
-
-      const options = {
-        url: `${url}?${querystring.stringify(query)}`,
-        headers,
-      };
-
-      const res = await get(options, url, { headers: options.headers });
-
-      if (res.statusCode == 403) {
-        return -1;
+    wafLogs: async function (all = false, options = {}) {
+      try {
+        const response = await get('/waf/logs', {
+          params: {
+            per_page: options.per_page || 10
+          }
+        });
+        return handleResponse(response);
+      } catch (error) {
+        console.log('WAF logs error:', {
+          message: error.message,
+          code: error.code,
+          response: error.response && error.response.data
+        });
+        throw error;
       }
-
-      if (
-        typeof res.data == "undefined" ||
-        typeof res.data.data == "undefined"
-      ) {
-        return logs;
-      }
-
-      logs.push(...res.data.data);
-      let page = 1;
-      if (unfold && res.data.next != "") {
-        let more;
-        do {
-          page++;
-          more = await doUnfold(page);
-        } while (more && page <= 100);
-      }
-      return logs;
     },
   };
 };
-
-module.exports = function () {
-  return module.exports.client.apply(this, arguments);
-};
-
-module.exports.client = client;

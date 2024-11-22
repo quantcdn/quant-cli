@@ -11,7 +11,7 @@ const config = require('../config');
 const client = require('../quant-client');
 
 const command = {
-  command: 'delete <path>',
+  command: 'delete [path]',
   describe: 'Delete a deployed path from Quant',
   
   builder: (yargs) => {
@@ -27,22 +27,27 @@ const command = {
       });
   },
 
-  async promptArgs() {
-    const path = await text({
-      message: 'Enter the deployed asset path to remove',
-      validate: value => !value ? 'Path is required' : undefined
-    });
+  async promptArgs(providedArgs = {}) {
+    // If path is provided, skip that prompt
+    let path = providedArgs.path;
+    if (!path) {
+      path = await text({
+        message: 'Enter the deployed asset path to remove',
+        validate: value => !value ? 'Path is required' : undefined
+      });
+      if (isCancel(path)) return null;
+    }
 
-    if (isCancel(path)) return null;
+    // If force is not provided, ask for confirmation
+    if (!providedArgs.force) {
+      const shouldDelete = await confirm({
+        message: 'This will delete all revisions of this asset from QuantCDN. Are you sure?',
+        initialValue: false
+      });
+      if (isCancel(shouldDelete) || !shouldDelete) return null;
+    }
 
-    const shouldDelete = await confirm({
-      message: 'This will delete all revisions of this asset from QuantCDN. Are you sure?',
-      initialValue: false
-    });
-
-    if (isCancel(shouldDelete) || !shouldDelete) return null;
-
-    return { path };
+    return { path, force: providedArgs.force };
   },
 
   async handler(args) {
@@ -50,15 +55,25 @@ const command = {
       throw new Error('Operation cancelled');
     }
 
-    if (!await config.fromArgs(args)) {
-      process.exit(1);
+    // Always prompt if path is missing
+    if (!args.path) {
+      const promptedArgs = await this.promptArgs(args);
+      if (!promptedArgs) {
+        throw new Error('Operation cancelled');
+      }
+      args = { ...args, ...promptedArgs };
+    }
+    // Only prompt for confirmation if not forced
+    else if (!args.force) {
+      const promptedArgs = await this.promptArgs(args);
+      if (!promptedArgs) {
+        throw new Error('Operation cancelled');
+      }
+      args = { ...args, ...promptedArgs };
     }
 
-    // If not in force mode and not coming from interactive prompt, confirm
-    if (!args.force && !args._interactiveMode) {
-      console.log(color.yellow('This will delete all revisions of this asset from QuantCDN'));
-      console.log(color.yellow('Use --force to skip this warning'));
-      process.exit(0);
+    if (!await config.fromArgs(args)) {
+      process.exit(1);
     }
 
     const quant = client(config);

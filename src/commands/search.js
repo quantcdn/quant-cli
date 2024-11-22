@@ -12,69 +12,59 @@ const fs = require('fs');
 const glob = require('glob');
 
 const command = {
-  command: 'search <operation>',
+  command: 'search [operation]',
   describe: 'Perform search index operations',
   
   builder: (yargs) => {
     return yargs
       .positional('operation', {
-        describe: 'Operation to perform (status|index|unindex|clear)',
+        describe: 'Operation to perform',
         type: 'string',
         choices: ['status', 'index', 'unindex', 'clear']
       })
       .option('path', {
         describe: 'Path to JSON file(s) for index/unindex operations',
         type: 'string'
-      })
-      .check((argv) => {
-        if ((argv.operation === 'index' || argv.operation === 'unindex') && !argv.path) {
-          throw new Error('Path is required for index and unindex operations');
-        }
-        return true;
       });
   },
 
-  async promptArgs() {
-    const operation = await select({
-      message: 'Select search operation',
-      options: [
-        { value: 'status', label: 'Show search index status' },
-        { value: 'index', label: 'Add/update search records' },
-        { value: 'unindex', label: 'Remove item from search index' },
-        { value: 'clear', label: 'Clear entire search index' }
-      ]
-    });
-
-    if (isCancel(operation)) return null;
+  async promptArgs(providedArgs = {}) {
+    // If operation is provided, skip that prompt
+    let operation = providedArgs.operation;
+    if (!operation) {
+      operation = await select({
+        message: 'Select search operation',
+        options: [
+          { value: 'status', label: 'Show search index status' },
+          { value: 'index', label: 'Add/update search records' },
+          { value: 'unindex', label: 'Remove item from search index' },
+          { value: 'clear', label: 'Clear entire search index' }
+        ]
+      });
+      if (isCancel(operation)) return null;
+    }
 
     let additionalArgs = {};
 
-    switch (operation) {
-      case 'index':
-        const path = await text({
-          message: 'Enter path to JSON file(s)',
-          validate: value => !value ? 'Path is required' : undefined
-        });
-        if (isCancel(path)) return null;
-        additionalArgs.path = path;
-        break;
+    // If path is required but not provided, prompt for it
+    if (['index', 'unindex'].includes(operation) && !providedArgs.path) {
+      const path = await text({
+        message: operation === 'index' 
+          ? 'Enter path to JSON file(s)'
+          : 'Enter URL path to remove from index',
+        validate: value => !value ? 'Path is required' : undefined
+      });
+      if (isCancel(path)) return null;
+      additionalArgs.path = path;
+    }
 
-      case 'unindex':
-        const urlPath = await text({
-          message: 'Enter URL path to remove from index',
-          validate: value => !value ? 'Path is required' : undefined
-        });
-        if (isCancel(urlPath)) return null;
-        additionalArgs.path = urlPath;
-        break;
-
-      case 'clear':
-        const confirmClear = await confirm({
-          message: 'Are you sure you want to clear the entire search index?',
-          initialValue: false
-        });
-        if (isCancel(confirmClear) || !confirmClear) return null;
-        break;
+    // If it's clear operation, confirm
+    if (operation === 'clear' && !providedArgs.confirmed) {
+      const confirmClear = await confirm({
+        message: 'Are you sure you want to clear the entire search index?',
+        initialValue: false
+      });
+      if (isCancel(confirmClear) || !confirmClear) return null;
     }
 
     return {
@@ -90,7 +80,7 @@ const command = {
 
     // Check for required arguments and prompt if missing
     if (!args.operation || ((['index', 'unindex'].includes(args.operation)) && !args.path)) {
-      const promptedArgs = await this.promptArgs();
+      const promptedArgs = await this.promptArgs(args); // Pass existing args
       if (!promptedArgs) {
         throw new Error('Operation cancelled');
       }

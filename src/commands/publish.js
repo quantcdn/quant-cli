@@ -10,7 +10,7 @@ const config = require('../config');
 const client = require('../quant-client');
 
 const command = {
-  command: 'publish <path>',
+  command: 'publish [path]',
   describe: 'Publish an asset',
   
   builder: (yargs) => {
@@ -27,20 +27,24 @@ const command = {
       });
   },
 
-  async promptArgs() {
-    const path = await text({
-      message: 'Enter the path to publish',
-      validate: value => !value ? 'Path is required' : undefined
-    });
+  async promptArgs(providedArgs = {}) {
+    let path = providedArgs.path;
+    if (!path) {
+      path = await text({
+        message: 'Enter the path to publish',
+        validate: value => !value ? 'Path is required' : undefined
+      });
+      if (isCancel(path)) return null;
+    }
 
-    if (isCancel(path)) return null;
-
-    const revision = await text({
-      message: 'Enter revision ID (or press Enter for latest)',
-      defaultValue: 'latest'
-    });
-
-    if (isCancel(revision)) return null;
+    let revision = providedArgs.revision;
+    if (!revision) {
+      revision = await text({
+        message: 'Enter revision ID (or press Enter for latest)',
+        defaultValue: 'latest'
+      });
+      if (isCancel(revision)) return null;
+    }
 
     return { path, revision };
   },

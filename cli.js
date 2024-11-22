@@ -6,14 +6,53 @@ const { getCommandOptions, getCommand } = require('./src/commandLoader');
 const config = require('./src/config');
 const yargs = require('yargs');
 
+function showActiveConfig() {
+  const endpoint = config.get('endpoint');
+  const clientId = config.get('clientid');
+  const project = config.get('project');
+  const defaultEndpoint = 'https://api.quantcdn.io/v1';
+
+  console.log(color.dim('─────────────────────────────────────'));
+  console.log(color.dim('Active configuration:'));
+  console.log(color.dim(`Organization: ${clientId}`));
+  console.log(color.dim(`Project: ${project}`));
+  if (endpoint !== defaultEndpoint) {
+    console.log(color.dim(`Endpoint: ${endpoint}`));
+  }
+  console.log(color.dim('─────────────────────────────────────'));
+}
+
 async function interactiveMode() {
   intro(color.bgCyan(' QuantCDN CLI '));
 
   try {
     // Check for config before showing menu
     if (!await config.fromArgs({ _: [''] })) {
-      process.exit(1);
+      const shouldInit = await confirm({
+        message: 'No configuration found. Would you like to initialize a new project?',
+        initialValue: true
+      });
+
+      if (isCancel(shouldInit) || !shouldInit) {
+        outro(color.yellow('Configuration required to continue. You can:'));
+        outro(color.yellow('1. Run "quant init" to create a new configuration'));
+        outro(color.yellow('2. Create a quant.json file in this directory'));
+        outro(color.yellow('3. Set environment variables (QUANT_CLIENT_ID, QUANT_PROJECT, QUANT_TOKEN)'));
+        outro(color.yellow('4. Provide configuration via command line arguments'));
+        process.exit(0);
+      }
+
+      // Get the init command and run it
+      const initCommand = getCommand('init');
+      const initArgs = await initCommand.promptArgs();
+      if (!initArgs) {
+        outro(color.yellow('Operation cancelled'));
+        process.exit(0);
+      }
+      await initCommand.handler(initArgs);
     }
+
+    showActiveConfig();
 
     const command = await select({
       message: 'What would you like to do?',
@@ -51,30 +90,46 @@ async function interactiveMode() {
 
 async function handleCommand(command, argv) {
   try {
-    // Check if command was called with no arguments
-    const commandParts = command.command.split(' ');
-    const requiredArgs = commandParts.filter(part => part.startsWith('<')).length;
-    const providedArgs = argv._.length - 1; // Subtract 1 for command name
+    // Add _command property to args for config check
+    argv._ = argv._ || [];
+    argv._[0] = command.command.split(' ')[0];
 
-    // If no arguments provided at all, go straight to interactive mode
-    if (providedArgs === 0 && requiredArgs > 0) {
+    // Extract command definition parts
+    const commandParts = command.command.split(' ');
+    const requiredArgs = commandParts
+      .filter(part => part.startsWith('<'))
+      .map(part => part.replace(/[<>]/g, ''));
+
+    // For positional arguments, they're in argv._ after the command name
+    const providedPositionalArgs = argv._.slice(1);
+
+    // Check if we have all required positional arguments
+    const hasAllRequiredArgs = requiredArgs.every((arg, index) => {
+      // For the first argument, check if it's provided either as positional or named
+      if (index === 0) {
+        return providedPositionalArgs[index] || argv[arg];
+      }
+      // For subsequent arguments, they must be provided as positional args
+      return providedPositionalArgs[index];
+    });
+
+    if (!await config.fromArgs(argv)) {
+      process.exit(1);
+    }
+
+    showActiveConfig();
+
+    // Always pass existing args to promptArgs, even in interactive mode
+    if (!hasAllRequiredArgs) {
       intro(color.bgCyan(' QuantCDN CLI '));
-      const args = await command.promptArgs();
-      if (!args) {
+      const promptedArgs = await command.promptArgs(argv);
+      if (!promptedArgs) {
         outro(color.yellow('Operation cancelled'));
         process.exit(0);
       }
-      argv = { ...argv, ...args };
-    } 
-    // If some arguments are missing, let yargs handle the error
-    else if (providedArgs < requiredArgs) {
-      return command.builder(yargs).argv;
+      argv = { ...argv, ...promptedArgs };
     }
 
-    // Add _command property to args for config check
-    argv._ = argv._ || [];
-    argv._[0] = commandParts[0];
-    
     const result = await command.handler(argv);
     console.log(color.green(result || 'Operation completed successfully!'));
   } catch (error) {
@@ -107,7 +162,6 @@ function cliMode() {
       alias: 'e',
       describe: 'API endpoint for QuantCDN',
       type: 'string',
-      default: 'https://api.quantcdn.io'
     })
     .option('bearer', {
       describe: 'Scoped API bearer token',

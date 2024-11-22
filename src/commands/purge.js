@@ -10,7 +10,7 @@ const config = require('../config');
 const client = require('../quant-client');
 
 const command = {
-  command: 'purge <path>',
+  command: 'purge [path]',
   describe: 'Purge the cache for a given URL',
   
   builder: (yargs) => {
@@ -21,13 +21,16 @@ const command = {
       });
   },
 
-  async promptArgs() {
-    const path = await text({
-      message: 'Enter the path to purge from cache',
-      validate: value => !value ? 'Path is required' : undefined
-    });
-
-    if (isCancel(path)) return null;
+  async promptArgs(providedArgs = {}) {
+    // If path is provided, skip that prompt
+    let path = providedArgs.path;
+    if (!path) {
+      path = await text({
+        message: 'Enter the path to purge from cache',
+        validate: value => !value ? 'Path is required' : undefined
+      });
+      if (isCancel(path)) return null;
+    }
 
     return { path };
   },

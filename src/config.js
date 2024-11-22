@@ -1,8 +1,6 @@
 const fs = require('fs');
 const os = require('os');
 const path = require('path');
-const { confirm } = require('@clack/prompts');
-const color = require('picocolors');
 
 let config = {};
 
@@ -11,6 +9,7 @@ let config = {};
  * 1. Command line arguments
  * 2. Environment variables
  * 3. quant.json file
+ * 4. Default values
  */
 async function fromArgs(args = {}) {
   // First check environment variables
@@ -18,7 +17,7 @@ async function fromArgs(args = {}) {
     clientid: process.env.QUANT_CLIENT_ID,
     project: process.env.QUANT_PROJECT,
     token: process.env.QUANT_TOKEN,
-    endpoint: process.env.QUANT_ENDPOINT,
+    endpoint: process.env.QUANT_ENDPOINT || 'https://api.quantcdn.io/v1',
     bearer: process.env.QUANT_BEARER
   };
 
@@ -30,8 +29,9 @@ async function fromArgs(args = {}) {
     // File doesn't exist or is invalid JSON - that's ok
   }
 
-  // Merge configs with precedence: args > env > file
+  // Merge configs with precedence: args > env > file > defaults
   config = {
+    ...config,  // Default values
     ...fileConfig,
     ...Object.fromEntries(
       Object.entries(envConfig).filter(([_, v]) => v !== undefined)
@@ -41,43 +41,12 @@ async function fromArgs(args = {}) {
     )
   };
 
-  // Check if we have required configuration
-  const hasConfig = (
+  // Ensure required fields are present
+  return (
     config.clientid !== undefined &&
     config.project !== undefined &&
     (config.token !== undefined || config.bearer !== undefined)
   );
-
-  // If no config is found and this isn't the init command
-  if (!hasConfig && args._[0] !== 'init') {
-    console.log(color.yellow('No configuration found.'));
-    
-    const shouldInit = await confirm({
-      message: 'Would you like to initialize a new project?',
-      initialValue: true
-    });
-
-    if (shouldInit) {
-      // Load and execute the init command
-      const initCommand = require('./commands/init');
-      const initArgs = await initCommand.promptArgs();
-      if (initArgs) {
-        await initCommand.handler(initArgs);
-        // Reload config after init
-        return fromArgs(args);
-      }
-    }
-
-    console.log(color.yellow('\nConfiguration required to continue. You can:'));
-    console.log(color.yellow('1. Run "quant init" to create a new configuration'));
-    console.log(color.yellow('2. Create a quant.json file in this directory'));
-    console.log(color.yellow('3. Set environment variables (QUANT_CLIENT_ID, QUANT_PROJECT, QUANT_TOKEN)'));
-    console.log(color.yellow('4. Provide configuration via command line arguments\n'));
-    
-    return false;
-  }
-
-  return hasConfig;
 }
 
 function get(key) {
