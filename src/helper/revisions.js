@@ -1,123 +1,65 @@
 const fs = require('fs');
-const os = require('os');
-const {tmpdir} = require('os');
-const {sep} = require('path');
+const path = require('path');
 
-let data = {};
-let isEnabled = true;
-let loc = tmpdir() + sep + 'quant-revision-log';
+let isEnabled = false;
+let revisions = {};
+let revisionFile;
 
-/**
- * Check if the sha exists in the revision log.
- *
- * @param {string} path
- *   Revision path to evaluate.
- * @param {string} sha
- *   Revision sha to evaluate.
- *
- * @return {boolean}
- *   If the revision exists.
- */
-const has = function(path, sha) {
-  if (!isEnabled) {
-    // Defaults to false if the local file is not enabled.
-    return false;
+function load(file) {
+  // If no file path provided, use current working directory
+  if (!file) {
+    const projectName = require('../config').get('project');
+    file = path.resolve(process.cwd(), `quant-revision-log_${projectName}`);
   }
 
-  if (!data.hasOwnProperty(path)) {
-    path = path.startsWith('/') ? path : `/${path}`;
-    if (!data.hasOwnProperty(path)) {
-      return false;
-    }
-  }
+  revisionFile = file;
 
-  return data[path] == sha;
-};
-
-/**
- * Load the revision log into memory for this process.
- *
- * @param {string} file
- *  File location that stores the revision log.
- *
- * @return {boolean}
- *   If the log file was found and loaded.
- */
-const load = function(file) {
-  if (!isEnabled) {
-    return;
-  }
-
-  let _d;
-
-  if (file) {
-    loc = file;
-  }
-
-  if (fs.existsSync(loc)) {
-    _d = fs.readFileSync(loc);
-    try {
-      _d = JSON.parse(_d.toString());
-    } catch (err) {
-      return false;
-    }
-  }
-  data = Object.assign(data, _d);
-  return true;
-};
-
-/**
- * Store an item in the log.
- *
- * @param {object} item
- *   An item to add to the revision log.
- */
-const store = function(item) {
-  if (!isEnabled) {
-    return;
-  }
-  const i = {};
-  i[item.url] = item.md5;
-  data = Object.assign(data, i);
-};
-
-/**
- * Save the revision log.
- *
- * @return {boolean}
- *   If the file was saved.
- */
-const save = function() {
-  if (!isEnabled) {
-    return;
-  }
   try {
-    fs.writeFileSync(loc, JSON.stringify(data) + os.EOL);
+    const data = fs.readFileSync(revisionFile);
+    revisions = JSON.parse(data);
   } catch (err) {
+    // File doesn't exist or is invalid JSON - start with empty revisions
+    revisions = {};
+  }
+}
+
+function save() {
+  if (!revisionFile) {
+    const projectName = require('../config').get('project');
+    revisionFile = path.resolve(process.cwd(), `quant-revision-log_${projectName}`);
+  }
+
+  fs.writeFileSync(revisionFile, JSON.stringify(revisions, null, 2));
+}
+
+function store(meta) {
+  if (!isEnabled) {
+    return;
+  }
+
+  revisions[meta.url] = meta;
+}
+
+function has(url, md5) {
+  if (!isEnabled) {
     return false;
   }
-  return true;
-};
 
-/**
- * Get/set the state.
- *
- * @param {boolean} s
- *   The state.
- * @return {boolean}
- *   The state.
- */
-const enabled = function(s) {
-  if (s) {
-    isEnabled = s;
+  return revisions[url] && revisions[url].md5 === md5;
+}
+
+function enabled(value = null) {
+  if (value !== null) {
+    isEnabled = value;
   }
+
   return isEnabled;
-};
+}
 
 module.exports = {
-  has,
-  store,
   load,
   save,
+  store,
+  has,
   enabled,
 };

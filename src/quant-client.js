@@ -151,64 +151,12 @@ module.exports = function (config) {
      *   - Async iterator for memory 21k items ~ 40mb.
      */
     meta: async function (unfold = false, exclude = true, extend = {}) {
-      const records = [];
-      const query = Object.assign(
-        {
-          page_size: 500,
-          published: true,
-          deleted: false,
-          sort_field: "last_modified",
-          sort_direction: "desc",
-        },
-        extend,
-      );
-      const url = `/global-meta?${querystring.stringify(query)}`;
-      const doUnfold = async function (i) {
-        const res = await get(`${url}&page=${i}`);
-        if (res.data.global_meta && res.data.global_meta.records) {
-          res.data.global_meta.records.map((item) =>
-            records.push({
-              url: item.meta.url,
-              md5: item.meta.md5,
-              type: item.meta.type,
-            }),
-          );
-        }
-      };
-
-      let page = 1;
-      // Seed the record set.
-      const res = await get(`${url}&page=${page}`);
-
-      if (!res.data.global_meta) {
-        // If no records have been published then global_meta is not
-        // present in the response.
-        return;
+      try {
+        const response = await get(`${config.get('endpoint')}/meta`, { headers });
+        return handleResponse(response);
+      } catch (error) {
+        throw error;
       }
-
-      if (res.data.global_meta.records) {
-        res.data.global_meta.records.map((item) =>
-          records.push({
-            url: item.meta.url,
-            md5: item.meta.md5,
-            type: item.meta.type,
-          }),
-        );
-      }
-
-      if (unfold) {
-        page++;
-        while (res.data.global_meta.total_pages >= page) {
-          await doUnfold(page);
-          page++;
-        }
-      }
-
-      return {
-        total_pages: res.data.global_meta.total_pages,
-        total_records: res.data.global_meta.total_records,
-        records,
-      };
     },
 
     /**
@@ -584,20 +532,13 @@ module.exports = function (config) {
      *
      * @throws Error.
      */
-    revisions: async function (url) {
-      url = url.indexOf("/") == 0 ? url : `/${url}`;
-      url = url.toLowerCase();
-      url = url.replace(/\/?index\.html/, "");
-
-      const options = {
-        url: `${config.get("endpoint")}/revisions`,
-        headers: {
-          ...headers,
-          "Quant-Url": url,
-        },
-      };
-      const res = await get(options.url, { headers: options.headers });
-      return handleResponse(res);
+    revisions: async function (path) {
+      try {
+        const response = await get(`${config.get('endpoint')}/meta/${path}`, { headers });
+        return handleResponse(response);
+      } catch (error) {
+        throw error;
+      }
     },
 
     /**
@@ -730,18 +671,43 @@ module.exports = function (config) {
      */
     wafLogs: async function (all = false, options = {}) {
       try {
-        const response = await get('/waf/logs', {
+        const response = await get(`${config.get('endpoint')}/waf/logs`, {
+          headers,
           params: {
-            per_page: options.per_page || 10
+            page_size: options.page_size || 10,
+            page: options.page || 1
           }
         });
         return handleResponse(response);
       } catch (error) {
-        console.log('WAF logs error:', {
-          message: error.message,
-          code: error.code,
-          response: error.response && error.response.data
-        });
+        throw error;
+      }
+    },
+
+    /**
+     * Get metadata for multiple URLs in a single request.
+     *
+     * @param {Array} urls
+     *   List of URLs to check.
+     *
+     * @return {object}
+     *   The response containing metadata for all URLs.
+     */
+    batchMeta: async function(urls) {
+      try {
+        const options = {
+          url: `${config.get('endpoint')}/url-meta`,
+          headers: {
+            ...headers
+          },
+          body: {
+            "Quant-Url": urls
+          }
+        };
+
+        const response = await post(options.url, options.body, { headers: options.headers });
+        return handleResponse(response);
+      } catch (error) {
         throw error;
       }
     },

@@ -3,10 +3,13 @@ const color = require('picocolors');
 const config = require('../config');
 const client = require('../quant-client');
 const getFiles = require('../helper/getFiles');
+const normalizePaths = require('../helper/normalizePaths');
 const path = require('path');
 const md5File = require('md5-file');
 const { chunk } = require('../helper/array');
+const quantUrl = require('../helper/quant-url');
 const revisions = require('../helper/revisions');
+const { sep } = require('path');
 
 const command = {
   command: 'deploy [dir]',
@@ -16,8 +19,7 @@ const command = {
     return yargs
       .positional('dir', {
         describe: 'Location of build artifacts',
-        type: 'string',
-        default: null
+        type: 'string'
       })
       .option('attachments', {
         alias: 'a',
@@ -31,6 +33,12 @@ const command = {
         description: 'Skip the automatic unpublish process',
         default: false
       })
+      .option('enable-index-html', {
+        alias: 'h',
+        type: 'boolean',
+        description: 'Push index.html files with page assets',
+        default: false
+      })
       .option('chunk-size', {
         alias: 'cs',
         type: 'number',
@@ -40,52 +48,65 @@ const command = {
       .option('force', {
         alias: 'f',
         type: 'boolean',
-        description: 'Force the deployment (ignore md5 match)',
+        description: 'Force deployment and update revision log',
         default: false
       });
   },
 
-  async promptArgs() {
-    const dir = await text({
-      message: 'Enter the build directory to deploy',
-      defaultValue: config.get('dir') || 'build'
-    });
+  async promptArgs(providedArgs = {}) {
+    const configDir = config.get('dir') || 'build';
+    
+    let dir = providedArgs.dir;
+    if (!dir) {
+      dir = await text({
+        message: 'Enter the build directory to deploy',
+        defaultValue: configDir,
+        placeholder: configDir
+      });
+      if (isCancel(dir)) return null;
+    }
 
-    if (isCancel(dir)) return null;
+    const attachments = providedArgs.attachments || false;
 
-    const attachments = await confirm({
-      message: 'Find attachments?',
-      initialValue: false
-    });
+    const enableIndexHtml = providedArgs['enable-index-html'] || false;
 
-    if (isCancel(attachments)) return null;
+    const chunkSize = providedArgs['chunk-size'] || 10;
+
+    let force = providedArgs.force;
+    if (typeof force !== 'boolean') {
+      force = await confirm({
+        message: 'Force deployment? (ignore MD5 checks and revision log)',
+        initialValue: false,
+        active: 'Yes',
+        inactive: 'No'
+      });
+      if (isCancel(force)) return null;
+    }
 
     const skipUnpublish = await confirm({
       message: 'Skip the automatic unpublish process?',
-      initialValue: false
+      initialValue: false,
+      active: 'Yes',
+      inactive: 'No'
     });
-
     if (isCancel(skipUnpublish)) return null;
 
-    const chunkSize = await text({
-      message: 'Enter chunk size for concurrency (1-20)',
-      defaultValue: '10',
-      validate: value => {
-        const num = parseInt(value);
-        if (isNaN(num) || num < 1 || num > 20) {
-          return 'Please enter a number between 1 and 20';
-        }
-      }
+    const skipPurge = await confirm({
+      message: 'Skip the automatic cache purge process?',
+      initialValue: false,
+      active: 'Yes',
+      inactive: 'No'
     });
-
-    if (isCancel(chunkSize)) return null;
+    if (isCancel(skipPurge)) return null;
 
     return {
       dir,
       attachments,
       'skip-unpublish': skipUnpublish,
-      'chunk-size': parseInt(chunkSize),
-      force: false // Could add this as a prompt if needed
+      'skip-purge': skipPurge,
+      'enable-index-html': enableIndexHtml,
+      'chunk-size': chunkSize,
+      force
     };
   },
 
@@ -98,28 +119,72 @@ const command = {
       process.exit(1);
     }
 
-    const p = path.resolve(process.cwd(), args.dir);
+    const buildDir = args.dir || config.get('dir') || 'build';
+    const p = path.resolve(process.cwd(), buildDir);
+    console.log('Resolved build directory:', p);
+    console.log('Directory exists:', require('fs').existsSync(p));
+
     const quant = client(config);
+
+    // Always enable revision log
+    const projectName = config.get('project');
+    const revisionLogPath = path.resolve(process.cwd(), `quant-revision-log_${projectName}`);
+    revisions.enabled(true);
+    revisions.load(revisionLogPath);
+    console.log(color.dim(`Using revision log: ${revisionLogPath}`));
 
     try {
       await quant.ping();
     } catch (err) {
+      console.log('Error details:', {
+        message: err.message,
+        response: err.response && err.response.data,
+        status: err.response && err.response.status
+      });
       throw new Error(`Unable to connect to Quant: ${err.message}`);
     }
 
     let files;
     try {
       files = await getFiles(p);
+      console.log('Found files:', files.length);
     } catch (err) {
+      console.log('Error getting files:', err);
       throw new Error(err.message);
     }
 
+    // Helper function to check if error is an MD5 match
+    const isMD5Match = (error) => {
+      // Check for any kind of MD5 match message
+      if (error.response && error.response.data && error.response.data.errorMsg) {
+        if (error.response.data.errorMsg === 'MD5 already matches existing file.' ||
+            error.response.data.errorMsg.includes('Published version already has md5')) {
+          return true;
+        }
+      }
+
+      if (error.message) {
+        if (error.message.includes('Published version already has md5') ||
+            error.message.includes('MD5 already matches')) {
+          return true;
+        }
+      }
+
+      return false;
+    };
+
     // Process files in chunks
-    files = chunk(files, args['chunk-size']);
+    files = chunk(files, args['chunk-size'] || 10);
     for (let i = 0; i < files.length; i++) {
       await Promise.all(files[i].map(async (file) => {
-        const md5 = md5File.sync(file);
         const filepath = path.relative(p, file);
+        const md5 = md5File.sync(file);
+
+        // Check revision log if not forcing
+        if (!args.force && revisions.has(filepath, md5)) {
+          console.log(color.dim(`Skipping ${filepath} (matches revision log)`));
+          return;
+        }
         
         try {
           const meta = await quant.send(
@@ -130,11 +195,126 @@ const command = {
             args['skip-purge'], 
             args['enable-index-html']
           );
-          return `Deployed ${filepath}`;
+
+          // Always store successful uploads in revision log
+          revisions.store({
+            url: filepath,
+            md5: md5,
+            ...meta
+          });
+
+          console.log(color.green('✓') + ` ${filepath}`);
+          return meta;
         } catch (err) {
-          throw new Error(`Failed to deploy ${filepath}: ${err.message}`);
+          // If not forcing and it's an MD5 match, skip the file
+          if (!args.force && isMD5Match(err)) {
+            console.log(color.dim(`Skipping ${filepath} (already up to date)`));
+            // Store MD5 matches in revision log
+            if (revisions.enabled()) {
+              revisions.store({
+                url: filepath,
+                md5: md5
+              });
+            }
+            return;
+          }
+
+          // If forcing, or it's not an MD5 match, show warning and continue
+          if (args.force && isMD5Match(err)) {
+            console.log(color.yellow(`Force uploading ${filepath} (ignoring MD5 match)`));
+            return;
+          }
+
+          // For actual errors
+          console.log(color.yellow(`Warning: Failed to deploy ${filepath}: ${err.message}`));
+          return; // Continue with next file
         }
       }));
+    }
+
+    // Save revision log
+    revisions.save();
+    console.log(color.dim('Revision log updated'));
+
+    if (args['skip-unpublish']) {
+      console.log(color.yellow('Skipping the automatic unpublish process'));
+      return 'Deployment completed successfully';
+    }
+
+    let data;
+    try {
+      data = await quant.meta(true);
+    } catch (err) {
+      console.log(color.yellow(`Failed to fetch metadata: ${err.message}`));
+      return 'Deployment completed with warnings';
+    }
+
+    const normalizePath = (filePath) => {
+      filePath = filePath.startsWith('/') ? filePath.slice(1) : filePath;
+      filePath = filePath.toLowerCase();
+      if (filePath.endsWith('/index.html')) {
+        return filePath.slice(0, -11);
+      }
+      if (filePath === 'index.html') {
+        return '';
+      }
+      if (filePath.endsWith('index.html')) {
+        return filePath.slice(0, -10);
+      }
+      return filePath;
+    };
+
+    const relativeFiles = new Set();
+    for (let i = 0; i < files.length; i++) {
+      files[i].forEach((file) => {
+        const relativePath = path.relative(p, file);
+        const normalizedPath = normalizePath(relativePath);
+        relativeFiles.add(normalizedPath);
+
+        if (normalizedPath.endsWith('/')) {
+          relativeFiles.add(normalizedPath.slice(0, -1));
+        } else {
+          relativeFiles.add(normalizedPath + '/');
+        }
+      });
+    }
+
+    if (!data || !('records' in data)) {
+      return 'Deployment completed successfully';
+    }
+
+    for (const item of data.records) {
+      const remoteUrl = normalizePath(item.url);
+
+      console.log('Checking remote file:', remoteUrl);
+      console.log('Exists locally:', relativeFiles.has(remoteUrl));
+
+      if (relativeFiles.has(remoteUrl) || 
+          relativeFiles.has(remoteUrl + '/') || 
+          relativeFiles.has(remoteUrl.replace(/\/$/, ''))) {
+        console.log(color.dim(`Keeping ${item.url} (exists locally)`));
+        continue;
+      }
+
+      if (item.type && item.type === 'redirect') {
+        console.log(color.dim(`Keeping ${item.url} (redirect)`));
+        continue;
+      }
+
+      if (args['skip-unpublish-regex']) {
+        const match = item.url.match(args['skip-unpublish-regex']);
+        if (match) {
+          console.log(color.dim(`Skipping unpublish via regex match: ${item.url}`));
+          continue;
+        }
+      }
+
+      try {
+        await quant.unpublish(item.url);
+        console.log(color.yellow(`✓ ${item.url} unpublished`));
+      } catch (err) {
+        console.log(color.red(`Failed to unpublish ${item.url}: ${err.message}`));
+      }
     }
 
     return 'Deployment completed successfully';

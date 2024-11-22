@@ -17,8 +17,9 @@ async function fromArgs(args = {}) {
     clientid: process.env.QUANT_CLIENT_ID,
     project: process.env.QUANT_PROJECT,
     token: process.env.QUANT_TOKEN,
-    endpoint: process.env.QUANT_ENDPOINT || 'https://api.quantcdn.io/v1',
-    bearer: process.env.QUANT_BEARER
+    endpoint: process.env.QUANT_ENDPOINT,
+    bearer: process.env.QUANT_BEARER,
+    dir: process.env.QUANT_DIR
   };
 
   // Then try to load from quant.json
@@ -26,22 +27,37 @@ async function fromArgs(args = {}) {
   try {
     fileConfig = JSON.parse(fs.readFileSync('quant.json'));
   } catch (err) {
-    // File doesn't exist or is invalid JSON - that's ok
+    console.log('Debug - No quant.json found or error:', err.message);
   }
 
-  // Merge configs with precedence: args > env > file > defaults
+  // Set defaults
+  const defaults = {
+    endpoint: 'https://api.quantcdn.io/v1',
+    dir: 'build'
+  };
+
+  // Merge configs with precedence: CLI args > env > file > defaults
   config = {
-    ...config,  // Default values
+    ...defaults,
     ...fileConfig,
     ...Object.fromEntries(
       Object.entries(envConfig).filter(([_, v]) => v !== undefined)
-    ),
-    ...Object.fromEntries(
-      Object.entries(args).filter(([_, v]) => v !== undefined)
     )
   };
 
-  // Ensure required fields are present
+  // Only merge specific CLI args we care about
+  if (args.dir) config.dir = args.dir;
+  if (args.endpoint) config.endpoint = args.endpoint;
+  if (args.clientid) config.clientid = args.clientid;
+  if (args.project) config.project = args.project;
+  if (args.token) config.token = args.token;
+  if (args.bearer) config.bearer = args.bearer;
+
+  // Ensure endpoint ends with /v1
+  if (config.endpoint && !config.endpoint.endsWith('/v1')) {
+    config.endpoint = `${config.endpoint}/v1`;
+  }
+
   return (
     config.clientid !== undefined &&
     config.project !== undefined &&
@@ -63,13 +79,19 @@ function save() {
     fs.mkdirSync(configDir, {recursive: true});
   }
 
+  // Remove /v1 from endpoint when saving to config file
+  const saveConfig = {...config};
+  if (saveConfig.endpoint && saveConfig.endpoint.endsWith('/v1')) {
+    saveConfig.endpoint = saveConfig.endpoint.slice(0, -3);
+  }
+
   // Save to both global and local config
   fs.writeFileSync(
     path.join(configDir, 'config.json'),
-    JSON.stringify(config, null, 2)
+    JSON.stringify(saveConfig, null, 2)
   );
 
-  fs.writeFileSync('quant.json', JSON.stringify(config, null, 2));
+  fs.writeFileSync('quant.json', JSON.stringify(saveConfig, null, 2));
 }
 
 module.exports = {

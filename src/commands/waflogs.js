@@ -70,27 +70,31 @@ const command = {
 
     // If fields is provided, skip that prompt
     let fields = providedArgs.fields;
-    if (!fields) {
+    if (fields === undefined) {
       fields = await text({
         message: 'Enter comma-separated field names to show (optional)',
       });
       if (isCancel(fields)) return null;
+      // Don't return empty string
+      fields = fields || null;
     }
 
     // If output is provided, skip that prompt
     let output = providedArgs.output;
-    if (!output) {
+    if (output === undefined) {
       output = await text({
         message: 'Location to write CSV output (optional)',
       });
       if (isCancel(output)) return null;
+      // Don't return empty string
+      output = output || null;
     }
 
     return {
       all: fetchAll,
       size,
-      fields: fields ? (typeof fields === 'string' ? fields.split(',') : fields) : undefined,
-      output: output || undefined
+      fields: fields ? (typeof fields === 'string' ? fields.split(',') : fields) : null,
+      output: output || null
     };
   },
 
@@ -117,19 +121,36 @@ const command = {
     try {
       console.log('Fetching WAF logs with params:', {
         all: args.all,
-        per_page: args.size,
+        page_size: args.size,
         endpoint: config.get('endpoint')
       });
 
-      const response = await quant.wafLogs(args.all, { per_page: args.size });
+      let allLogs = [];
+      let currentPage = 1;
+      let totalPages = 1;
 
-      if (response === -1) {
-        throw new Error('Invalid credentials provided, please check your token has access');
-      }
+      do {
+        const response = await quant.wafLogs(args.all, { 
+          page_size: args.size,
+          page: currentPage 
+        });
+
+        if (response === -1) {
+          throw new Error('Invalid credentials provided, please check your token has access');
+        }
+
+        allLogs = allLogs.concat(response.records);
+        totalPages = response.total_pages;
+        currentPage++;
+
+        if (args.all && currentPage <= totalPages) {
+          console.log(`Fetching page ${currentPage} of ${totalPages}...`);
+        }
+      } while (args.all && currentPage <= totalPages);
 
       if (args.output) {
         try {
-          fs.writeFileSync(args.output, papa.unparse(response.records));
+          fs.writeFileSync(args.output, papa.unparse(allLogs));
           return `Logs saved to ${args.output}`;
         } catch (err) {
           throw new Error(`Failed to write output file: ${err.message}`);
@@ -137,15 +158,15 @@ const command = {
       }
 
       // Format the logs output
-      if (!response.records || response.records.length === 0) {
+      if (!allLogs || allLogs.length === 0) {
         return 'No logs found';
       }
 
-      let output = `Found ${response.total_records} logs (showing page ${response.page} of ${response.total_pages})\n`;
+      let output = `Found ${allLogs.length} logs\n`;
       
       if (args.fields) {
         const fields = typeof args.fields === 'string' ? args.fields.split(',') : args.fields;
-        response.records.forEach(log => {
+        allLogs.forEach(log => {
           output += '\n---\n';
           fields.forEach(field => {
             if (log[field] !== undefined) {
@@ -154,7 +175,7 @@ const command = {
           });
         });
       } else {
-        response.records.forEach(log => {
+        allLogs.forEach(log => {
           output += '\n---\n';
           Object.entries(log).forEach(([key, value]) => {
             if (key === 'meta') {
