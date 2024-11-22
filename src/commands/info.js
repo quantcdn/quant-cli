@@ -44,21 +44,7 @@ const command = {
     try {
       const meta = await quant.meta();
       if (meta && meta.total_records) {
-        const totals = { content: 0, redirects: 0 };
-        
-        if (meta.records) {
-          meta.records.forEach(item => {
-            if (item.type && item.type === 'redirect') {
-              totals.redirects++;
-            } else {
-              totals.content++;
-            }
-          });
-        }
-
-        output += `\nTotal records: ${meta.total_records}\n`;
-        output += `  - content: ${totals.content}\n`;
-        output += `  - redirects: ${totals.redirects}\n`;
+        output += `\nTotal records: ${meta.total_records}`;
       }
     } catch (err) {
       output += '\nCould not fetch metadata';

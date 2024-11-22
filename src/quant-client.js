@@ -151,12 +151,64 @@ module.exports = function (config) {
      *   - Async iterator for memory 21k items ~ 40mb.
      */
     meta: async function (unfold = false, exclude = true, extend = {}) {
-      try {
-        const response = await get(`${config.get('endpoint')}/meta`, { headers });
-        return handleResponse(response);
-      } catch (error) {
-        throw error;
+      const records = [];
+      const query = Object.assign(
+        {
+          page_size: 500,
+          published: true,
+          deleted: false,
+          sort_field: "last_modified",
+          sort_direction: "desc",
+        },
+        extend,
+      );
+      const url = `${config.get("endpoint")}/global-meta?${querystring.stringify(query)}`;
+      const doUnfold = async function (i) {
+        const res = await get(`${url}&page=${i}`, { headers });
+        if (res.data.global_meta && res.data.global_meta.records) {
+          res.data.global_meta.records.map((item) =>
+            records.push({
+              url: item.meta.url,
+              md5: item.meta.md5,
+              type: item.meta.type,
+            }),
+          );
+        }
+      };
+
+      let page = 1;
+      // Seed the record set.
+      const res = await get(`${url}&page=${page}`, { headers });
+
+      if (!res.data.global_meta) {
+        // If no records have been published then global_meta is not
+        // present in the response.
+        return;
       }
+
+      if (res.data.global_meta.records) {
+        res.data.global_meta.records.map((item) =>
+          records.push({
+            url: item.meta.url,
+            md5: item.meta.md5,
+            type: item.meta.type,
+          }),
+        );
+      }
+
+      if (unfold) {
+        page++;
+        while (res.data.global_meta.total_pages >= page) {
+          await doUnfold(page);
+          page++;
+        }
+      }
+
+      return {
+        total_pages: res.data.global_meta.total_pages,
+        total_records: res.data.global_meta.total_records,
+        records,
+      };
     },
 
     /**
