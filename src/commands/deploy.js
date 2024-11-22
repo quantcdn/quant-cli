@@ -33,6 +33,10 @@ const command = {
         description: 'Skip the automatic unpublish process',
         default: false
       })
+      .option('skip-unpublish-regex', {
+        type: 'string',
+        description: 'Skip unpublishing paths that match this regex pattern'
+      })
       .option('enable-index-html', {
         alias: 'h',
         type: 'boolean',
@@ -136,11 +140,6 @@ const command = {
     try {
       await quant.ping();
     } catch (err) {
-      console.log('Error details:', {
-        message: err.message,
-        response: err.response && err.response.data,
-        status: err.response && err.response.status
-      });
       throw new Error(`Unable to connect to Quant: ${err.message}`);
     }
 
@@ -286,18 +285,13 @@ const command = {
     for (const item of data.records) {
       const remoteUrl = normalizePath(item.url);
 
-      console.log('Checking remote file:', remoteUrl);
-      console.log('Exists locally:', relativeFiles.has(remoteUrl));
-
       if (relativeFiles.has(remoteUrl) || 
           relativeFiles.has(remoteUrl + '/') || 
           relativeFiles.has(remoteUrl.replace(/\/$/, ''))) {
-        console.log(color.dim(`Keeping ${item.url} (exists locally)`));
         continue;
       }
 
       if (item.type && item.type === 'redirect') {
-        console.log(color.dim(`Keeping ${item.url} (redirect)`));
         continue;
       }
 

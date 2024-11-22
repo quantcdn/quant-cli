@@ -21,8 +21,8 @@ const command = {
       })
       .option('force', {
         alias: 'f',
-        describe: 'Skip confirmation prompt',
         type: 'boolean',
+        description: 'Skip confirmation prompt',
         default: false
       });
   },
@@ -40,11 +40,13 @@ const command = {
 
     // If force is not provided, ask for confirmation
     if (!providedArgs.force) {
-      const confirmUnpublish = await confirm({
+      const shouldUnpublish = await confirm({
         message: 'Are you sure you want to unpublish this asset?',
-        initialValue: false
+        initialValue: false,
+        active: 'Yes',
+        inactive: 'No'
       });
-      if (isCancel(confirmUnpublish) || !confirmUnpublish) return null;
+      if (isCancel(shouldUnpublish) || !shouldUnpublish) return null;
     }
 
     return { path, force: providedArgs.force };
@@ -55,31 +57,24 @@ const command = {
       throw new Error('Operation cancelled');
     }
 
-    if (!args.path) {
-      const promptedArgs = await this.promptArgs(args);
-      if (!promptedArgs) {
-        throw new Error('Operation cancelled');
-      }
-      args = { ...args, ...promptedArgs };
-    }
-
     if (!await config.fromArgs(args)) {
       process.exit(1);
     }
 
-    // If not in force mode and not coming from interactive prompt, confirm
-    if (!args.force && !args._interactiveMode) {
-      console.log(color.yellow('This will unpublish the asset from QuantCDN'));
-      console.log(color.yellow('Use --force to skip this warning'));
-      process.exit(0);
-    }
-
     const quant = client(config);
+
     try {
       await quant.unpublish(args.path);
       return 'Unpublished successfully';
     } catch (err) {
-      throw new Error(`Failed to unpublish: ${err.message}`);
+      // Check for already unpublished message
+      if (err.response?.data?.errorMsg?.includes('already unpublished') ||
+          err.response?.data?.errorMsg?.includes('not published')) {
+        return color.dim(`Path [${args.path}] is already unpublished`);
+      }
+      
+      // For other errors, show the full response
+      throw new Error(`Failed to unpublish: ${err.message}\nResponse: ${JSON.stringify(err.response?.data, null, 2)}`);
     }
   }
 };
