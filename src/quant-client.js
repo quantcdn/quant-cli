@@ -21,10 +21,6 @@ module.exports = function (config) {
     'Quant-Organisation': config.get('clientid')
   };
 
-  if (config.get('bearer')) {
-    headers['Authorization'] = `Bearer ${config.get('bearer')}`;
-  }
-
   // Create axios instance with dynamic baseURL
   const client = axios.create({
     baseURL: config.get('endpoint')

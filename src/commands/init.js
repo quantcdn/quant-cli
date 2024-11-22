@@ -65,12 +65,6 @@ const command = {
 
     if (isCancel(token)) return null;
 
-    const bearer = await password({
-      message: 'Enter an optional QuantCDN API token (press Enter to skip)',
-    });
-
-    if (isCancel(bearer)) return null;
-
     const dir = await text({
       message: 'Directory containing static assets',
       defaultValue: 'build'
@@ -83,7 +77,6 @@ const command = {
       clientid,
       project,
       token,
-      bearer: bearer || undefined,
       dir
     };
   },
@@ -107,7 +100,6 @@ const command = {
       clientid: args.clientid,
       project: args.project,
       token: args.token,
-      bearer: args.bearer,
       dir: args.dir || 'build'
     };
 

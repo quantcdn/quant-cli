@@ -107,7 +107,6 @@ These options can be used with any command:
 --project, -p     Project name for QuantCDN
 --token, -t       Project token for QuantCDN
 --endpoint, -e    API endpoint for QuantCDN (default: "https://api.quantcdn.io")
---bearer          Scoped API bearer token
 ```
 
 ## Configuration
@@ -120,7 +119,6 @@ The CLI can be configured using either:
    - `QUANT_PROJECT`
    - `QUANT_TOKEN`
    - `QUANT_ENDPOINT`
-   - `QUANT_BEARER`
 
 ## Examples
 

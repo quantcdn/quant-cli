@@ -63,7 +63,6 @@ describe('Config', function() {
         clientid: null,
         project: null,
         token: null,
-        bearer: null,
       }, null, 2);
       expect(writeFileSync.calledOnceWith('./quant.json', data)).to.be.true;
     });
@@ -77,7 +76,6 @@ describe('Config', function() {
         clientid: 'test',
         project: null,
         token: null,
-        bearer: null,
       }, null, 2);
       expect(writeFileSync.calledOnceWith('./quant.json', data)).to.be.true;
     });
@@ -89,7 +87,6 @@ describe('Config', function() {
         clientid: null,
         project: null,
         token: null,
-        bearer: null,
       }, null, 2);
       expect(writeFileSync.calledOnceWith('/tmp/quant.json', data)).to.be.true;
     });

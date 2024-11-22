@@ -18,7 +18,6 @@ async function fromArgs(args = {}) {
     project: process.env.QUANT_PROJECT,
     token: process.env.QUANT_TOKEN,
     endpoint: process.env.QUANT_ENDPOINT,
-    bearer: process.env.QUANT_BEARER,
     dir: process.env.QUANT_DIR
   };
 
@@ -51,7 +50,6 @@ async function fromArgs(args = {}) {
   if (args.clientid) config.clientid = args.clientid;
   if (args.project) config.project = args.project;
   if (args.token) config.token = args.token;
-  if (args.bearer) config.bearer = args.bearer;
 
   // Ensure endpoint ends with /v1
   if (config.endpoint && !config.endpoint.endsWith('/v1')) {
@@ -61,7 +59,7 @@ async function fromArgs(args = {}) {
   return (
     config.clientid !== undefined &&
     config.project !== undefined &&
-    (config.token !== undefined || config.bearer !== undefined)
+    config.token !== undefined
   );
 }
 

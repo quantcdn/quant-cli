@@ -162,10 +162,6 @@ function cliMode() {
       alias: 'e',
       describe: 'API endpoint for QuantCDN',
       type: 'string',
-    })
-    .option('bearer', {
-      describe: 'Scoped API bearer token',
-      type: 'string',
     });
 
   // Add all commands to yargs
@@ -175,25 +171,24 @@ function cliMode() {
       command.command || name,
       command.describe,
       command.builder || {},
-      (argv) => handleCommand(command, argv)
+      async (argv) => handleCommand(command, argv)
     );
   });
 
   yargsInstance.demandCommand().parse();
 }
 
-// Determine if we should run in interactive or CLI mode
-if (process.argv.length <= 2) {
-  interactiveMode().catch((error) => {
-    outro(color.red(`Error: ${error.message}`));
-    process.exit(1);
-  });
-} else {
-  cliMode();
+// Check if being run directly
+if (require.main === module) {
+  // No arguments = interactive mode
+  if (process.argv.length === 2) {
+    interactiveMode();
+  } else {
+    cliMode();
+  }
 }
 
-// Handle interrupts gracefully
-process.on('SIGINT', () => {
-  outro(color.yellow('\nOperation cancelled'));
-  process.exit(0);
-});
+module.exports = {
+  interactiveMode,
+  cliMode
+};

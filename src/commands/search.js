@@ -9,10 +9,9 @@ const color = require('picocolors');
 const config = require('../config');
 const client = require('../quant-client');
 const fs = require('fs');
-const glob = require('glob');
 
 const command = {
-  command: 'search [operation]',
+  command: 'search <operation>',
   describe: 'Perform search index operations',
   
   builder: (yargs) => {
@@ -23,7 +22,7 @@ const command = {
         choices: ['status', 'index', 'unindex', 'clear']
       })
       .option('path', {
-        describe: 'Path to JSON file(s) for index/unindex operations',
+        describe: 'Path to file or URL',
         type: 'string'
       });
   },
@@ -36,7 +35,7 @@ const command = {
         message: 'Select search operation',
         options: [
           { value: 'status', label: 'Show search index status' },
-          { value: 'index', label: 'Add/update search records' },
+          { value: 'index', label: 'Add/update items in search index' },
           { value: 'unindex', label: 'Remove item from search index' },
           { value: 'clear', label: 'Clear entire search index' }
         ]
@@ -44,47 +43,33 @@ const command = {
       if (isCancel(operation)) return null;
     }
 
-    let additionalArgs = {};
-
-    // If path is required but not provided, prompt for it
-    if (['index', 'unindex'].includes(operation) && !providedArgs.path) {
-      const path = await text({
+    // If path is needed and not provided, prompt for it
+    let path = providedArgs.path;
+    if ((operation === 'index' || operation === 'unindex') && !path) {
+      path = await text({
         message: operation === 'index' 
-          ? 'Enter path to JSON file(s)'
-          : 'Enter URL path to remove from index',
+          ? 'Enter path to JSON file containing search data'
+          : 'Enter URL to remove from search index',
         validate: value => !value ? 'Path is required' : undefined
       });
       if (isCancel(path)) return null;
-      additionalArgs.path = path;
     }
 
-    // If it's clear operation, confirm
-    if (operation === 'clear' && !providedArgs.confirmed) {
-      const confirmClear = await confirm({
+    // For clear operation, ask for confirmation
+    if (operation === 'clear') {
+      const shouldClear = await confirm({
         message: 'Are you sure you want to clear the entire search index?',
         initialValue: false
       });
-      if (isCancel(confirmClear) || !confirmClear) return null;
+      if (isCancel(shouldClear) || !shouldClear) return null;
     }
 
-    return {
-      operation,
-      ...additionalArgs
-    };
+    return { operation, path };
   },
 
   async handler(args) {
     if (!args) {
       throw new Error('Operation cancelled');
-    }
-
-    // Check for required arguments and prompt if missing
-    if (!args.operation || ((['index', 'unindex'].includes(args.operation)) && !args.path)) {
-      const promptedArgs = await this.promptArgs(args); // Pass existing args
-      if (!promptedArgs) {
-        throw new Error('Operation cancelled');
-      }
-      args = { ...args, ...promptedArgs };
     }
 
     if (!await config.fromArgs(args)) {
@@ -96,24 +81,19 @@ const command = {
     switch (args.operation) {
       case 'status':
         const status = await quant.searchStatus();
-        return status;
+        return `Search index status:\nTotal documents: ${status.index?.entries || 0}`;
 
       case 'index':
-        let jsonFiles = [];
-        const stats = fs.statSync(args.path);
-        
-        if (stats.isDirectory()) {
-          jsonFiles = glob.sync(args.path + '/*.json');
-        } else {
-          jsonFiles = [args.path];
+        if (!args.path) {
+          throw new Error('Path to JSON file is required');
         }
-
-        for (const file of jsonFiles) {
-          await quant.searchIndex(file);
-        }
-        return `Successfully indexed ${jsonFiles.length} file(s)`;
+        await quant.searchIndex(args.path);
+        return 'Successfully added items to search index';
 
       case 'unindex':
+        if (!args.path) {
+          throw new Error('URL to remove is required');
+        }
         await quant.searchRemove(args.path);
         return `Successfully removed ${args.path} from search index`;
 

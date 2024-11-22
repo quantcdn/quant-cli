@@ -1,36 +1,33 @@
 /**
- * Redirect a QuantCDN path to another.
+ * Create a redirect.
  *
  * @usage
- *   quant redirect <from> <to> --status
+ *   quant redirect <from> <to> [status]
  */
-const { text, select, isCancel } = require('@clack/prompts');
+const { text, confirm, isCancel, select } = require('@clack/prompts');
 const color = require('picocolors');
 const config = require('../config');
 const client = require('../quant-client');
 
 const command = {
-  command: 'redirect [from] [to] [status] [author]',
+  command: 'redirect <from> <to> [status]',
   describe: 'Create a redirect',
   
   builder: (yargs) => {
     return yargs
       .positional('from', {
-        describe: 'Path to redirect from',
+        describe: 'URL to redirect from',
         type: 'string'
       })
       .positional('to', {
-        describe: 'Path to redirect to',
+        describe: 'URL to redirect to',
         type: 'string'
       })
       .positional('status', {
-        describe: 'HTTP status code (301 or 302)',
+        describe: 'HTTP status code',
         type: 'number',
-        default: 302
-      })
-      .positional('author', {
-        describe: 'Author of the redirect',
-        type: 'string'
+        default: 302,
+        choices: [301, 302, 303, 307, 308]
       });
   },
 
@@ -39,8 +36,8 @@ const command = {
     let from = providedArgs.from;
     if (!from) {
       from = await text({
-        message: 'Enter the path to redirect from',
-        validate: value => !value ? 'Source path is required' : undefined
+        message: 'Enter URL to redirect from',
+        validate: value => !value ? 'From URL is required' : undefined
       });
       if (isCancel(from)) return null;
     }
@@ -49,8 +46,8 @@ const command = {
     let to = providedArgs.to;
     if (!to) {
       to = await text({
-        message: 'Enter the path to redirect to',
-        validate: value => !value ? 'Destination path is required' : undefined
+        message: 'Enter URL to redirect to',
+        validate: value => !value ? 'To URL is required' : undefined
       });
       if (isCancel(to)) return null;
     }
@@ -59,26 +56,20 @@ const command = {
     let status = providedArgs.status;
     if (!status) {
       status = await select({
-        message: 'Select redirect type',
+        message: 'Select HTTP status code',
         options: [
-          { value: 301, label: '301 - Permanent redirect' },
-          { value: 302, label: '302 - Temporary redirect' }
+          { value: 301, label: '301 - Permanent' },
+          { value: 302, label: '302 - Found (Temporary)' },
+          { value: 303, label: '303 - See Other' },
+          { value: 307, label: '307 - Temporary Redirect' },
+          { value: 308, label: '308 - Permanent Redirect' }
         ],
         initialValue: 302
       });
       if (isCancel(status)) return null;
     }
 
-    // If author is provided, skip that prompt
-    let author = providedArgs.author;
-    if (!author) {
-      author = await text({
-        message: 'Enter author name (optional)',
-      });
-      if (isCancel(author)) return null;
-    }
-
-    return { from, to, status: parseInt(status), author: author || null };
+    return { from, to, status };
   },
 
   async handler(args) {
@@ -86,22 +77,15 @@ const command = {
       throw new Error('Operation cancelled');
     }
 
-    if (!args.from || !args.to) {
-      const promptedArgs = await this.promptArgs();
-      if (!promptedArgs) {
-        throw new Error('Operation cancelled');
-      }
-      args = { ...args, ...promptedArgs };
-    }
-
     if (!await config.fromArgs(args)) {
       process.exit(1);
     }
 
     const quant = client(config);
+
     try {
-      await quant.redirect(args.from, args.to, args.author, args.status);
-      return `Added redirect from ${args.from} to ${args.to}`;
+      await quant.redirect(args.from, args.to, null, args.status);
+      return `Created redirect from ${args.from} to ${args.to} (${args.status})`;
     } catch (err) {
       throw new Error(`Failed to create redirect: ${err.message}`);
     }
