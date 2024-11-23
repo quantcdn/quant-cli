@@ -590,22 +590,35 @@ module.exports = function (config) {
     },
 
     /**
-     * Purge URL patterns from Quants Varnish.
+     * Purge content from the cache.
      *
-     * @param {string} urlPattern
+     * @param {string} url
+     *   The URL to purge.
+     * @param {string} cacheKeys
+     *   Space separated cache keys to purge.
+     * @param {object} options
+     *   Additional options for the purge.
      *
-     * @throws Error
+     * @return {object}
+     *   The response.
+     *
+     * @throws Error.
      */
-    purge: async function (urlPattern) {
-      const options = {
-        url: `${config.get("endpoint")}/purge`,
-        headers: {
-          ...headers,
-          "Quant-Url": urlPattern,
-        },
-      };
-      const res = await post(options.url, {}, { headers: options.headers });
-      return handleResponse(res);
+    purge: async function(url, cacheKeys, options = {}) {
+      const purgeHeaders = { ...headers };
+      
+      if (cacheKeys) {
+        purgeHeaders['Cache-Keys'] = cacheKeys;
+      } else {
+        purgeHeaders['Quant-Url'] = url;
+      }
+
+      if (options.softPurge) {
+        purgeHeaders['Soft-Purge'] = 'true';
+      }
+
+      const response = await post(`${config.get('endpoint')}/purge`, {}, { headers: purgeHeaders });
+      return handleResponse(response);
     },
 
     /**
