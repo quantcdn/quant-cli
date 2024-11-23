@@ -51,6 +51,24 @@ async function fromArgs(args = {}, silent = false) {
   if (args.project) config.project = args.project;
   if (args.token) config.token = args.token;
 
+  // Handle enable-index-html setting
+  if (args['enable-index-html'] !== undefined) {
+    // If setting exists in config, ensure it matches
+    if (config.enableIndexHtml !== undefined && 
+        config.enableIndexHtml !== args['enable-index-html']) {
+      throw new Error(
+        'Project was previously deployed with ' + 
+        (config.enableIndexHtml ? '--enable-index-html' : 'no --enable-index-html') +
+        '. Cannot change this setting after initial deployment.'
+      );
+    }
+    // Store the setting if it's the first time
+    if (config.enableIndexHtml === undefined) {
+      config.enableIndexHtml = args['enable-index-html'];
+      save();
+    }
+  }
+
   // Check required config
   const missingConfig = [];
   if (!config.clientid) missingConfig.push('clientid');
