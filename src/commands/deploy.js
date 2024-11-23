@@ -206,18 +206,14 @@ const command = {
             args['enable-index-html']
           );
 
-          // Always store successful uploads in revision log
-          revisions.store({
-            url: filepath,
-            md5: md5,
-            ...meta
-          });
-
+          // Clear line before output
+          process.stdout.write('\x1b[2K\r');
           console.log(color.green('✓') + ` ${filepath}`);
           return meta;
         } catch (err) {
           // If not forcing and it's an MD5 match, skip the file
           if (!args.force && isMD5Match(err)) {
+            process.stdout.write('\x1b[2K\r');
             console.log(color.dim(`Skipping ${filepath} (already up to date)`));
             // Store MD5 matches in revision log
             if (revisions.enabled()) {
@@ -231,11 +227,13 @@ const command = {
 
           // If forcing, or it's not an MD5 match, show warning and continue
           if (args.force && isMD5Match(err)) {
+            process.stdout.write('\x1b[2K\r');
             console.log(color.yellow(`Force uploading ${filepath} (ignoring MD5 match)`));
             return;
           }
 
           // For actual errors
+          process.stdout.write('\x1b[2K\r');
           console.log(color.yellow(`Warning: Failed to deploy ${filepath}: ${err.message}`));
           return; // Continue with next file
         }
@@ -293,6 +291,8 @@ const command = {
       return 'Deployment completed successfully';
     }
 
+    // Get list of files to unpublish
+    const filesToUnpublish = [];
     for (const item of data.records) {
       const remoteUrl = normalizePath(item.url);
 
@@ -309,19 +309,32 @@ const command = {
       if (args['skip-unpublish-regex']) {
         const match = item.url.match(args['skip-unpublish-regex']);
         if (match) {
+          process.stdout.write('\x1b[2K\r');  // Clear line
           console.log(color.dim(`Skipping unpublish via regex match: ${item.url}`));
           continue;
         }
       }
 
-      try {
-        await quant.unpublish(item.url);
-        console.log(color.yellow(`✓ ${item.url} unpublished`));
-      } catch (err) {
-        console.log(color.red(`Failed to unpublish ${item.url}: ${err.message}`));
-      }
+      filesToUnpublish.push(item.url);
     }
 
+    // Process unpublish in chunks
+    const unpublishBatches = chunk(filesToUnpublish, args['chunk-size'] || 10);
+    for (const batch of unpublishBatches) {
+      await Promise.all(batch.map(async (url) => {
+        try {
+          await quant.unpublish(url);
+          process.stdout.write('\x1b[2K\r');  // Clear line
+          console.log(color.yellow(`✓ ${url} unpublished`));
+        } catch (err) {
+          process.stdout.write('\x1b[2K\r');  // Clear line
+          console.log(color.red(`Failed to unpublish ${url}: ${err.message}`));
+        }
+      }));
+    }
+
+    // Clear any remaining spinner before final message
+    process.stdout.write('\x1b[2K\r');
     return 'Deployment completed successfully';
   }
 };

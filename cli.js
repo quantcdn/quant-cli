@@ -130,8 +130,17 @@ async function handleCommand(command, argv) {
       argv = { ...argv, ...promptedArgs };
     }
 
-    const result = await command.handler(argv);
-    console.log(color.green(result || 'Operation completed successfully!'));
+    const spin = spinner();
+    spin.start(`Executing ${command.command.split(' ')[0]}`);
+    
+    try {
+      const result = await command.handler(argv);
+      spin.stop('');
+      console.log(color.green(result || 'Operation completed successfully!'));
+    } catch (error) {
+      spin.stop('');
+      throw error;
+    }
   } catch (error) {
     console.error(color.red(`Error: ${error.message}`));
     process.exit(1);
