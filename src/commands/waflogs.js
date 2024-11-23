@@ -119,11 +119,6 @@ const command = {
     const quant = client(config);
     
     try {
-      console.log('Fetching WAF logs with params:', {
-        all: args.all,
-        page_size: args.size,
-        endpoint: config.get('endpoint')
-      });
 
       let allLogs = [];
       let currentPage = 1;
@@ -197,18 +192,6 @@ const command = {
       return output;
 
     } catch (err) {
-      console.log('Error details:', {
-        message: err.message,
-        code: err.code,
-        status: err.response && err.response.status,
-        data: err.response && err.response.data,
-        config: {
-          url: err.config && err.config.url,
-          method: err.config && err.config.method,
-          headers: err.config && err.config.headers
-        }
-      });
-
       // Format a user-friendly error message
       let errorMessage = 'Failed to fetch WAF logs: ';
       if (err.code === 'ECONNREFUSED') {

@@ -335,6 +335,27 @@ const command = {
 
     // Clear any remaining spinner before final message
     process.stdout.write('\x1b[2K\r');
+
+    // Cute robot animation frames
+    const frames = [
+      '\\(o o)/',  // arms up
+      '|(o o)|',   // arms middle
+      '/(o o)\\',  // arms down
+      '|(o o)|',   // arms middle
+      '\\(o o)/',  // arms up
+      '\\(- -)/',  // blink!
+    ];
+
+    // Play the animation
+    for (let i = 0; i < frames.length; i++) {
+      process.stdout.write('\x1b[2K\r'); // Clear line
+      console.log(color.cyan(frames[i]));
+      await new Promise(resolve => setTimeout(resolve, 150)); // 150ms between frames
+      process.stdout.write('\x1b[1A'); // Move cursor up one line
+    }
+
+    // Clear the animation
+    process.stdout.write('\x1b[2K\r');
     return 'Deployment completed successfully';
   }
 };
