@@ -131,7 +131,7 @@ const command = {
       let normalizedPath = '/' + filepath.toLowerCase();
       
       // Special cases for HTML files
-      if (normalizedPath.endsWith('.html')) {
+      if (!args['enable-index-html'] && normalizedPath.endsWith('/index.html')) {
         // Case 1: Root index.html -> /
         if (normalizedPath === '/index.html') {
           return '/';
@@ -139,7 +139,7 @@ const command = {
         
         // Case 2: Directory index.html -> directory path
         if (normalizedPath.endsWith('/index.html')) {
-          return normalizedPath.slice(0, -10); // Remove index.html
+          return normalizedPath.slice(0, -11); // Remove index.html including the slash
         }
       }
       
@@ -163,7 +163,7 @@ const command = {
       process.stdout.write('\x1b[2K\r');
     };
 
-    // Process files in batches for efficient API calls
+    // Process files in batches
     const batchSize = 20;
     const batches = chunk(files, batchSize);
     
@@ -171,8 +171,23 @@ const command = {
       const batch = batches[i];
       const batchPaths = batch.map(file => {
         const filepath = path.relative(p, file);
-        // Keep index.html in API paths
-        return '/' + filepath.toLowerCase();
+        let normalizedPath = '/' + filepath.toLowerCase();
+        
+        // Remove both /index.html and trailing slashes
+        if (!args['enable-index-html'] && normalizedPath.endsWith('/index.html')) {
+
+          // Case 1: Root index.html -> /
+          if (normalizedPath === '/index.html') {
+            return '/';
+          }
+          
+          // Case 2: Directory index.html -> directory path
+          if (normalizedPath.endsWith('/index.html')) {
+            return normalizedPath.slice(0, -11); // Remove index.html including the slash
+          }
+        }
+        
+        return normalizedPath;
       });
 
       // Update progress
@@ -183,21 +198,50 @@ const command = {
       process.stdout.write(`${spinChar} ${progress} Checking batch of files...`);
 
       try {
-        // Get metadata for all files in batch
         const response = await quant.batchMeta(batchPaths);
+        
+        console.log('\nDebug - Batch request:', {
+          batchPaths: batchPaths
+        });
+
+        console.log('\nDebug - API Response records:', {
+          records: response.global_meta.records.map(r => ({
+            url: r.meta.url,
+            type: r.meta.type,
+            md5: r.meta.md5
+          }))
+        });
         
         // Process each file in the batch
         for (let j = 0; j < batch.length; j++) {
           const file = batch[j];
           const filepath = path.relative(p, file);
-          const localPath = '/' + filepath.toLowerCase();
+          let localPath = '/' + filepath.toLowerCase();
+          
+          // Remove both /index.html and trailing slashes
+          if (!args['enable-index-html']) {
+            localPath = localPath
+              .replace(/\/index\.html$/, '')  // Remove /index.html
+              .replace(/\/$/, '');            // Remove trailing slash
+          }
+          
           const localmd5 = md5File.sync(file);
 
           // Find matching record in response
           const record = response.global_meta.records.find(r => {
             if (!r || !r.meta) return false;
             const recordUrl = r.meta.url || '';
-            return recordUrl.toLowerCase() === localPath;
+            const matches = recordUrl.toLowerCase() === localPath;
+            
+            if (filepath.includes('index.html')) {
+              console.log('\nDebug - Content path comparison:', {
+                localPath,
+                recordUrl: recordUrl.toLowerCase(),
+                matches
+              });
+            }
+            
+            return matches;
           });
 
           if (record && record.meta.md5 === localmd5) {
