@@ -130,6 +130,17 @@ const command = {
 
     const quant = client(config);
 
+    // If enableIndexHtml is not set in config, this is first deploy
+    if (config.get('enableIndexHtml') === undefined) {
+      config.set({
+        enableIndexHtml: args['enable-index-html'] || false
+      });
+      config.save();
+      console.log(color.dim(
+        `Project configured with ${args['enable-index-html'] ? '--enable-index-html' : 'no --enable-index-html'}`
+      ));
+    }
+
     // Always enable revision log
     const projectName = config.get('project');
     const revisionLogPath = path.resolve(process.cwd(), `quant-revision-log_${projectName}`);

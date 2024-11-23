@@ -50,6 +50,19 @@ async function fromArgs(args = {}) {
   if (args.clientid) config.clientid = args.clientid;
   if (args.project) config.project = args.project;
   if (args.token) config.token = args.token;
+  
+  // Handle enable-index-html setting
+  if (args['enable-index-html'] !== undefined) {
+    // If setting exists in config, ensure it matches
+    if (config.enableIndexHtml !== undefined && 
+        config.enableIndexHtml !== args['enable-index-html']) {
+      throw new Error(
+        'Project was previously deployed with ' + 
+        (config.enableIndexHtml ? '--enable-index-html' : 'no --enable-index-html') +
+        '. Cannot change this setting after initial deployment.'
+      );
+    }
+  }
 
   // Ensure endpoint ends with /v1
   if (config.endpoint && !config.endpoint.endsWith('/v1')) {

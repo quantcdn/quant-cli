@@ -146,6 +146,9 @@ const command = {
       return normalizedPath;
     };
 
+    // Use enableIndexHtml setting from config if it exists
+    const enableIndexHtml = config.get('enableIndexHtml') ?? args['enable-index-html'] ?? false;
+
     // Initialize revision log
     const projectName = config.get('project');
     const revisionLogPath = path.resolve(process.cwd(), `quant-revision-log_${projectName}`);
@@ -169,8 +172,6 @@ const command = {
     
     for (let i = 0; i < batches.length; i++) {
       const batch = batches[i];
-
-      // Normalize paths for batch
       const batchPaths = batch.map(file => {
         const filepath = path.relative(p, file);
         return normalizePath(filepath);
@@ -185,18 +186,6 @@ const command = {
 
       try {
         const response = await quant.batchMeta(batchPaths);
-        
-        console.log('\nDebug - Batch request:', {
-          batchPaths: batchPaths
-        });
-
-        console.log('\nDebug - API Response records:', {
-          records: response.global_meta.records.map(r => ({
-            url: r.meta.url,
-            type: r.meta.type,
-            md5: r.meta.md5
-          }))
-        });
         
         // Process each file in the batch
         for (let j = 0; j < batch.length; j++) {
@@ -214,15 +203,6 @@ const command = {
             if (!r || !r.meta) return false;
             const recordUrl = r.meta.url || '';
             const matches = recordUrl.toLowerCase() === localPath;
-            
-            if (filepath.includes('index.html')) {
-              console.log('\nDebug - Content path comparison:', {
-                localPath,
-                recordUrl: recordUrl.toLowerCase(),
-                matches
-              });
-            }
-            
             return matches;
           });
 
