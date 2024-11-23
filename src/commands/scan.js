@@ -169,25 +169,11 @@ const command = {
     
     for (let i = 0; i < batches.length; i++) {
       const batch = batches[i];
+
+      // Normalize paths for batch
       const batchPaths = batch.map(file => {
         const filepath = path.relative(p, file);
-        let normalizedPath = '/' + filepath.toLowerCase();
-        
-        // Remove both /index.html and trailing slashes
-        if (!args['enable-index-html'] && normalizedPath.endsWith('/index.html')) {
-
-          // Case 1: Root index.html -> /
-          if (normalizedPath === '/index.html') {
-            return '/';
-          }
-          
-          // Case 2: Directory index.html -> directory path
-          if (normalizedPath.endsWith('/index.html')) {
-            return normalizedPath.slice(0, -11); // Remove index.html including the slash
-          }
-        }
-        
-        return normalizedPath;
+        return normalizePath(filepath);
       });
 
       // Update progress
@@ -218,13 +204,9 @@ const command = {
           const filepath = path.relative(p, file);
           let localPath = '/' + filepath.toLowerCase();
           
-          // Remove both /index.html and trailing slashes
-          if (!args['enable-index-html']) {
-            localPath = localPath
-              .replace(/\/index\.html$/, '')  // Remove /index.html
-              .replace(/\/$/, '');            // Remove trailing slash
-          }
-          
+          // Normalize path
+          localPath = normalizePath(filepath);
+
           const localmd5 = md5File.sync(file);
 
           // Find matching record in response
