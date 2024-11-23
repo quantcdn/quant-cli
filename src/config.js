@@ -11,7 +11,7 @@ let config = {};
  * 3. quant.json file
  * 4. Default values
  */
-async function fromArgs(args = {}) {
+async function fromArgs(args = {}, silent = false) {
   // First check environment variables
   const envConfig = {
     clientid: process.env.QUANT_CLIENT_ID,
@@ -26,7 +26,7 @@ async function fromArgs(args = {}) {
   try {
     fileConfig = JSON.parse(fs.readFileSync('quant.json'));
   } catch (err) {
-    console.log('Debug - No quant.json found or error:', err.message);
+    // Silent fail - we'll handle missing config later
   }
 
   // Set defaults
@@ -50,30 +50,31 @@ async function fromArgs(args = {}) {
   if (args.clientid) config.clientid = args.clientid;
   if (args.project) config.project = args.project;
   if (args.token) config.token = args.token;
-  
-  // Handle enable-index-html setting
-  if (args['enable-index-html'] !== undefined) {
-    // If setting exists in config, ensure it matches
-    if (config.enableIndexHtml !== undefined && 
-        config.enableIndexHtml !== args['enable-index-html']) {
-      throw new Error(
-        'Project was previously deployed with ' + 
-        (config.enableIndexHtml ? '--enable-index-html' : 'no --enable-index-html') +
-        '. Cannot change this setting after initial deployment.'
-      );
-    }
+
+  // Check required config
+  const missingConfig = [];
+  if (!config.clientid) missingConfig.push('clientid');
+  if (!config.project) missingConfig.push('project');
+  if (!config.token) missingConfig.push('token');
+
+  if (missingConfig.length > 0 && !silent) {
+    const color = require('picocolors');
+    console.log(color.red('Missing required configuration:'));
+    console.log(color.yellow(`Missing: ${missingConfig.join(', ')}`));
+    console.log('\nYou can provide configuration in several ways:');
+    console.log('1. Run "quant init" to create a new configuration');
+    console.log('2. Create a quant.json file in this directory');
+    console.log('3. Set environment variables:');
+    console.log('   - QUANT_CLIENT_ID');
+    console.log('   - QUANT_PROJECT');
+    console.log('   - QUANT_TOKEN');
+    console.log('4. Provide via command line arguments:');
+    console.log('   --clientid, -c');
+    console.log('   --project, -p');
+    console.log('   --token, -t');
   }
 
-  // Ensure endpoint ends with /v1
-  if (config.endpoint && !config.endpoint.endsWith('/v1')) {
-    config.endpoint = `${config.endpoint}/v1`;
-  }
-
-  return (
-    config.clientid !== undefined &&
-    config.project !== undefined &&
-    config.token !== undefined
-  );
+  return missingConfig.length === 0;
 }
 
 function get(key) {

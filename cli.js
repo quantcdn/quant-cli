@@ -27,7 +27,7 @@ async function interactiveMode() {
 
   try {
     // Check for config before showing menu
-    if (!await config.fromArgs({ _: [''] })) {
+    if (!await config.fromArgs({ _: [''] }, true)) {
       const shouldInit = await confirm({
         message: 'No configuration found. Would you like to initialize a new project?',
         initialValue: true
