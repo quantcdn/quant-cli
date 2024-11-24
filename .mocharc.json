@@ -1,0 +1,8 @@
+{
+  "loader": "esm",
+  "experimental-modules": true,
+  "node-option": [
+    "experimental-vm-modules",
+    "no-warnings"
+  ]
+} 
