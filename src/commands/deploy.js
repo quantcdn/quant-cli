@@ -1,4 +1,4 @@
-const { text, confirm, isCancel, select } = require('@clack/prompts');
+const { text, confirm, isCancel, select, spinner } = require('@clack/prompts');
 const color = require('picocolors');
 const config = require('../config');
 const client = require('../quant-client');
@@ -128,7 +128,7 @@ const command = {
     console.log('Resolved build directory:', p);
     console.log('Directory exists:', require('fs').existsSync(p));
 
-    const quant = client(config);
+    const quant = this.client ? this.client(config) : client(config);
 
     // If enableIndexHtml is not set in config, this is first deploy
     if (config.get('enableIndexHtml') === undefined) {

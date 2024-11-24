@@ -8,9 +8,11 @@
     "node": ">=16"
   },
   "scripts": {
-    "test": "mocha tests/**/*.test.mjs",
-    "test:watch": "mocha tests/**/*.test.mjs --watch",
-    "test:coverage": "c8 mocha tests/**/*.test.mjs",
+    "test": "mocha 'tests/**/**/*.test.mjs'",
+    "test:watch": "mocha 'tests/**/**/*.test.mjs' --watch",
+    "test:coverage": "c8 mocha 'tests/**/**/*.test.mjs'",
+    "test:config": "mocha 'tests/unit/config.test.mjs'",
+    "test:deploy": "mocha 'tests/unit/commands/deploy.test.mjs'",
     "lint:cli": "eslint cli.js",
     "lint:src": "eslint src",
     "lint": "npm run lint:cli && npm run lint:src"
@@ -51,6 +53,7 @@
     "yargs": "^17.0.1"
   },
   "devDependencies": {
+    "axios-mock-adapter": "^2.1.0",
     "c8": "^8.0.1",
     "chai": "^5.1.0",
     "mocha": "^10.3.0",

@@ -1,11 +1,12 @@
 import { expect } from 'chai';
 import fs from 'fs';
 import sinon from 'sinon';
-import config from '../../src/config.js';
+
+const config = await import('../../src/config.js');
 
 describe('Config', () => {
   beforeEach(() => {
-    // Reset config before each test
+    // Reset config to empty state
     config.set({});
     
     // Clean up any test config files
