@@ -53,18 +53,21 @@ async function fromArgs(args = {}, silent = false) {
 
   // Handle enable-index-html setting
   if (args['enable-index-html'] !== undefined) {
+    const enableIndexHtml = args['enable-index-html'] === true || args['enable-index-html'] === '';
+    
     // If setting exists in config, ensure it matches
     if (config.enableIndexHtml !== undefined && 
-        config.enableIndexHtml !== args['enable-index-html']) {
+        config.enableIndexHtml !== enableIndexHtml) {
+      const currentSetting = config.enableIndexHtml ? 'enabled' : 'disabled';
+      const requestedSetting = enableIndexHtml ? 'enable' : 'disable';
       throw new Error(
-        'Project was previously deployed with ' + 
-        (config.enableIndexHtml ? '--enable-index-html' : 'no --enable-index-html') +
-        '. Cannot change this setting after initial deployment.'
+        `Cannot ${requestedSetting} index.html URLs - this project was deployed with index.html URLs ${currentSetting}`
       );
     }
+    
     // Store the setting if it's the first time
     if (config.enableIndexHtml === undefined) {
-      config.enableIndexHtml = args['enable-index-html'];
+      config.enableIndexHtml = enableIndexHtml;
       save();
     }
   }

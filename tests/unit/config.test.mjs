@@ -133,7 +133,21 @@ describe('Config', () => {
         await config.fromArgs({ 'enable-index-html': false }, true);
         expect.fail('Should have thrown error');
       } catch (err) {
-        expect(err.message).to.include('Cannot change this setting');
+        expect(err.message).to.equal('Cannot disable index.html URLs - this project was deployed with index.html URLs enabled');
+      }
+    });
+
+    it('should handle enableIndexHtml false setting', async () => {
+      // First deployment sets the setting to false
+      await config.fromArgs({ 'enable-index-html': false }, true);
+      expect(config.get('enableIndexHtml')).to.be.false;
+
+      // Try to enable it later
+      try {
+        await config.fromArgs({ 'enable-index-html': true }, true);
+        expect.fail('Should have thrown error');
+      } catch (err) {
+        expect(err.message).to.equal('Cannot enable index.html URLs - this project was deployed with index.html URLs disabled');
       }
     });
 

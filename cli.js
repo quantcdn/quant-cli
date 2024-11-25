@@ -134,8 +134,8 @@ function cliMode() {
       describe: command.describe,
       builder: command.builder,
       handler: async (argv) => {
-        await showActiveConfig();
         try {
+          await showActiveConfig();
           const result = await command.handler(argv);
           if (result) {
             console.log(result);
