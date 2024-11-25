@@ -31,18 +31,24 @@ const command = {
       .example('quant page about.html /about --enable-index-html', 'Deploy with index.html suffix');
   },
 
-  async promptArgs() {
-    const file = await text({
-      message: 'Enter path to local HTML file',
+  async promptArgs(providedArgs = {}) {
+    let file = providedArgs.file;
+    if (!file) {
+      file = await text({
+        message: 'Enter path to local HTML file',
       validate: value => !value ? 'File path is required' : undefined
-    });
-    if (isCancel(file)) return null;
+      });
+      if (isCancel(file)) return null;
+    }
 
-    const location = await text({
+    let location = providedArgs.location;
+    if (!location) {
+      location = await text({
       message: 'Enter the access URI (where the page will be available)',
       validate: value => !value ? 'Location is required' : undefined
-    });
-    if (isCancel(location)) return null;
+      });
+      if (isCancel(location)) return null;
+    }
 
     return { file, location };
   },
