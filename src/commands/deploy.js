@@ -9,6 +9,7 @@ const md5File = require('md5-file');
 const { chunk } = require('../helper/array');
 const quantUrl = require('../helper/quant-url');
 const revisions = require('../helper/revisions');
+const isMD5Match = require('../helper/is-md5-match');
 const { sep } = require('path');
 
 const command = {
@@ -163,26 +164,6 @@ const command = {
       throw new Error(err.message);
     }
 
-    // Helper function to check if error is an MD5 match
-    const isMD5Match = (error) => {
-      // Check for any kind of MD5 match message
-      if (error.response && error.response.data && error.response.data.errorMsg) {
-        if (error.response.data.errorMsg === 'MD5 already matches existing file.' ||
-            error.response.data.errorMsg.includes('Published version already has md5')) {
-          return true;
-        }
-      }
-
-      if (error.message) {
-        if (error.message.includes('Published version already has md5') ||
-            error.message.includes('MD5 already matches')) {
-          return true;
-        }
-      }
-
-      return false;
-    };
-
     // Process files in chunks
     files = chunk(files, args['chunk-size'] || 10);
     for (let i = 0; i < files.length; i++) {
@@ -211,7 +192,7 @@ const command = {
           console.log(color.green('✓') + ` ${filepath}`);
           return meta;
         } catch (err) {
-          // If not forcing and it's an MD5 match, skip the file
+          // Using the helper function
           if (!args.force && isMD5Match(err)) {
             process.stdout.write('\x1b[2K\r');
             console.log(color.dim(`Skipping ${filepath} (already up to date)`));

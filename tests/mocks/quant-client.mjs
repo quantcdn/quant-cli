@@ -2,70 +2,72 @@
  * Mock Quant client for testing.
  */
 export default function (config) {
-  // Store request history for assertions
   const history = {
     get: [],
     post: [],
     patch: []
   };
 
-  // Mock responses
-  const responses = {
-    ping: { project: 'test-project' },
-    meta: {
-      global_meta: {
-        records: [
-          { url: 'test/index.html' }
-        ],
-        total_pages: 1,
-        total_records: 3
-      }
-    }
-  };
-
-  return {
-    // Store request for assertions
+  const client = {
     _history: history,
 
-    // Mock API methods
-    ping: async function() {
-      console.log('Mock client: ping called');
-      history.get.push({ url: '/ping' });
-      return responses.ping;
-    },
-
-    meta: async function() {
-      console.log('Mock client: meta called');
-      history.get.push({ url: '/global-meta' });
-      return responses.meta;
-    },
-
-    send: async function(file, url, force = false, findAttachments = false) {
-      console.log('Mock client: send called', { file, url, force, findAttachments });
+    file: async function(filePath, location) {
       history.post.push({
-        url: '/',
+        url: '/file',
         headers: {
+          'Quant-File-Url': location
+        },
+        data: filePath
+      });
+      return { success: true };
+    },
+
+    markup: async function(filePath, location) {
+      history.post.push({
+        url: '/markup',
+        headers: {
+          'Quant-File-Url': location
+        },
+        data: filePath
+      });
+      return { success: true };
+    },
+
+    send: async function(filePath, location, force = false, findAttachments = false) {
+      history.post.push({
+        url: '/send',
+        headers: {
+          'Quant-File-Url': location,
           'Force-Deploy': force,
           'Find-Attachments': findAttachments
         },
-        data: { file, url }
+        data: filePath
       });
       return { success: true };
     },
 
-    batchMeta: async function() {
-      console.log('Mock client: batchMeta called');
-      history.get.push({ url: '/global-meta' });
-      return responses.meta;
+    meta: async function() {
+      history.get.push({ url: '/meta' });
+      return {
+        records: [],
+        total_pages: 0,
+        total_records: 0
+      };
+    },
+
+    ping: async function() {
+      history.get.push({ url: '/ping' });
+      return { project: 'test-project' };
     },
 
     unpublish: async function(url) {
-      console.log('Mock client: unpublish called', { url });
       history.post.push({
         url: '/unpublish',
-        data: { url }
+        headers: { 'Quant-Url': url }
       });
       return { success: true };
     }
   };
+
+  return client;
 } 

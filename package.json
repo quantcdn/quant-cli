@@ -13,6 +13,8 @@
     "test:coverage": "c8 mocha 'tests/**/**/*.test.mjs'",
     "test:config": "mocha 'tests/unit/config.test.mjs'",
     "test:deploy": "mocha 'tests/unit/commands/deploy.test.mjs'",
+    "test:file": "mocha 'tests/unit/commands/file.test.mjs'",
+    "test:page": "mocha 'tests/unit/commands/page.test.mjs'",
     "lint:cli": "eslint cli.js",
     "lint:src": "eslint src",
     "lint": "npm run lint:cli && npm run lint:src"
