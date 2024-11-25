@@ -10,6 +10,11 @@ function loadCommands() {
     'search': require('./commands/search'),
     'scan': require('./commands/scan'),
 
+    // Edge functions
+    'function': require('./commands/function'),
+    'filter': require('./commands/function_filter'),
+    'auth': require('./commands/function_auth'),
+
     // Destructive operations
     'unpublish': require('./commands/unpublish'),
     'delete': require('./commands/delete'),
@@ -37,12 +42,20 @@ function getCommandOptions() {
     // Visual separator
     { value: 'separator1', label: '───────────────────────', disabled: true },
 
+    // Edge functions
+    { value: 'function', label: 'Deploy an edge function' },
+    { value: 'filter', label: 'Deploy an edge filter' },
+    { value: 'auth', label: 'Deploy an edge auth function' },
+
+    // Visual separator
+    { value: 'separator2', label: '───────────────────────', disabled: true },
+
     // Destructive operations
     { value: 'unpublish', label: 'Unpublish an asset' },
     { value: 'delete', label: 'Delete an asset' },
 
     // Visual separator
-    { value: 'separator2', label: '───────────────────────', disabled: true },
+    { value: 'separator3', label: '───────────────────────', disabled: true },
 
     // Project management
     { value: 'info', label: 'Show project info' },

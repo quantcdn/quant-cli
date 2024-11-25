@@ -755,5 +755,119 @@ module.exports = function (config) {
         throw error;
       }
     },
+
+    /**
+     * Create or update an edge function.
+     * 
+     * @param {string} file - Path to the function file
+     * @param {string} description - Description of the function
+     * @param {string} [uuid] - Optional UUID for updating existing function
+     * @returns {object} Response from the API
+     */
+    edgeFunction: async function(file, description, uuid = null) {
+      if (!description) {
+        throw new Error("Description is required for edge functions");
+      }
+
+      if (!Buffer.isBuffer(file)) {
+        if (!fs.existsSync(file)) {
+          throw new Error("Function file is not accessible.");
+        }
+        file = fs.readFileSync(file, 'utf8');
+      }
+
+      const body = {
+        content: file.toString(),
+        published: true,
+        desc: description
+      };
+
+      if (uuid) {
+        body.uuid = uuid;
+      }
+
+      try {
+        const response = await post(`${config.get('endpoint')}/functions`, body, { headers });
+        return handleResponse(response);
+      } catch (error) {
+        throw error;
+      }
+    },
+
+    /**
+     * Create or update an edge filter function.
+     * 
+     * @param {string} file - Path to the filter function file
+     * @param {string} description - Description of the filter
+     * @param {string} [uuid] - Optional UUID for updating existing filter
+     * @returns {object} Response from the API
+     */
+    edgeFilter: async function(file, description, uuid = null) {
+      if (!description) {
+        throw new Error("Description is required for edge filters");
+      }
+
+      if (!Buffer.isBuffer(file)) {
+        if (!fs.existsSync(file)) {
+          throw new Error("Filter function file is not accessible.");
+        }
+        file = fs.readFileSync(file, 'utf8');
+      }
+
+      const body = {
+        content: file.toString(),
+        published: true,
+        desc: description
+      };
+
+      if (uuid) {
+        body.uuid = uuid;
+      }
+
+      try {
+        const response = await post(`${config.get('endpoint')}/functions/filter`, body, { headers });
+        return handleResponse(response);
+      } catch (error) {
+        throw error;
+      }
+    },
+
+    /**
+     * Create or update an edge auth function.
+     * 
+     * @param {string} file - Path to the auth function file
+     * @param {string} description - Description of the auth function
+     * @param {string} [uuid] - Optional UUID for updating existing auth function
+     * @returns {object} Response from the API
+     */
+    edgeAuth: async function(file, description, uuid = null) {
+      if (!description) {
+        throw new Error("Description is required for auth functions");
+      }
+
+      if (!Buffer.isBuffer(file)) {
+        if (!fs.existsSync(file)) {
+          throw new Error("Auth function file is not accessible.");
+        }
+        file = fs.readFileSync(file, 'utf8');
+      }
+
+      const body = {
+        content: file.toString(),
+        published: true,
+        desc: description
+      };
+
+      if (uuid) {
+        body.uuid = uuid;
+      }
+
+      try {
+        const response = await post(`${config.get('endpoint')}/functions/auth`, body, { headers });
+        return handleResponse(response);
+      } catch (error) {
+        throw error;
+      }
+    }
   };
 };
