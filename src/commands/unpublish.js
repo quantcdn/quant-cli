@@ -39,19 +39,16 @@ const command = {
       throw new Error('Operation cancelled');
     }
 
-    if (!args.path) {
-      const promptedArgs = await this.promptArgs();
-      if (!promptedArgs) {
-        throw new Error('Operation cancelled');
-      }
-      args = { ...args, ...promptedArgs };
-    }
+    const context = {
+      config: this.config || config,
+      client: this.client || (() => client(config))
+    };
 
-    if (!await config.fromArgs(args)) {
+    if (!await context.config.fromArgs(args)) {
       process.exit(1);
     }
 
-    const quant = client(config);
+    const quant = context.client(context.config);
 
     try {
       await quant.unpublish(args.path);
@@ -62,11 +59,7 @@ const command = {
         throw new Error(`Path [${args.path}] not found`);
       }
       
-      // Try to extract error message from response
-      const errorMessage = err.response?.data?.errorMsg || err.message;
-      const responseData = err.response?.data ? JSON.stringify(err.response.data, null, 2) : 'No response data';
-      
-      throw new Error(`Failed to unpublish: ${errorMessage}\nResponse: ${responseData}`);
+      throw new Error(`Failed to unpublish: ${err.message}`);
     }
   }
 };

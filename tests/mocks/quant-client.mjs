@@ -76,7 +76,9 @@ export default function (_config) {
     unpublish: async function(url) {
       history.post.push({
         url: '/unpublish',
-        headers: { 'Quant-Url': url }
+        headers: {
+          'Quant-Url': url
+        }
       });
       return { success: true };
     },
