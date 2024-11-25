@@ -4,7 +4,7 @@
  * @usage
  *   quant redirect <from> <to> [status]
  */
-const { text, isCancel } = require('@clack/prompts');
+const { text, select, isCancel } = require('@clack/prompts');
 const config = require('../config');
 const client = require('../quant-client');
 const isMD5Match = require('../helper/is-md5-match');
