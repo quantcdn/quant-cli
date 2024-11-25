@@ -124,14 +124,18 @@ const command = {
       process.exit(1);
     }
 
-    const buildDir = args.dir || config.get('dir') || 'build';
-    const p = path.resolve(process.cwd(), buildDir);
-    console.log('Resolved build directory:', p);
-    console.log('Directory exists:', require('fs').existsSync(p));
-
     const quant = this.client ? this.client(config) : client(config);
 
-    // If enableIndexHtml is not set in config, this is first deploy
+    try {
+      await quant.ping();
+    } catch (err) {
+      throw new Error(`Unable to connect to Quant: ${err.message}`);
+    }
+
+    const buildDir = args.dir || config.get('dir') || 'build';
+    const p = path.resolve(process.cwd(), buildDir);
+    console.log('Deploying from:', p);
+
     if (config.get('enableIndexHtml') === undefined) {
       config.set({
         enableIndexHtml: args['enable-index-html'] || false
@@ -142,38 +146,27 @@ const command = {
       ));
     }
 
-    // Always enable revision log
     const projectName = config.get('project');
     const revisionLogPath = path.resolve(process.cwd(), `quant-revision-log_${projectName}`);
     revisions.enabled(true);
     revisions.load(revisionLogPath);
-    console.log(color.dim(`Using revision log: ${revisionLogPath}`));
-
-    try {
-      await quant.ping();
-    } catch (err) {
-      throw new Error(`Unable to connect to Quant: ${err.message}`);
-    }
 
     let files;
     try {
       files = await getFiles(p);
-      console.log('Found files:', files.length);
+      console.log('Found', files.length, 'files to process');
     } catch (err) {
-      console.log('Error getting files:', err);
       throw new Error(err.message);
     }
 
-    // Process files in chunks
     files = chunk(files, args['chunk-size'] || 10);
     for (let i = 0; i < files.length; i++) {
       await Promise.all(files[i].map(async (file) => {
         const filepath = path.relative(p, file);
         const md5 = md5File.sync(file);
 
-        // Check revision log if not forcing
         if (!args.force && revisions.has(filepath, md5)) {
-          console.log(color.dim(`Skipping ${filepath} (matches revision log)`));
+          console.log(color.dim(`Skipping ${filepath} (content unchanged)`));
           return;
         }
         
@@ -187,46 +180,35 @@ const command = {
             args['enable-index-html']
           );
 
-          // Clear line before output
-          process.stdout.write('\x1b[2K\r');
-          console.log(color.green('✓') + ` ${filepath}`);
+          console.log(color.green('✓'), filepath);
           return meta;
         } catch (err) {
-          // Using the helper function
           if (!args.force && isMD5Match(err)) {
-            process.stdout.write('\x1b[2K\r');
-            console.log(color.dim(`Skipping ${filepath} (already up to date)`));
-            // Store MD5 matches in revision log
             if (revisions.enabled()) {
               revisions.store({
                 url: filepath,
                 md5: md5
               });
             }
+            console.log(color.dim(`Skipping ${filepath} (content unchanged)`));
             return;
           }
 
-          // If forcing, or it's not an MD5 match, show warning and continue
           if (args.force && isMD5Match(err)) {
-            process.stdout.write('\x1b[2K\r');
             console.log(color.yellow(`Force uploading ${filepath} (ignoring MD5 match)`));
             return;
           }
 
-          // For actual errors
-          process.stdout.write('\x1b[2K\r');
           console.log(color.yellow(`Warning: Failed to deploy ${filepath}: ${err.message}`));
-          return; // Continue with next file
+          return;
         }
       }));
     }
 
-    // Save revision log
     revisions.save();
-    console.log(color.dim('Revision log updated'));
 
     if (args['skip-unpublish']) {
-      console.log(color.yellow('Skipping the automatic unpublish process'));
+      console.log(color.dim('Skipping unpublish process'));
       return 'Deployment completed successfully';
     }
 
@@ -234,7 +216,6 @@ const command = {
     try {
       data = await quant.meta(true);
     } catch (err) {
-      console.log(color.yellow(`Failed to fetch metadata: ${err.message}`));
       return 'Deployment completed with warnings';
     }
 
@@ -272,7 +253,6 @@ const command = {
       return 'Deployment completed successfully';
     }
 
-    // Get list of files to unpublish
     const filesToUnpublish = [];
     for (const item of data.records) {
       const remoteUrl = normalizePath(item.url);
@@ -290,8 +270,6 @@ const command = {
       if (args['skip-unpublish-regex']) {
         const match = item.url.match(args['skip-unpublish-regex']);
         if (match) {
-          process.stdout.write('\x1b[2K\r');  // Clear line
-          console.log(color.dim(`Skipping unpublish via regex match: ${item.url}`));
           continue;
         }
       }
@@ -299,44 +277,17 @@ const command = {
       filesToUnpublish.push(item.url);
     }
 
-    // Process unpublish in chunks
     const unpublishBatches = chunk(filesToUnpublish, args['chunk-size'] || 10);
     for (const batch of unpublishBatches) {
       await Promise.all(batch.map(async (url) => {
         try {
           await quant.unpublish(url);
-          process.stdout.write('\x1b[2K\r');  // Clear line
           console.log(color.yellow(`✓ ${url} unpublished`));
         } catch (err) {
-          process.stdout.write('\x1b[2K\r');  // Clear line
           console.log(color.red(`Failed to unpublish ${url}: ${err.message}`));
         }
       }));
     }
-
-    // Clear any remaining spinner before final message
-    process.stdout.write('\x1b[2K\r');
-
-    // Cute robot animation frames
-    const frames = [
-      '\\(o o)/',  // arms up
-      '|(o o)|',   // arms middle
-      '/(o o)\\',  // arms down
-      '|(o o)|',   // arms middle
-      '\\(o o)/',  // arms up
-      '\\(- -)/',  // blink!
-    ];
-
-    // Play the animation
-    for (let i = 0; i < frames.length; i++) {
-      process.stdout.write('\x1b[2K\r'); // Clear line
-      console.log(color.cyan(frames[i]));
-      await new Promise(resolve => setTimeout(resolve, 150)); // 150ms between frames
-      process.stdout.write('\x1b[1A'); // Move cursor up one line
-    }
-
-    // Clear the animation
-    process.stdout.write('\x1b[2K\r');
     return 'Deployment completed successfully';
   }
 };
