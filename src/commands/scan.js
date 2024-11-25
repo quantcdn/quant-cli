@@ -27,6 +27,11 @@ const command = {
         type: 'boolean',
         default: false
       })
+      .option('skip-unpublish', {
+        describe: 'Skip the unpublish process',
+        type: 'boolean',
+        default: false
+      })
       .option('skip-unpublish-regex', {
         describe: 'Skip the unpublish process for specific regex',
         type: 'string'
@@ -81,8 +86,9 @@ const command = {
     const p = path.resolve(process.cwd(), buildDir);
 
     console.log('Fetching metadata from Quant...');
+    let metadata;
     try {
-      await quant.meta(true);
+      metadata = await quant.meta(true);
       console.log('Metadata fetched successfully');
     } catch (err) {
       throw new Error('Failed to fetch metadata from Quant');
@@ -161,8 +167,7 @@ const command = {
       process.stdout.write(`${spinChar} ${progress} Checking batch of files...`);
 
       try {
-        const response = await quant.batchMeta(batchPaths);
-        
+        const response = await quant.batchMeta(batchPaths);        
         // Process each file in the batch
         for (let j = 0; j < batch.length; j++) {
           const file = batch[j];
@@ -206,6 +211,43 @@ const command = {
       }
     }
 
+
+    // Find paths to unpublish from initial metadata
+    const processedUrls = new Set(); // Track what we've already processed
+    const skippedByRegex = new Set(); // Track files skipped by regex
+    
+    if (!args['skip-unpublish'] && metadata && metadata.records) {
+      const skipPattern = args['skip-unpublish-regex'] ? new RegExp(args['skip-unpublish-regex']) : null;
+      
+      metadata.records.forEach(record => {
+        if (!record.url || processedUrls.has(record.url)) return;
+
+        // Skip redirects
+        if (record.type === 'redirect') {
+          return;
+        }
+
+        // Skip if matches the skip pattern
+        if (skipPattern && skipPattern.test(record.url)) {
+          skippedByRegex.add(record.url);
+          return;
+        }
+
+        // Check if file exists locally
+        const localFile = files.find(file => {
+          const filepath = path.relative(p, file);
+          const localPath = normalizePath(filepath);
+          const recordPath = record.url.toLowerCase();
+          return localPath === recordPath || localPath === recordPath.replace(/^\//, '');
+        });
+
+        if (!localFile) {
+          results.toUnpublish.push(record.url);
+          processedUrls.add(record.url);
+        }
+      });
+    }
+
     // Clear the last progress line
     clearLine();
     process.stdout.write('\n');
@@ -234,6 +276,10 @@ const command = {
       output += color.magenta('\nTo be unpublished:') + `\n${results.toUnpublish.join('\n')}\n`;
     }
 
+    if (skippedByRegex.size > 0) {
+      output += color.blue('\nSkipped by regex:') + `\n${Array.from(skippedByRegex).join('\n')}\n`;
+    }
+
     if (output === '\nScan Results:\n') {
       output += 'No changes found';
     }
@@ -245,6 +291,9 @@ const command = {
     output += `Different: ${results.different.length}\n`;
     output += `Not found: ${results.notFound.length}\n`;
     output += `To be unpublished: ${results.toUnpublish.length}\n`;
+    if (skippedByRegex.size > 0) {
+      output += `Skipped by regex: ${skippedByRegex.size}\n`;
+    }
 
     return output;
   }
