@@ -16,6 +16,7 @@
     "test:file": "mocha 'tests/unit/commands/file.test.mjs'",
     "test:page": "mocha 'tests/unit/commands/page.test.mjs'",
     "test:redirect": "mocha 'tests/unit/commands/redirect.test.mjs'",
+    "test:purge": "mocha 'tests/unit/commands/purge.test.mjs'",
     "lint:cli": "eslint --config .eslintrc.js cli.js",
     "lint:src": "eslint --config .eslintrc.js src",
     "lint:tests": "eslint --config tests/.eslintrc.js tests",

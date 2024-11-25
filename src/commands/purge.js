@@ -30,11 +30,7 @@ const command = {
         describe: 'Mark content as stale rather than delete from edge caches',
         type: 'boolean',
         default: false
-      })
-      .example('quant purge "/about"', 'Purge a single path')
-      .example('quant purge "/*"', 'Purge all content (use quotes)')
-      .example('quant purge --cache-keys="key1 key2"', 'Purge specific cache keys')
-      .example('quant purge "/about" --soft-purge', 'Soft purge a path');
+      });
   },
 
   async promptArgs(providedArgs = {}) {
@@ -98,11 +94,16 @@ const command = {
       throw new Error('Operation cancelled');
     }
 
-    if (!await config.fromArgs(args)) {
+    const context = {
+      config: this.config || config,
+      client: this.client || (() => client(config))
+    };
+
+    if (!await context.config.fromArgs(args)) {
       process.exit(1);
     }
 
-    const quant = client(config);
+    const quant = context.client(context.config);
 
     try {
       const options = {
