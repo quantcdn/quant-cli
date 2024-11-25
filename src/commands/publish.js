@@ -5,7 +5,6 @@
  *   quant publish <path>
  */
 const { text, isCancel } = require('@clack/prompts');
-const color = require('picocolors');
 const config = require('../config');
 const client = require('../quant-client');
 

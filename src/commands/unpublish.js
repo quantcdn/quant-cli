@@ -4,31 +4,24 @@
  * @usage
  *   quant unpublish <path>
  */
-const { text, confirm, isCancel } = require('@clack/prompts');
-const color = require('picocolors');
+const { text, isCancel } = require('@clack/prompts');
 const config = require('../config');
 const client = require('../quant-client');
 
 const command = {
-  command: 'unpublish [path]',
+  command: 'unpublish <path>',
   describe: 'Unpublish an asset',
   
   builder: (yargs) => {
     return yargs
       .positional('path', {
         describe: 'Path to unpublish',
-        type: 'string'
-      })
-      .option('force', {
-        alias: 'f',
-        type: 'boolean',
-        description: 'Skip confirmation prompt',
-        default: false
+        type: 'string',
+        demandOption: true
       });
   },
 
   async promptArgs(providedArgs = {}) {
-    // If path is provided, skip that prompt
     let path = providedArgs.path;
     if (!path) {
       path = await text({
@@ -38,23 +31,20 @@ const command = {
       if (isCancel(path)) return null;
     }
 
-    // If force is not provided, ask for confirmation
-    if (!providedArgs.force) {
-      const shouldUnpublish = await confirm({
-        message: 'Are you sure you want to unpublish this asset?',
-        initialValue: false,
-        active: 'Yes',
-        inactive: 'No'
-      });
-      if (isCancel(shouldUnpublish) || !shouldUnpublish) return null;
-    }
-
-    return { path, force: providedArgs.force };
+    return { path };
   },
 
   async handler(args) {
     if (!args) {
       throw new Error('Operation cancelled');
+    }
+
+    if (!args.path) {
+      const promptedArgs = await this.promptArgs();
+      if (!promptedArgs) {
+        throw new Error('Operation cancelled');
+      }
+      args = { ...args, ...promptedArgs };
     }
 
     if (!await config.fromArgs(args)) {
@@ -65,16 +55,18 @@ const command = {
 
     try {
       await quant.unpublish(args.path);
-      return 'Unpublished successfully';
+      return `Successfully unpublished [${args.path}]`;
     } catch (err) {
-      // Check for already unpublished message
-      if (err.response?.data?.errorMsg?.includes('already unpublished') ||
-          err.response?.data?.errorMsg?.includes('not published')) {
-        return color.dim(`Path [${args.path}] is already unpublished`);
+      // Format a user-friendly error message
+      if (err.response?.status === 404) {
+        throw new Error(`Path [${args.path}] not found`);
       }
       
-      // For other errors, show the full response
-      throw new Error(`Failed to unpublish: ${err.message}\nResponse: ${JSON.stringify(err.response?.data, null, 2)}`);
+      // Try to extract error message from response
+      const errorMessage = err.response?.data?.errorMsg || err.message;
+      const responseData = err.response?.data ? JSON.stringify(err.response.data, null, 2) : 'No response data';
+      
+      throw new Error(`Failed to unpublish: ${errorMessage}\nResponse: ${responseData}`);
     }
   }
 };

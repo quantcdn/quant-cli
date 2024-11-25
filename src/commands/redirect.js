@@ -4,10 +4,10 @@
  * @usage
  *   quant redirect <from> <to> [status]
  */
-const { text, confirm, isCancel, select } = require('@clack/prompts');
-const color = require('picocolors');
+const { text, isCancel } = require('@clack/prompts');
 const config = require('../config');
 const client = require('../quant-client');
+const isMD5Match = require('../helper/is-md5-match');
 
 const command = {
   command: 'redirect <from> <to> [status]',
@@ -17,11 +17,13 @@ const command = {
     return yargs
       .positional('from', {
         describe: 'URL to redirect from',
-        type: 'string'
+        type: 'string',
+        demandOption: true
       })
       .positional('to', {
         describe: 'URL to redirect to',
-        type: 'string'
+        type: 'string',
+        demandOption: true
       })
       .positional('status', {
         describe: 'HTTP status code',
@@ -32,7 +34,6 @@ const command = {
   },
 
   async promptArgs(providedArgs = {}) {
-    // If from is provided, skip that prompt
     let from = providedArgs.from;
     if (!from) {
       from = await text({
@@ -42,7 +43,6 @@ const command = {
       if (isCancel(from)) return null;
     }
 
-    // If to is provided, skip that prompt
     let to = providedArgs.to;
     if (!to) {
       to = await text({
@@ -52,7 +52,6 @@ const command = {
       if (isCancel(to)) return null;
     }
 
-    // If status is provided, skip that prompt
     let status = providedArgs.status;
     if (!status) {
       status = await select({
@@ -87,6 +86,9 @@ const command = {
       await quant.redirect(args.from, args.to, null, args.status);
       return `Created redirect from ${args.from} to ${args.to} (${args.status})`;
     } catch (err) {
+      if (isMD5Match(err)) {
+        return `Skipped redirect from ${args.from} to ${args.to} (already exists)`;
+      }
       throw new Error(`Failed to create redirect: ${err.message}`);
     }
   }

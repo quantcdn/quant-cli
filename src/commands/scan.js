@@ -1,19 +1,15 @@
 /**
- * Validate local file checksums.
- *
- * @usage
- *   quant scan
+ * Scan local files and validate checksums.
  */
-
-const { text, confirm, isCancel, select, spinner } = require('@clack/prompts');
-const color = require('picocolors');
+const { text, confirm, isCancel } = require('@clack/prompts');
 const config = require('../config');
 const client = require('../quant-client');
 const getFiles = require('../helper/getFiles');
 const path = require('path');
 const md5File = require('md5-file');
-const { chunk } = require('../helper/array');
 const revisions = require('../helper/revisions');
+const color = require('picocolors');
+const { chunk } = require('../helper/array');
 
 const command = {
   command: 'scan [options]',
@@ -34,12 +30,6 @@ const command = {
       .option('skip-unpublish-regex', {
         describe: 'Skip the unpublish process for specific regex',
         type: 'string'
-      })
-      .option('enable-index-html', {
-        alias: 'h',
-        type: 'boolean',
-        description: 'Keep index.html in paths when scanning',
-        default: false
       });
   },
 
@@ -70,20 +60,10 @@ const command = {
       if (isCancel(skipUnpublishRegex)) return null;
     }
 
-    let enableIndexHtml = providedArgs['enable-index-html'];
-    if (typeof enableIndexHtml !== 'boolean') {
-      enableIndexHtml = await confirm({
-        message: 'Keep index.html in paths when scanning?',
-        initialValue: false
-      });
-      if (isCancel(enableIndexHtml)) return null;
-    }
-
     return {
       'diff-only': diffOnly,
       'unpublish-only': unpublishOnly,
-      'skip-unpublish-regex': skipUnpublishRegex || undefined,
-      'enable-index-html': enableIndexHtml
+      'skip-unpublish-regex': skipUnpublishRegex || undefined
     };
   },
 
@@ -97,13 +77,12 @@ const command = {
     }
 
     const quant = client(config);
-    const dir = config.get('dir') || 'build';
-    const p = path.resolve(process.cwd(), dir);
+    const buildDir = args.dir || config.get('dir') || 'build';
+    const p = path.resolve(process.cwd(), buildDir);
 
     console.log('Fetching metadata from Quant...');
-    let data;
     try {
-      data = await quant.meta(true);
+      await quant.meta(true);
       console.log('Metadata fetched successfully');
     } catch (err) {
       throw new Error('Failed to fetch metadata from Quant');
@@ -145,9 +124,6 @@ const command = {
       
       return normalizedPath;
     };
-
-    // Use enableIndexHtml setting from config if it exists
-    const enableIndexHtml = config.get('enableIndexHtml') ?? args['enable-index-html'] ?? false;
 
     // Initialize revision log
     const projectName = config.get('project');

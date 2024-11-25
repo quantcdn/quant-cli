@@ -2,7 +2,6 @@
  * Deploy a single file to QuantCDN.
  */
 const { text, isCancel } = require('@clack/prompts');
-const color = require('picocolors');
 const config = require('../config');
 const client = require('../quant-client');
 const fs = require('fs');

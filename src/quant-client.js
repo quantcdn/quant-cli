@@ -3,13 +3,11 @@
  */
 
 const axios = require("axios");
-const util = require("util");
 const fs = require("fs");
 const path = require("path");
 const mime = require("mime-types");
 const querystring = require("querystring");
 const quantURL = require("./helper/quant-url");
-const config = require('./config');
 
 module.exports = function (config) {
   // Set up headers with correct Quant header names
@@ -56,7 +54,7 @@ module.exports = function (config) {
     // If this is an error response, format it
     if (response.isAxiosError) {
       const errorData = response.response && response.response.data ? response.response.data : {};
-      throw new Error(formatError(response));
+      throw new Error(formatError(errorData));
     }
 
     const body =
@@ -86,21 +84,6 @@ module.exports = function (config) {
 
     return body;
   };
-
-  // Helper function to format error message
-  function formatErrorMessage(error) {
-    if (error.response) {
-      // The request was made and the server responded with a status code
-      // that falls out of the range of 2xx
-      return `${error.message}\nResponse: ${JSON.stringify(error.response.data, null, 2)}`;
-    } else if (error.request) {
-      // The request was made but no response was received
-      return `No response received: ${error.message}`;
-    } else {
-      // Something happened in setting up the request that triggered an Error
-      return error.message;
-    }
-  }
 
   // Add this helper function for consistent error handling
   function formatError(error) {
@@ -146,7 +129,7 @@ module.exports = function (config) {
      * @TODO
      *   - Async iterator for memory 21k items ~ 40mb.
      */
-    meta: async function (unfold = false, exclude = true, extend = {}) {
+    meta: async function (unfold = false, _exclude = true, extend = {}) {
       const records = [];
       const query = Object.assign(
         {
@@ -360,7 +343,7 @@ module.exports = function (config) {
     file: async function (
       local,
       location,
-      absolute = false,
+      _absolute = false,
       extraHeaders = {},
       skipPurge = false,
     ) {
@@ -730,7 +713,7 @@ module.exports = function (config) {
      * @return {object}
      *   A list of all WAF logs.
      */
-    wafLogs: async function (all = false, options = {}) {
+    wafLogs: async function (_all = false, options = {}) {
       try {
         const response = await get(`${config.get('endpoint')}/waf/logs`, {
           headers,

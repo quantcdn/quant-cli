@@ -5,20 +5,21 @@
  *   quant delete <path>
  */
 
-const { text, confirm, isCancel, select } = require('@clack/prompts');
+const { text, confirm, isCancel } = require('@clack/prompts');
 const color = require('picocolors');
 const config = require('../config');
 const client = require('../quant-client');
 
 const command = {
-  command: 'delete [path]',
+  command: 'delete <path>',
   describe: 'Delete a deployed path from Quant',
   
   builder: (yargs) => {
     return yargs
       .positional('path', {
         describe: 'Deployed asset path to remove',
-        type: 'string'
+        type: 'string',
+        demandOption: true
       })
       .option('force', {
         alias: 'f',
@@ -29,7 +30,6 @@ const command = {
   },
 
   async promptArgs(providedArgs = {}) {
-    // If path is provided, skip that prompt
     let path = providedArgs.path;
     if (!path) {
       path = await text({
@@ -56,6 +56,15 @@ const command = {
   async handler(args) {
     if (!args) {
       throw new Error('Operation cancelled');
+    }
+
+    // Check for required path argument
+    if (!args.path) {
+      const promptedArgs = await this.promptArgs();
+      if (!promptedArgs) {
+        throw new Error('Operation cancelled');
+      }
+      args = { ...args, ...promptedArgs };
     }
 
     if (!await config.fromArgs(args)) {
@@ -101,7 +110,7 @@ const command = {
       }
       
       // For actual errors
-      throw new Error(`Cannot delete path (${args.path}): ${err.message}`);
+      throw new Error(`Cannot delete path (${args.path || 'undefined'}): ${err.message}`);
     }
   }
 };

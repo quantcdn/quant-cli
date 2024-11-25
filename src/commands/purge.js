@@ -4,8 +4,7 @@
  * @usage
  *   quant purge <path>
  */
-const { text, confirm, isCancel, select } = require('@clack/prompts');
-const color = require('picocolors');
+const { text, confirm, isCancel } = require('@clack/prompts');
 const config = require('../config');
 const client = require('../quant-client');
 

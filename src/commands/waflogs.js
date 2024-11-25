@@ -1,19 +1,15 @@
 /**
- * Provides access to the WAF logs for a project.
+ * Access WAF logs.
  *
  * @usage
- *   quant waf-logs
+ *   quant waflogs
  */
-
-const { text, confirm, isCancel, select } = require('@clack/prompts');
-const color = require('picocolors');
+const { text, confirm, isCancel } = require('@clack/prompts');
 const config = require('../config');
 const client = require('../quant-client');
-const papa = require('papaparse');
-const fs = require('fs');
 
 const command = {
-  command: 'waf:logs',
+  command: 'waflogs',
   describe: 'Access project WAF logs',
   
   builder: (yargs) => {

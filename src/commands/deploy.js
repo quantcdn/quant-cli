@@ -1,16 +1,13 @@
-const { text, confirm, isCancel, select, spinner } = require('@clack/prompts');
+const { text, confirm, isCancel } = require('@clack/prompts');
 const color = require('picocolors');
 const config = require('../config');
 const client = require('../quant-client');
 const getFiles = require('../helper/getFiles');
-const normalizePaths = require('../helper/normalizePaths');
 const path = require('path');
 const md5File = require('md5-file');
 const { chunk } = require('../helper/array');
-const quantUrl = require('../helper/quant-url');
 const revisions = require('../helper/revisions');
 const isMD5Match = require('../helper/is-md5-match');
-const { sep } = require('path');
 
 const command = {
   command: 'deploy [dir]',

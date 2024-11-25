@@ -1,8 +1,5 @@
-const { text, password, confirm, isCancel } = require('@clack/prompts');
-const color = require('picocolors');
+const { text } = require('@clack/prompts');
 const config = require('../config');
-const client = require('../quant-client');
-const fs = require('fs');
 
 const command = {
   command: 'init',

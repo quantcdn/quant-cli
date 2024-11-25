@@ -15,9 +15,10 @@
     "test:deploy": "mocha 'tests/unit/commands/deploy.test.mjs'",
     "test:file": "mocha 'tests/unit/commands/file.test.mjs'",
     "test:page": "mocha 'tests/unit/commands/page.test.mjs'",
-    "lint:cli": "eslint cli.js",
-    "lint:src": "eslint src",
-    "lint": "npm run lint:cli && npm run lint:src"
+    "lint:cli": "eslint --config .eslintrc.js cli.js",
+    "lint:src": "eslint --config .eslintrc.js src",
+    "lint:tests": "eslint --config tests/.eslintrc.js tests",
+    "lint": "npm run lint:cli && npm run lint:src && npm run lint:tests"
   },
   "repository": {
     "type": "git",
@@ -61,6 +62,7 @@
     "mocha": "^10.3.0",
     "nock": "^13.5.4",
     "sinon": "^17.0.1",
-    "sinon-chai": "^4.0.0"
+    "sinon-chai": "^4.0.0",
+    "eslint": "^8.0.0"
   }
 }
