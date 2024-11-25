@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 
-const { intro, outro, select, confirm, isCancel, spinner } = require('@clack/prompts');
+const { intro, outro, select, confirm, isCancel } = require('@clack/prompts');
 const color = require('picocolors');
 const { getCommandOptions, getCommand, loadCommands } = require('./src/commandLoader');
 const config = require('./src/config');
@@ -124,7 +124,7 @@ function cliMode() {
 
   // Add all commands to yargs
   const commands = loadCommands();
-  Object.entries(commands).forEach(([name, command]) => {
+  Object.entries(commands).forEach(([_name, command]) => {
     yargsInstance = yargsInstance.command({
       command: command.command,
       describe: command.describe,

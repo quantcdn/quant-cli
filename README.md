@@ -37,7 +37,7 @@ quant <command> [options]
 ### Content Management
 - `quant deploy [dir]` - Deploy the output of a static generator
   ```bash
-  quant deploy [dir] [--attachments] [--skip-unpublish] [--chunk-size=10] [--force]
+  quant deploy [dir] [--attachments] [--skip-unpublish] [--skip-unpublish-regex=pattern] [--enable-index-html] [--chunk-size=10] [--force]
   ```
 
 - `quant file <file> <location>` - Deploy a single asset
@@ -47,7 +47,7 @@ quant <command> [options]
 
 - `quant page <file> <location>` - Make a local page asset available
   ```bash
-  quant page path/to/page.html /about-us
+  quant page path/to/page.html /about-us [--enable-index-html]
   ```
 
 ### Publishing Controls
@@ -58,7 +58,7 @@ quant <command> [options]
 
 - `quant unpublish <path>` - Unpublish an asset
   ```bash
-  quant unpublish /about-us [--force]
+  quant unpublish /about-us
   ```
 
 - `quant delete <path>` - Delete a deployed path
@@ -79,6 +79,25 @@ quant <command> [options]
 - `quant redirect <from> <to> [status]` - Create a redirect
   ```bash
   quant redirect /old-page /new-page [--status=301]
+  ```
+
+### Edge Functions
+- `quant function <file> <description> [uuid]` - Deploy an edge function
+  ```bash
+  quant function handler.js "My edge function"                                     # Deploy new function
+  quant function handler.js "Updated function" 019361ae-2516-788a-8f50-e803ff561c34  # Update existing
+  ```
+
+- `quant filter <file> <description> [uuid]` - Deploy an edge filter function
+  ```bash
+  quant filter filter.js "My edge filter"                                         # Deploy new filter
+  quant filter filter.js "Updated filter" 019361ae-2516-788a-8f50-e803ff561c34   # Update existing
+  ```
+
+- `quant auth <file> <description> [uuid]` - Deploy an edge auth function
+  ```bash
+  quant auth auth.js "My auth function"                                          # Deploy new auth function
+  quant auth auth.js "Updated auth" 019361ae-2516-788a-8f50-e803ff561c34        # Update existing
   ```
 
 ### Search
@@ -148,7 +167,7 @@ These options can be used with any command:
 --clientid, -c    Project customer id for QuantCDN
 --project, -p     Project name for QuantCDN
 --token, -t       Project token for QuantCDN
---endpoint, -e    API endpoint for QuantCDN (default: "https://api.quantcdn.io")
+--endpoint, -e    API endpoint for QuantCDN (default: "https://api.quantcdn.io/v1")
 ```
 
 ## Configuration
@@ -186,6 +205,11 @@ quant redirect /old-page /new-page --status=301
 quant purge "/*"                              # Purge all content
 quant purge --cache-keys="key1 key2"          # Purge specific cache keys
 quant purge /about --soft-purge               # Soft purge a path
+
+# Deploy edge functions
+quant function handler.js "My edge function"   # Deploy a new function
+quant auth auth.js "My auth function"          # Deploy an auth function
+quant filter filter.js "My edge filter"        # Deploy a filter function
 
 # Check deployment status
 quant scan --diff-only
