@@ -16,42 +16,43 @@ const command = {
   builder: (yargs) => {
     return yargs
       .positional('dir', {
-        describe: 'Location of build artifacts',
+        describe: 'Directory containing static assets',
         type: 'string'
       })
       .option('attachments', {
-        alias: 'a',
+        describe: 'Deploy attachments',
         type: 'boolean',
-        description: 'Find attachments',
-        default: false
+        default: false,
+        hidden: true
       })
       .option('skip-unpublish', {
-        alias: 'u',
+        describe: 'Skip the unpublish process',
         type: 'boolean',
-        description: 'Skip the automatic unpublish process',
         default: false
       })
       .option('skip-unpublish-regex', {
-        type: 'string',
-        description: 'Skip unpublishing paths that match this regex pattern'
+        describe: 'Skip the unpublish process for specific regex',
+        type: 'string'
       })
       .option('enable-index-html', {
-        alias: 'h',
+        describe: 'Keep index.html in URLs',
         type: 'boolean',
-        description: 'Push index.html files with page assets',
         default: false
       })
       .option('chunk-size', {
-        alias: 'cs',
+        describe: 'Number of files to process at once',
         type: 'number',
-        description: 'Control the chunk-size for concurrency',
         default: 10
       })
       .option('force', {
-        alias: 'f',
+        describe: 'Force deployment even if files exist',
         type: 'boolean',
-        description: 'Force deployment and update revision log',
         default: false
+      })
+      .option('revision-log', {
+        describe: 'Path to revision log file',
+        type: 'string',
+        hidden: true
       });
   },
 
@@ -144,9 +145,10 @@ const command = {
     }
 
     const projectName = config.get('project');
-    const revisionLogPath = path.resolve(process.cwd(), `quant-revision-log_${projectName}`);
+    const revisionLogPath = args['revision-log'] || path.resolve(process.cwd(), `quant-revision-log_${projectName}`);
     revisions.enabled(true);
     revisions.load(revisionLogPath);
+    console.log(color.dim(`Using revision log: ${revisionLogPath}`));
 
     let files;
     try {
