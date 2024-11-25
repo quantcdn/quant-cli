@@ -76,15 +76,21 @@ const command = {
       throw new Error('Operation cancelled');
     }
 
-    if (!await config.fromArgs(args)) {
+    const context = {
+      config: this.config || config,
+      client: this.client || (() => client(config))
+    };
+
+    if (!await context.config.fromArgs(args)) {
       process.exit(1);
     }
 
-    const quant = client(config);
+    const quant = context.client(context.config);
+    const status = args.status || 302;
 
     try {
-      await quant.redirect(args.from, args.to, null, args.status);
-      return `Created redirect from ${args.from} to ${args.to} (${args.status})`;
+      await quant.redirect(args.from, args.to, null, status);
+      return `Created redirect from ${args.from} to ${args.to} (${status})`;
     } catch (err) {
       if (isMD5Match(err)) {
         return `Skipped redirect from ${args.from} to ${args.to} (already exists)`;

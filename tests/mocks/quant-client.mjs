@@ -116,6 +116,18 @@ export default function (_config) {
         headers: { 'Quant-Url': url }
       });
       return { success: true };
+    },
+
+    redirect: async function(from, to, _headers = null, status = 302) {
+      history.post.push({
+        url: '/redirect',
+        headers: {
+          'Quant-From-Url': from,
+          'Quant-To-Url': to,
+          'Quant-Status': status
+        }
+      });
+      return { success: true, uuid: 'mock-uuid-123' };
     }
   };
 
