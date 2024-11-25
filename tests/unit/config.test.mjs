@@ -136,6 +136,52 @@ describe('Config', () => {
         expect(err.message).to.include('Cannot change this setting');
       }
     });
+
+    it('should accept short form CLI arguments', async () => {
+      const args = {
+        c: 'test-client',
+        p: 'test-project',
+        t: 'test-token',
+        e: 'http://custom.api/v1'
+      };
+
+      await config.fromArgs(args, true);
+
+      expect(config.get('clientid')).to.equal('test-client');
+      expect(config.get('project')).to.equal('test-project');
+      expect(config.get('token')).to.equal('test-token');
+      expect(config.get('endpoint')).to.equal('http://custom.api/v1');
+    });
+
+    it('should accept long form CLI arguments', async () => {
+      const args = {
+        clientid: 'test-client',
+        project: 'test-project',
+        token: 'test-token',
+        endpoint: 'http://custom.api/v1'
+      };
+
+      await config.fromArgs(args, true);
+
+      expect(config.get('clientid')).to.equal('test-client');
+      expect(config.get('project')).to.equal('test-project');
+      expect(config.get('token')).to.equal('test-token');
+      expect(config.get('endpoint')).to.equal('http://custom.api/v1');
+    });
+
+    it('should prioritize long form over short form arguments', async () => {
+      const args = {
+        clientid: 'long-client',
+        c: 'short-client',
+        project: 'long-project',
+        p: 'short-project'
+      };
+
+      await config.fromArgs(args, true);
+
+      expect(config.get('clientid')).to.equal('long-client');
+      expect(config.get('project')).to.equal('long-project');
+    });
   });
 
   describe('save', () => {

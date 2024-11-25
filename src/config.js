@@ -44,12 +44,12 @@ async function fromArgs(args = {}, silent = false) {
     )
   };
 
-  // Only merge specific CLI args we care about
+  // Handle CLI args and their aliases
   if (args.dir) config.dir = args.dir;
-  if (args.endpoint) config.endpoint = args.endpoint;
-  if (args.clientid) config.clientid = args.clientid;
-  if (args.project) config.project = args.project;
-  if (args.token) config.token = args.token;
+  if (args.endpoint || args.e) config.endpoint = args.endpoint || args.e;
+  if (args.clientid || args.c) config.clientid = args.clientid || args.c;
+  if (args.project || args.p) config.project = args.project || args.p;
+  if (args.token || args.t) config.token = args.token || args.t;
 
   // Handle enable-index-html setting
   if (args['enable-index-html'] !== undefined) {

@@ -8,7 +8,11 @@ const yargs = require('yargs');
 
 async function showActiveConfig() {
   // Try to load config first
-  await config.fromArgs({ _: [''] }, true);
+  const args = process.argv.slice(2);
+  const yargsInstance = yargs(args);
+  const argv = await yargsInstance.parse();
+
+  await config.fromArgs(argv, true);
 
   const endpoint = config.get('endpoint');
   const clientId = config.get('clientid');
@@ -17,9 +21,9 @@ async function showActiveConfig() {
 
   console.log(color.dim('─────────────────────────────────────'));
   console.log(color.dim('Active configuration:'));
-  console.log(color.dim(`Organization: ${clientId}`));
-  console.log(color.dim(`Project: ${project}`));
-  if (endpoint !== defaultEndpoint) {
+  console.log(color.dim(`Organization: ${clientId || 'Not set'}`));
+  console.log(color.dim(`Project: ${project || 'Not set'}`));
+  if (endpoint && endpoint !== defaultEndpoint) {
     console.log(color.dim(`Endpoint: ${endpoint}`));
   }
   console.log(color.dim('─────────────────────────────────────'));
