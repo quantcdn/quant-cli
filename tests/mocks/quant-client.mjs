@@ -1,7 +1,7 @@
 /**
  * Mock Quant client for testing.
  */
-export default function (config) {
+export default function (_config) {
   const history = {
     get: [],
     post: [],

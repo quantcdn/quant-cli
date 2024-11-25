@@ -1,6 +1,6 @@
 import { expect } from 'chai';
-import fs from 'fs';
-import path from 'path';
+import _fs from 'fs';
+import _path from 'path';
 import sinon from 'sinon';
 import mockClient from '../../mocks/quant-client.mjs';
 
@@ -158,8 +158,8 @@ describe('File Command', () => {
 
     it('should handle config fromArgs failure', async function() {
       const exit = process.exit;
-      process.exit = (code) => {
-        process.exit = exit; // Restore immediately
+      process.exit = (_code) => {
+        process.exit = exit;
         throw new Error('Process exited with code 1');
       };
 

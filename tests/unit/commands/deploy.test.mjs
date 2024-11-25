@@ -1,7 +1,7 @@
 import { expect } from 'chai';
 import sinon from 'sinon';
-import fs from 'fs';
-import path from 'path';
+import _fs from 'fs';
+import _path from 'path';
 import mockClient from '../../mocks/quant-client.mjs';
 
 const deploy = (await import('../../../src/commands/deploy.js')).default;
@@ -212,7 +212,7 @@ describe('Deploy Command', () => {
 
     it('should handle config fromArgs failure', async () => {
       const exit = process.exit;
-      process.exit = (code) => {
+      process.exit = (_code) => {
         process.exit = exit;
         throw new Error('Process exited with code 1');
       };

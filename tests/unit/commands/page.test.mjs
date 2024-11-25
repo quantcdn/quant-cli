@@ -1,7 +1,7 @@
 import { expect } from 'chai';
 import sinon from 'sinon';
-import fs from 'fs';
-import path from 'path';
+import _fs from 'fs';
+import _path from 'path';
 import mockClient from '../../mocks/quant-client.mjs';
 
 const page = (await import('../../../src/commands/page.js')).default;

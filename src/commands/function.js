@@ -7,7 +7,6 @@
 const { text, isCancel } = require('@clack/prompts');
 const config = require('../config');
 const client = require('../quant-client');
-const fs = require('fs');
 const { validateUUID } = require('../helper/validate-uuid');
 
 const command = {

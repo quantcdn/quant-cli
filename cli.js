@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 
-const { intro, outro, text, password, select, confirm, isCancel, spinner } = require('@clack/prompts');
+const { intro, outro, select, confirm, isCancel, spinner } = require('@clack/prompts');
 const color = require('picocolors');
 const { getCommandOptions, getCommand } = require('./src/commandLoader');
 const config = require('./src/config');
