@@ -1,5 +1,6 @@
-const { text } = require('@clack/prompts');
+const { text, password, isCancel } = require('@clack/prompts');
 const config = require('../config');
+const client = require('../quant-client');
 
 const command = {
   command: 'init',
@@ -27,6 +28,12 @@ const command = {
         alias: 't',
         describe: 'Project token for QuantCDN',
         type: 'string'
+      })
+      .option('endpoint', {
+        alias: 'e',
+        describe: 'QuantCDN API endpoint',
+        type: 'string',
+        default: 'https://api.quantcdn.io/v1'
       });
   },
 
@@ -70,7 +77,7 @@ const command = {
     if (isCancel(dir)) return null;
 
     return {
-      endpoint: endpoint || 'https://api.quantcdn.io',
+      endpoint: 'https://api.quantcdn.io',
       clientid,
       project,
       token,
