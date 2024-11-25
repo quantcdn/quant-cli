@@ -130,6 +130,20 @@ export default function (_config) {
         }
       });
       return { success: true, uuid: 'mock-uuid-123' };
+    },
+
+    delete: async function(url) {
+      history.delete.push({
+        url: '/delete',
+        headers: {
+          'Quant-Url': url
+        }
+      });
+      return {
+        meta: [{
+          deleted: true
+        }]
+      };
     }
   };
 

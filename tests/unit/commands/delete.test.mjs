@@ -3,12 +3,11 @@ import sinon from 'sinon';
 import _fs from 'fs';
 import _path from 'path';
 import mockClient from '../../mocks/quant-client.mjs';
-import stripAnsi from 'strip-ansi';
 
-const unpublish = (await import('../../../src/commands/unpublish.js')).default;
+const deleteCommand = (await import('../../../src/commands/delete.js')).default;
 const config = (await import('../../../src/config.js')).default;
 
-describe('Unpublish Command', () => {
+describe('Delete Command', () => {
   let mockConfig;
   let mockClientInstance;
 
@@ -42,7 +41,7 @@ describe('Unpublish Command', () => {
   });
 
   describe('handler', () => {
-    it('should unpublish a path', async () => {
+    it('should delete a path with force flag', async () => {
       const context = {
         config: mockConfig,
         client: () => mockClientInstance
@@ -50,15 +49,16 @@ describe('Unpublish Command', () => {
 
       const args = {
         path: '/about',
+        force: true,
         clientid: 'test-client',
         project: 'test-project',
         token: 'test-token'
       };
 
-      const result = await unpublish.handler.call(context, args);
-      expect(stripAnsi(result)).to.equal('Successfully unpublished [/about]');
-      expect(mockClientInstance._history.post.length).to.equal(1);
-      const [call] = mockClientInstance._history.post;
+      const result = await deleteCommand.handler.call(context, args);
+      expect(result).to.include('Successfully removed [/about]');
+      expect(mockClientInstance._history.delete.length).to.equal(1);
+      const [call] = mockClientInstance._history.delete;
       expect(call.headers['Quant-Url']).to.equal('/about');
     });
 
@@ -70,7 +70,7 @@ describe('Unpublish Command', () => {
       };
 
       try {
-        await unpublish.handler.call(context, null);
+        await deleteCommand.handler.call(context, null);
         expect.fail('Should have thrown error');
       } catch (err) {
         expect(err.message).to.equal('Operation cancelled');
@@ -93,13 +93,14 @@ describe('Unpublish Command', () => {
 
       const args = {
         path: '/about',
+        force: true,
         clientid: 'test-client',
         project: 'test-project',
         token: 'test-token'
       };
 
       try {
-        await unpublish.handler.call(context, args);
+        await deleteCommand.handler.call(context, args);
         expect.fail('Process exited with code 1');
       } catch (err) {
         expect(err.message).to.equal('Process exited with code 1');
@@ -108,18 +109,13 @@ describe('Unpublish Command', () => {
       }
     });
 
-    it('should handle already unpublished paths', async () => {
+    it('should handle already deleted paths', async () => {
       const errorClientInstance = mockClient(mockConfig);
-      errorClientInstance.unpublish = async () => {
-        throw {
-          response: {
-            status: 404,
-            data: {
-              errorMsg: 'not found'
-            }
-          }
-        };
-      };
+      errorClientInstance.delete = async () => ({
+        meta: [{
+          deleted_timestamp: '2024-01-01'
+        }]
+      });
 
       const context = {
         config: mockConfig,
@@ -127,20 +123,21 @@ describe('Unpublish Command', () => {
       };
 
       const args = {
-        path: '/already-unpublished',
+        path: '/already-deleted',
+        force: true,
         clientid: 'test-client',
         project: 'test-project',
         token: 'test-token'
       };
 
-      const result = await unpublish.handler.call(context, args);
-      expect(stripAnsi(result)).to.equal('Path [/already-unpublished] does not exist or is already unpublished');
+      const result = await deleteCommand.handler.call(context, args);
+      expect(result).to.include('was already deleted');
     });
 
     it('should handle general errors', async () => {
       const errorClientInstance = mockClient(mockConfig);
-      errorClientInstance.unpublish = async () => {
-        throw new Error('Failed to unpublish');
+      errorClientInstance.delete = async () => {
+        throw new Error('Failed to delete');
       };
 
       const context = {
@@ -150,16 +147,17 @@ describe('Unpublish Command', () => {
 
       const args = {
         path: '/about',
+        force: true,
         clientid: 'test-client',
         project: 'test-project',
         token: 'test-token'
       };
 
       try {
-        await unpublish.handler.call(context, args);
+        await deleteCommand.handler.call(context, args);
         expect.fail('Should have thrown error');
       } catch (err) {
-        expect(err.message).to.include('Failed to unpublish');
+        expect(err.message).to.include('Cannot delete path');
       }
     });
   });

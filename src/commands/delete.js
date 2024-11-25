@@ -39,8 +39,8 @@ const command = {
       if (isCancel(path)) return null;
     }
 
-    // If force is not provided, ask for confirmation
-    if (!providedArgs.force) {
+    // Only ask for confirmation in promptArgs if we're in interactive mode
+    if (!providedArgs.force && !process.argv.slice(2).length) {
       const shouldDelete = await confirm({
         message: 'This will delete all revisions of this asset from QuantCDN. Are you sure?',
         initialValue: false,
@@ -58,20 +58,29 @@ const command = {
       throw new Error('Operation cancelled');
     }
 
-    // Check for required path argument
-    if (!args.path) {
-      const promptedArgs = await this.promptArgs();
-      if (!promptedArgs) {
+    const context = {
+      config: this.config || config,
+      client: this.client || (() => client(config))
+    };
+
+    // If not using force flag and not in interactive mode, ask for confirmation
+    if (!args.force && process.argv.slice(2).length) {
+      const shouldDelete = await confirm({
+        message: 'This will delete all revisions of this asset from QuantCDN. Are you sure?',
+        initialValue: false,
+        active: 'Yes',
+        inactive: 'No'
+      });
+      if (isCancel(shouldDelete) || !shouldDelete) {
         throw new Error('Operation cancelled');
       }
-      args = { ...args, ...promptedArgs };
     }
 
-    if (!await config.fromArgs(args)) {
+    if (!await context.config.fromArgs(args)) {
       process.exit(1);
     }
 
-    const quant = client(config);
+    const quant = context.client(context.config);
 
     try {
       const response = await quant.delete(args.path);
@@ -82,11 +91,12 @@ const command = {
         if (meta.deleted) {
           return color.green(`Successfully removed [${args.path}]`);
         }
+        if (meta.deleted_timestamp) {
+          return color.dim(`Path [${args.path}] was already deleted`);
+        }
       }
 
-      // If we get here, something unexpected happened
       throw new Error(`Unexpected response format: ${JSON.stringify(response, null, 2)}`);
-
     } catch (err) {
       // If we have a response in the error message, try to parse it
       try {

@@ -2,11 +2,14 @@
 
 const { intro, outro, select, confirm, isCancel, spinner } = require('@clack/prompts');
 const color = require('picocolors');
-const { getCommandOptions, getCommand } = require('./src/commandLoader');
+const { getCommandOptions, getCommand, loadCommands } = require('./src/commandLoader');
 const config = require('./src/config');
 const yargs = require('yargs');
 
-function showActiveConfig() {
+async function showActiveConfig() {
+  // Try to load config first
+  await config.fromArgs({ _: [''] }, true);
+
   const endpoint = config.get('endpoint');
   const clientId = config.get('clientid');
   const project = config.get('project');
@@ -23,7 +26,7 @@ function showActiveConfig() {
 }
 
 async function interactiveMode() {
-  intro(color.bgCyan(' QuantCDN CLI '));
+  intro(color.bgCyan(color.white(' QuantCDN CLI ')));
 
   try {
     // Check for config before showing menu
@@ -52,103 +55,49 @@ async function interactiveMode() {
       await initCommand.handler(initArgs);
     }
 
-    showActiveConfig();
+    await showActiveConfig();
 
+    const commandOptions = getCommandOptions();
     const command = await select({
       message: 'What would you like to do?',
-      options: getCommandOptions()
+      options: commandOptions
     });
 
     if (isCancel(command)) {
-      outro(color.yellow('Operation cancelled'));
+      outro('Operation cancelled');
       process.exit(0);
     }
 
-    const commandHandler = getCommand(command);
-    if (!commandHandler) {
-      throw new Error(`Unknown command: ${command}`);
-    }
-
-    const args = await commandHandler.promptArgs();
-    
-    const spin = spinner();
-    spin.start(`Executing ${command}`);
-    
-    try {
-      const result = await commandHandler.handler(args);
-      spin.stop(`${command} completed successfully`);
-      outro(color.green(result || 'Operation completed successfully!'));
-    } catch (error) {
-      spin.stop(`${command} failed`);
-      throw error;
-    }
-  } catch (error) {
-    outro(color.red(`Error: ${error.message}`));
-    process.exit(1);
-  }
-}
-
-async function handleCommand(command, argv) {
-  try {
-    // Add _command property to args for config check
-    argv._ = argv._ || [];
-    argv._[0] = command.command.split(' ')[0];
-
-    // Extract command definition parts
-    const commandParts = command.command.split(' ');
-    const requiredArgs = commandParts
-      .filter(part => part.startsWith('<'))
-      .map(part => part.replace(/[<>]/g, ''));
-
-    // For positional arguments, they're in argv._ after the command name
-    const providedPositionalArgs = argv._.slice(1);
-
-    // Check if we have all required positional arguments
-    const hasAllRequiredArgs = requiredArgs.every((arg, index) => {
-      // For the first argument, check if it's provided either as positional or named
-      if (index === 0) {
-        return providedPositionalArgs[index] || argv[arg];
-      }
-      // For subsequent arguments, they must be provided as positional args
-      return providedPositionalArgs[index];
-    });
-
-    if (!await config.fromArgs(argv)) {
+    const cmd = getCommand(command);
+    if (!cmd) {
+      outro('Invalid command selected');
       process.exit(1);
     }
 
-    showActiveConfig();
-
-    // Always pass existing args to promptArgs, even in interactive mode
-    if (!hasAllRequiredArgs) {
-      intro(color.bgCyan(' QuantCDN CLI '));
-      const promptedArgs = await command.promptArgs(argv);
-      if (!promptedArgs) {
-        outro(color.yellow('Operation cancelled'));
-        process.exit(0);
-      }
-      argv = { ...argv, ...promptedArgs };
+    const args = await cmd.promptArgs();
+    if (!args) {
+      outro('Operation cancelled');
+      process.exit(0);
     }
 
-    const spin = spinner();
-    spin.start(`Executing ${command.command.split(' ')[0]}`);
-    
     try {
-      const result = await command.handler(argv);
-      spin.stop('');
-      console.log(color.green(result || 'Operation completed successfully!'));
-    } catch (error) {
-      spin.stop('');
-      throw error;
+      const result = await cmd.handler(args);
+      if (result) {
+        console.log(result);
+      }
+      outro('Operation completed successfully');
+    } catch (err) {
+      outro(color.red('Error: ' + err.message));
+      process.exit(1);
     }
-  } catch (error) {
-    console.error(color.red(`Error: ${error.message}`));
+  } catch (err) {
+    outro(color.red('Error: ' + err.message));
     process.exit(1);
   }
 }
 
 function cliMode() {
-  const yargsInstance = yargs(process.argv.slice(2))
+  let yargsInstance = yargs(process.argv.slice(2))
     .strict()
     .help()
     // Global options
@@ -174,30 +123,33 @@ function cliMode() {
     });
 
   // Add all commands to yargs
-  const commands = require('./src/commandLoader').loadCommands();
+  const commands = loadCommands();
   Object.entries(commands).forEach(([name, command]) => {
-    yargsInstance.command(
-      command.command || name,
-      command.describe,
-      command.builder || {},
-      async (argv) => handleCommand(command, argv)
-    );
+    yargsInstance = yargsInstance.command({
+      command: command.command,
+      describe: command.describe,
+      builder: command.builder,
+      handler: async (argv) => {
+        await showActiveConfig();
+        try {
+          const result = await command.handler(argv);
+          if (result) {
+            console.log(result);
+          }
+          process.exit(0);
+        } catch (err) {
+          console.error(color.red('Error: ' + err.message));
+          process.exit(1);
+        }
+      }
+    });
   });
 
-  yargsInstance.demandCommand().parse();
+  yargsInstance.parse();
 }
 
-// Check if being run directly
-if (require.main === module) {
-  // No arguments = interactive mode
-  if (process.argv.length === 2) {
-    interactiveMode();
-  } else {
-    cliMode();
-  }
+if (process.argv.length > 2) {
+  cliMode();
+} else {
+  interactiveMode();
 }
-
-module.exports = {
-  interactiveMode,
-  cliMode
-};
