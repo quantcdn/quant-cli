@@ -34,6 +34,11 @@ const command = {
         describe: 'Skip the unpublish process for specific regex',
         type: 'string'
       })
+      .option('skip-purge', {
+        describe: 'Skip the automatic cache purge process',
+        type: 'boolean',
+        default: false
+      })
       .option('enable-index-html', {
         describe: 'Keep index.html in URLs',
         type: 'boolean',
