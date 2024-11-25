@@ -109,11 +109,7 @@ function save() {
     fs.mkdirSync(configDir, {recursive: true});
   }
 
-  // Remove /v1 from endpoint when saving to config file
   const saveConfig = {...config};
-  if (saveConfig.endpoint && saveConfig.endpoint.endsWith('/v1')) {
-    saveConfig.endpoint = saveConfig.endpoint.slice(0, -3);
-  }
 
   // Save to both global and local config
   fs.writeFileSync(

@@ -157,17 +157,5 @@ describe('Config', () => {
       expect(savedConfig.token).to.equal('test-token');
     });
 
-    it('should remove /v1 from endpoint when saving', () => {
-      const writeStub = sinon.stub(fs, 'writeFileSync');
-      
-      config.set({
-        endpoint: 'https://api.quantcdn.io/v1'
-      });
-      
-      config.save();
-      
-      const savedConfig = JSON.parse(writeStub.firstCall.args[1]);
-      expect(savedConfig.endpoint).to.equal('https://api.quantcdn.io');
-    });
   });
 }); 
