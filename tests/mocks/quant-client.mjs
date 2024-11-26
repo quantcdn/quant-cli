@@ -144,6 +144,54 @@ export default function (_config) {
           deleted: true
         }]
       };
+    },
+
+    edgeFunction: async function(file, description, uuid = null) {
+      history.post.push({
+        url: '/functions',
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        data: {
+          content: file,
+          desc: description,
+          uuid: uuid,
+          published: true
+        }
+      });
+      return { success: true, uuid: uuid || 'new-uuid' };
+    },
+
+    edgeFilter: async function(file, description, uuid = null) {
+      history.post.push({
+        url: '/functions/filter',
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        data: {
+          content: file,
+          desc: description,
+          uuid: uuid,
+          published: true
+        }
+      });
+      return { success: true, uuid: uuid || 'new-uuid' };
+    },
+
+    edgeAuth: async function(file, description, uuid = null) {
+      history.post.push({
+        url: '/functions/auth',
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        data: {
+          content: file,
+          desc: description,
+          uuid: uuid,
+          published: true
+        }
+      });
+      return { success: true, uuid: uuid || 'new-uuid' };
     }
   };
 

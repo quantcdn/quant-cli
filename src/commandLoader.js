@@ -14,6 +14,7 @@ function loadCommands() {
     'function': require('./commands/function'),
     'filter': require('./commands/function_filter'),
     'auth': require('./commands/function_auth'),
+    'functions': require('./commands/functions'),
 
     // Destructive operations
     'unpublish': require('./commands/unpublish'),
@@ -46,6 +47,7 @@ function getCommandOptions() {
     { value: 'function', label: 'Deploy an edge function' },
     { value: 'filter', label: 'Deploy an edge filter' },
     { value: 'auth', label: 'Deploy an edge auth function' },
+    { value: 'functions', label: 'Deploy multiple edge functions from JSON' },
 
     // Visual separator
     { value: 'separator2', label: '───────────────────────', disabled: true },

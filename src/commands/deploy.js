@@ -267,7 +267,8 @@ const command = {
         continue;
       }
 
-      if (item.type && item.type === 'redirect') {
+      // Skip redirects and functions
+      if (item.type && (item.type === 'redirect' || item.type === 'edge_function' || item.type === 'edge_auth' || item.type === 'edge_filter')) {
         continue;
       }
 
