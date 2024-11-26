@@ -8,6 +8,7 @@ const fs = require('fs');
 const config = require('../config');
 const client = require('../quant-client');
 const color = require('picocolors');
+const isMD5Match = require('../helper/is-md5-match');
 
 const command = {
   command: 'functions <file>',
@@ -65,19 +66,43 @@ const command = {
       try {
         switch (type.toLowerCase()) {
           case 'auth':
-            await quant.edgeAuth(path, description, uuid);
-            console.log(color.green(`Deployed auth function: ${path}`));
+            try {
+              await quant.edgeAuth(path, description, uuid);
+              console.log(color.green(`Deployed auth function: ${path}`));
+            } catch (err) {
+              if (isMD5Match(err)) {
+                console.log(color.dim(`Skipped auth function: ${path} (content unchanged)`));
+              } else {
+                throw err;
+              }
+            }
             break;
 
           case 'filter':
-            await quant.edgeFilter(path, description, uuid);
-            console.log(color.green(`Deployed filter function: ${path}`));
+            try {
+              await quant.edgeFilter(path, description, uuid);
+              console.log(color.green(`Deployed filter function: ${path}`));
+            } catch (err) {
+              if (isMD5Match(err)) {
+                console.log(color.dim(`Skipped filter function: ${path} (content unchanged)`));
+              } else {
+                throw err;
+              }
+            }
             break;
 
           case 'edge':
           case 'function':
-            await quant.edgeFunction(path, description, uuid);
-            console.log(color.green(`Deployed edge function: ${path}`));
+            try {
+              await quant.edgeFunction(path, description, uuid);
+              console.log(color.green(`Deployed edge function: ${path}`));
+            } catch (err) {
+              if (isMD5Match(err)) {
+                console.log(color.dim(`Skipped edge function: ${path} (content unchanged)`));
+              } else {
+                throw err;
+              }
+            }
             break;
 
           default:
@@ -88,7 +113,7 @@ const command = {
       }
     }
 
-    return color.green('All functions deployed successfully');
+    return color.green('All functions processed successfully');
   }
 };
 

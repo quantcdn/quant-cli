@@ -69,7 +69,7 @@ describe('Functions Command', () => {
       };
 
       const result = await functions.handler.call(context, args);
-      expect(result).to.include('All functions deployed successfully');
+      expect(result).to.include('All functions processed successfully');
       expect(mockClientInstance._history.post.length).to.equal(1);
     });
 
@@ -95,7 +95,7 @@ describe('Functions Command', () => {
       };
 
       const result = await functions.handler.call(context, args);
-      expect(result).to.include('All functions deployed successfully');
+      expect(result).to.include('All functions processed successfully');
       expect(mockClientInstance._history.post.length).to.equal(1);
     });
 
@@ -121,7 +121,7 @@ describe('Functions Command', () => {
       };
 
       const result = await functions.handler.call(context, args);
-      expect(result).to.include('All functions deployed successfully');
+      expect(result).to.include('All functions processed successfully');
       expect(mockClientInstance._history.post.length).to.equal(1);
     });
 
