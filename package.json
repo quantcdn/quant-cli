@@ -8,11 +8,22 @@
     "node": ">=16"
   },
   "scripts": {
-    "test": "mocha --recursive",
-    "mocha": "mocha",
-    "lint:cli": "eslint cli.js",
-    "lint:src": "eslint src",
-    "lint": "npm run lint:cli && npm run lint:src"
+    "test": "mocha 'tests/**/**/*.test.mjs'",
+    "test:watch": "mocha 'tests/**/**/*.test.mjs' --watch",
+    "test:coverage": "c8 mocha 'tests/**/**/*.test.mjs'",
+    "test:config": "mocha 'tests/unit/config.test.mjs'",
+    "test:deploy": "mocha 'tests/unit/commands/deploy.test.mjs'",
+    "test:file": "mocha 'tests/unit/commands/file.test.mjs'",
+    "test:page": "mocha 'tests/unit/commands/page.test.mjs'",
+    "test:redirect": "mocha 'tests/unit/commands/redirect.test.mjs'",
+    "test:purge": "mocha 'tests/unit/commands/purge.test.mjs'",
+    "test:unpublish": "mocha 'tests/unit/commands/unpublish.test.mjs'",
+    "test:delete": "mocha 'tests/unit/commands/delete.test.mjs'",
+    "test:functions": "mocha 'tests/unit/commands/functions.test.mjs'",
+    "lint:cli": "eslint --config .eslintrc.js cli.js",
+    "lint:src": "eslint --config .eslintrc.js src",
+    "lint:tests": "eslint --config tests/.eslintrc.js tests",
+    "lint": "npm run lint:cli && npm run lint:src && npm run lint:tests"
   },
   "repository": {
     "type": "git",
@@ -35,6 +46,8 @@
     "/src"
   ],
   "dependencies": {
+    "@clack/core": "^0.3.3",
+    "@clack/prompts": "^0.7.0",
     "axios": "^1.7.3",
     "big-json": "^3.1.0",
     "chalk": "^4.1.0",
@@ -43,22 +56,18 @@
     "md5-file": "^5.0.0",
     "mime-types": "^2.1.27",
     "papaparse": "^5.4.1",
-    "prompt": "^1.1.0",
-    "simplecrawler": "^1.1.9",
+    "picocolors": "^1.0.0",
     "string.prototype.matchall": "^4.0.2",
-    "tmp": "^0.2.1",
     "yargs": "^17.0.1"
   },
   "devDependencies": {
-    "@sinonjs/referee": "^11.0.1",
-    "chai": "^5.1.1",
-    "chai-as-promised": "^8.0.0",
-    "eslint": "^9.8.0",
-    "eslint-config-google": "^0.14.0",
-    "eslint-plugin-jsdoc": "^50.0.1",
-    "mocha": "^10.0.0",
-    "mock-require": "^3.0.3",
-    "sinon": "^19.0.2",
-    "sinon-chai": "^4.0.0"
+    "axios-mock-adapter": "^2.1.0",
+    "c8": "^8.0.1",
+    "chai": "^5.1.0",
+    "mocha": "^10.3.0",
+    "nock": "^13.5.4",
+    "sinon": "^17.0.1",
+    "sinon-chai": "^4.0.0",
+    "eslint": "^8.0.0"
   }
 }

@@ -1,121 +1,225 @@
-# QuantCDN cli
+# QuantCDN CLI
 
-![Unit tests](https://github.com/quantcdn/quant-cli/actions/workflows/ci.yml/badge.svg)
+Command line tools for QuantCDN.
 
-Simplify deployments and interactions with the QuantCDN API by using the support cli tool.
+## Installation
 
-## Install
-
-The preferred method for installation is via npm.
-
-```
-npm i -g @quantcdn/quant-cli
-```
-
-or locally to a project
-
-```
-npm i -D @quantcdn/quant-cli
+```bash
+npm install -g @quantcdn/quant-cli
 ```
 
 ## Usage
 
+The CLI can be used in two modes:
+
+### Interactive Mode
+Simply run:
+```bash
+quant
 ```
-$ quant <command>
+This will launch an interactive prompt that guides you through available commands and options.
 
-Commands:
-  quant crawl [domain]                               Crawl and push an entire domain
-  quant delete <path>                                Delete a deployed path from Quant
-  quant deploy [dir]                                 Deploy the output of a static generator
-  quant file <file> <location>                       Deploy a single asset
-  quant info                                         Give info based on current configuration
-  quant init                                         Initialise a project in the current directory
-  quant page <file> <location>                       Make a local page asset available via Quant
-  quant proxy <path> <origin> [status]               Create a proxy to allow traffic directly to origin
-  [basicAuthUser] [basicAuthPass]
-  quant publish <path>                               Publish an asset
-  quant purge <path>                                 Purge the cache for a given url
-  quant redirect <from> <to> [status] [author]       Create a redirect
-  quant search <index|unindex|clear>                 Perform search index operations
-  quant unpublish <path>                             Unpublish an asset
-
-Options:
-  --version       Show version number                                                      [boolean]
-  --help          Show help                                                                [boolean]
-  --clientid, -c  Project customer id for QuantCDN                                          [string]
-  --project, -p   Project name for QuantCDN                                                 [string]
-  --token, -t     Project token for QuantCDN                                                [string]
-  --endpoint, -e  API endpoint for QuantCDN            [string] [default: "https://api.quantcdn.io"]
+### CLI Mode
+```bash
+quant <command> [options]
 ```
 
-## Get started
+## Available Commands
 
-Please refer to the ["get started" guide](https://docs.quantcdn.io/docs/cli/get-started) for more details on getting set up.
+### Configuration
+- `quant init` - Initialize a project in the current directory
+  ```bash
+  quant init [--dir=<build-dir>]
+  ```
 
-Quant accepts options or will ready configuration values from a `quant.json` file in the current directory.
+- `quant info` - Show information about current configuration
 
-```
-$ quant init
-```
+### Content Management
+- `quant deploy [dir]` - Deploy the output of a static generator
+  ```bash
+  quant deploy [dir] [--attachments] [--skip-unpublish] [--skip-unpublish-regex=pattern] [--enable-index-html] [--chunk-size=10] [--force]
+  ```
 
-An interactive walk-through for configuring your API connection.
+- `quant file <file> <location>` - Deploy a single asset
+  ```bash
+  quant file path/to/file.jpg /images/file.jpg
+  ```
 
-```
-$ quant info
+- `quant page <file> <location>` - Make a local page asset available
+  ```bash
+  quant page path/to/page.html /about-us [--enable-index-html]
+  ```
 
-Endpoint: https://api.quantcdn.io/v1
-Customer: quant
-Project: dev-docs
-Token: ****
-✅✅✅ Successfully connected to dev-docs
-```
+### Publishing Controls
+- `quant publish <path>` - Publish an asset
+  ```bash
+  quant publish /about-us [--revision=latest]
+  ```
 
-## Manage search index
+- `quant unpublish <path>` - Unpublish an asset
+  ```bash
+  quant unpublish /about-us
+  ```
 
-### Basic usage
+- `quant delete <path>` - Delete a deployed path
+  ```bash
+  quant delete /about-us [--force]
+  ```
 
-* Use `quant search status` to retrieve index size and basic configuration.
-* Use `quant search unindex --path=/url/path` to remove an item from the index.
-* Use `quant search clear` to clear the entire index.
+### Cache Management
+- `quant purge <path>` - Purge the cache for a given URL or cache keys
+  ```bash
+  quant purge /about-us                        # Purge by path
+  quant purge "/*"                            # Purge all content
+  quant purge --cache-keys="key1 key2"        # Purge by cache keys
+  quant purge /about-us --soft-purge          # Mark as stale instead of deleting
+  ```
 
-### Create and update records
+### Redirects
+- `quant redirect <from> <to> [status]` - Create a redirect
+  ```bash
+  quant redirect /old-page /new-page [--status=301]
+  ```
+
+### Edge Functions
+- `quant function <file> <description> [uuid]` - Deploy an edge function
+  ```bash
+  quant function handler.js "My edge function"                                     # Deploy new function
+  quant function handler.js "Updated function" 019361ae-2516-788a-8f50-e803ff561c34  # Update existing
+  ```
+
+- `quant filter <file> <description> [uuid]` - Deploy an edge filter function
+  ```bash
+  quant filter filter.js "My edge filter"                                         # Deploy new filter
+  quant filter filter.js "Updated filter" 019361ae-2516-788a-8f50-e803ff561c34   # Update existing
+  ```
+
+- `quant auth <file> <description> [uuid]` - Deploy an edge auth function
+  ```bash
+  quant auth auth.js "My auth function"                                          # Deploy new auth function
+  quant auth auth.js "Updated auth" 019361ae-2516-788a-8f50-e803ff561c34        # Update existing
+  ```
+
+### Search
+- `quant search <operation>` - Perform search index operations
+  ```bash
+  quant search status                         # Show search index status
+  quant search index --path=records.json      # Add/update search records
+  quant search unindex --path=/url/to/remove  # Remove item from search index
+  quant search clear                          # Clear entire search index
+  ```
 
 You may index new content or update existing content in the search index directly. Simply provide one or multiple records in JSON files. For example, consider a `search-records.json` file containing the following:
 
-```
+```json
 [
     {
         "title": "This is a record",
         "url": "/blog/page",
         "summary": "The record is small and neat.",
-        "content": "Lots of good content here. But not too much!",
+        "content": "Lots of good content here. But not too much!"
     },
     {
         "title": "Fully featured search record",
         "url": "/about-us",
         "summary": "The record contains all the trimmings.",
-        "content": "Lorem ipsum dolor sit amet, consectetur adipiscing elit. Cras id dolor facilisis, ornare erat et, scelerisque odio. Class aptent taciti sociosqu ad litora torquent per conubia nostra, per inceptos himenaeos.",
+        "content": "Lorem ipsum dolor sit amet, consectetur adipiscing elit.",
         "image": "https://www.example.com/images/about.jpg",
         "categories": [ "Blog", "Commerce", "Jamstack" ],
-        "tags": [ "Tailwind" , "QuantCDN" ]
+        "tags": [ "Tailwind" , "QuantCDN" ],
+        "author": "John Doe",
+        "publishDate": "2024-02-22",
+        "readTime": "5 mins",
+        "customField": "Any value you need"
     }
 ]
 ```
 
-To post these records to the search index:
-```
-quant search index --path=./search-records.json
+Required fields for each record:
+- `title`: The title of the page
+- `url`: The URL path of the page
+- `content`: The searchable content
+
+Common optional fields:
+- `summary`: A brief description
+- `image`: URL to an associated image
+- `categories`: Array of category names
+- `tags`: Array of tag names
+
+You can include any additional key/value pairs in your records. These custom fields will be indexed and available for filtering, faceting, or display in your search integration.
+
+### Validation
+- `quant scan` - Validate local file checksums
+  ```bash
+  quant scan [--diff-only] [--unpublish-only] [--skip-unpublish-regex=pattern]
+  ```
+
+### WAF Logs
+- `quant waf:logs` - Access project WAF logs
+  ```bash
+  quant waf:logs [--fields=field1,field2] [--output=file.csv] [--all] [--size=10]
+  ```
+
+## Global Options
+These options can be used with any command:
+
+```bash
+--clientid, -c    Project customer id for QuantCDN
+--project, -p     Project name for QuantCDN
+--token, -t       Project token for QuantCDN
+--endpoint, -e    API endpoint for QuantCDN (default: "https://api.quantcdn.io/v1")
 ```
 
-**Note:** The path may either refer to an individual file or a path on disk containing multiple JSON files.
+## Configuration
+
+The CLI can be configured using either:
+1. Interactive initialization: `quant init`
+2. Command line arguments (see Global Options)
+3. Environment variables:
+   - `QUANT_CLIENT_ID`
+   - `QUANT_PROJECT`
+   - `QUANT_TOKEN`
+   - `QUANT_ENDPOINT`
+4. Configuration file: `quant.json` in the current directory
+
+Missing configuration will be handled differently depending on the context:
+- Running `quant` with no arguments will prompt to initialize a new project
+- Running specific commands without configuration will show detailed setup instructions
+
+## Examples
+
+```bash
+# Initialize a new project
+quant init
+
+# Deploy a directory
+quant deploy build --attachments
+
+# Upload a single file
+quant file ./logo.png /images/logo.png
+
+# Create a redirect
+quant redirect /old-page /new-page --status=301
+
+# Purge cache with various options
+quant purge "/*"                              # Purge all content
+quant purge --cache-keys="key1 key2"          # Purge specific cache keys
+quant purge /about --soft-purge               # Soft purge a path
+
+# Deploy edge functions
+quant function handler.js "My edge function"   # Deploy a new function
+quant auth auth.js "My auth function"          # Deploy an auth function
+quant filter filter.js "My edge filter"        # Deploy a filter function
+
+# Check deployment status
+quant scan --diff-only
+```
 
 ## Testing
 
-Automated via CodeFresh for all PRs and mainline branches.
-
-```
-$ npm run lint
-$ npm run test
+```bash
+npm run lint
+npm run test
 ```
 
 ## Contributing

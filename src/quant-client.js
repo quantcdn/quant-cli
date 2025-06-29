@@ -3,32 +3,43 @@
  */
 
 const axios = require("axios");
-const util = require("util");
 const fs = require("fs");
 const path = require("path");
 const mime = require("mime-types");
 const querystring = require("querystring");
 const quantURL = require("./helper/quant-url");
 
-const client = function (config) {
-  const req = axios;
-  const get = axios.get;
-  const post = axios.post;
-  const patch = axios.patch;
-  const del = axios.delete;
-
+module.exports = function (config) {
+  // Set up headers with correct Quant header names
   const headers = {
-    "User-Agent": "Quant (+http://api.quantcdn.io)",
-    "Quant-Token": config.get("token"),
-    "Quant-Customer": config.get("clientid"),
-    "Quant-Organisation": config.get("clientid"),
-    "Quant-Project": config.get("project"),
-    "Content-Type": "application/json",
+    'Content-Type': 'application/json',
+    'Quant-Customer': config.get('clientid'),
+    'Quant-Project': config.get('project'),
+    'Quant-Token': config.get('token'),
+    'Quant-Organisation': config.get('clientid')
   };
 
-  if (config.get("bearer")) {
-    headers.Authorization = `Bearer ${config.get("bearer")}`;
-  }
+  // Create axios instance with dynamic baseURL
+  const client = axios.create({
+    baseURL: config.get('endpoint')
+  });
+
+  // Helper functions for HTTP methods
+  const get = async (url, options = {}) => {
+    return await client.get(url, { ...options, headers: { ...headers, ...options.headers } });
+  };
+
+  const post = async (url, data, options = {}) => {
+    return await client.post(url, data, { ...options, headers: { ...headers, ...options.headers } });
+  };
+
+  const patch = async (url, data, options = {}) => {
+    return await client.patch(url, data, { ...options, headers: { ...headers, ...options.headers } });
+  };
+
+  const del = async (url, options = {}) => {
+    return await client.delete(url, { ...options, headers: { ...headers, ...options.headers } });
+  };
 
   /**
    * Handle the response.
@@ -40,6 +51,12 @@ const client = function (config) {
    *   The API response.
    */
   const handleResponse = function (response) {
+    // If this is an error response, format it
+    if (response.isAxiosError) {
+      const errorData = response.response && response.response.data ? response.response.data : {};
+      throw new Error(formatError(errorData));
+    }
+
     const body =
       typeof response.data == "string"
         ? JSON.parse(response.data)
@@ -50,27 +67,31 @@ const client = function (config) {
       for (i in body.errors) {
         msg += body.errors[i].errorMsg + "\n";
       }
-      throw new Error(msg);
+      throw new Error(`${msg}\nResponse: ${JSON.stringify(body, null, 2)}`);
     }
 
     if (response.statusCode == 400) {
-      // @TODO: this is generally if the content is
-      // streamed to the endpoint 4xx and 5xx are thrown
-      // similarly, the API should respond with errors
-      // otherwise.
       if (typeof body.errorMsg != "undefined") {
-        throw new Error(body.errorMsg);
+        throw new Error(`${body.errorMsg}\nResponse: ${JSON.stringify(body, null, 2)}`);
       }
-      throw new Error("Critical error...");
+      throw new Error(`Critical error...\nResponse: ${JSON.stringify(body, null, 2)}`);
     }
 
     if (body.error || (typeof body.errorMsg != "undefined" && body.errorMsg.length > 0)) {
       const msg = typeof body.errorMsg != "undefined" ? body.errorMsg : body.msg;
-      throw new Error(msg);
+      throw new Error(`${msg}\nResponse: ${JSON.stringify(body, null, 2)}`);
     }
 
     return body;
   };
+
+  // Add this helper function for consistent error handling
+  function formatError(error) {
+    if (error.response && error.response.data) {
+      return `${error.message}\nResponse: ${JSON.stringify(error.response.data, null, 2)}`;
+    }
+    return error.message;
+  }
 
   return {
     /**
@@ -82,9 +103,12 @@ const client = function (config) {
      * @throws Error.
      */
     ping: async function () {
-      const url = `${config.get("endpoint")}/ping`;
-      const res = await get(url, { headers });
-      return handleResponse(res);
+      try {
+        const res = await get(`/ping`);
+        return handleResponse(res);
+      } catch (error) {
+        throw new Error(formatError(error));
+      }
     },
 
     /**
@@ -105,7 +129,7 @@ const client = function (config) {
      * @TODO
      *   - Async iterator for memory 21k items ~ 40mb.
      */
-    meta: async function (unfold = false, exclude = true, extend = {}) {
+    meta: async function (unfold = false, _exclude = true, extend = {}) {
       const records = [];
       const query = Object.assign(
         {
@@ -319,7 +343,7 @@ const client = function (config) {
     file: async function (
       local,
       location,
-      absolute = false,
+      _absolute = false,
       extraHeaders = {},
       skipPurge = false,
     ) {
@@ -471,56 +495,6 @@ const client = function (config) {
     },
 
     /**
-     * Create a proxy with the Quant API.
-     *
-     * @param {string} url
-     *   The relative URL to proxy.
-     * @param {string} destination
-     *   The absolute FQDN/path to proxy to.
-     * @param {bool} published
-     *   If the proxy is published
-     * @param {string} username
-     *   Basic auth user.
-     * @param {string} password
-     *   Basic auth password.
-     *
-     * @return {object}
-     *   The response.
-     *
-     * @throws Error.
-     */
-    proxy: async function (
-      url,
-      destination,
-      published = true,
-      username,
-      password,
-    ) {
-      const options = {
-        url: `${config.get("endpoint")}/proxy`,
-        headers: {
-          ...headers,
-        },
-        json: true,
-        body: {
-          url,
-          destination,
-          published,
-        },
-      };
-
-      if (username) {
-        options.body.basic_auth_user = username;
-        options.body.basic_auth_pass = password;
-      }
-
-      const res = await post(options.url, options.body, {
-        headers: options.headers,
-      });
-      return handleResponse(res);
-    },
-
-    /**
      * Delete a path from Quant.
      *
      * @param {string} path
@@ -589,39 +563,45 @@ const client = function (config) {
      *
      * @throws Error.
      */
-    revisions: async function (url) {
-      url = url.indexOf("/") == 0 ? url : `/${url}`;
-      url = url.toLowerCase();
-      url = url.replace(/\/?index\.html/, "");
-
-      const options = {
-        url: `${config.get("endpoint")}/revisions`,
-        headers: {
-          ...headers,
-          "Quant-Url": url,
-        },
-      };
-      const res = await get(options.url, { headers: options.headers });
-      return handleResponse(res);
+    revisions: async function (path) {
+      try {
+        const response = await get(`${config.get('endpoint')}/meta/${path}`, { headers });
+        return handleResponse(response);
+      } catch (error) {
+        throw error;
+      }
     },
 
     /**
-     * Purge URL patterns from Quants Varnish.
+     * Purge content from the cache.
      *
-     * @param {string} urlPattern
+     * @param {string} url
+     *   The URL to purge.
+     * @param {string} cacheKeys
+     *   Space separated cache keys to purge.
+     * @param {object} options
+     *   Additional options for the purge.
      *
-     * @throws Error
+     * @return {object}
+     *   The response.
+     *
+     * @throws Error.
      */
-    purge: async function (urlPattern) {
-      const options = {
-        url: `${config.get("endpoint")}/purge`,
-        headers: {
-          ...headers,
-          "Quant-Url": urlPattern,
-        },
-      };
-      const res = await post(options.url, {}, { headers: options.headers });
-      return handleResponse(res);
+    purge: async function(url, cacheKeys, options = {}) {
+      const purgeHeaders = { ...headers };
+      
+      if (cacheKeys) {
+        purgeHeaders['Cache-Keys'] = cacheKeys;
+      } else {
+        purgeHeaders['Quant-Url'] = url;
+      }
+
+      if (options.softPurge) {
+        purgeHeaders['Soft-Purge'] = 'true';
+      }
+
+      const response = await post(`${config.get('endpoint')}/purge`, {}, { headers: purgeHeaders });
+      return handleResponse(response);
     },
 
     /**
@@ -649,11 +629,12 @@ const client = function (config) {
         },
         body: data,
       };
-      const res = await post(options.url, options.body, {
-        headers: options.headers,
-      });
-
-      return handleResponse(res);
+      try {
+        const res = await post(options.url, options.body, { headers: options.headers });
+        return handleResponse(res);
+      } catch (error) {
+        throw new Error(formatError(error));
+      }
     },
 
     /**
@@ -671,9 +652,12 @@ const client = function (config) {
           "Quant-Url": url,
         },
       };
-      const res = await del(options.url, { headers: options.headers });
-
-      return handleResponse(res);
+      try {
+        const res = await del(options.url, { headers: options.headers });
+        return handleResponse(res);
+      } catch (error) {
+        throw new Error(formatError(error));
+      }
     },
 
     /**
@@ -689,9 +673,12 @@ const client = function (config) {
         },
         json: true,
       };
-      const res = await del(options.url, { headers: options.headers });
-
-      return handleResponse(res);
+      try {
+        const res = await del(options.url, { headers: options.headers });
+        return handleResponse(res);
+      } catch (error) {
+        throw new Error(formatError(error));
+      }
     },
 
     /**
@@ -707,9 +694,12 @@ const client = function (config) {
         },
         json: true,
       };
-      const res = await get(options.url, { headers: options.headers });
-
-      return handleResponse(res);
+      try {
+        const res = await get(options.url, { headers: options.headers });
+        return handleResponse(res);
+      } catch (error) {
+        throw new Error(formatError(error));
+      }
     },
 
     /**
@@ -723,66 +713,161 @@ const client = function (config) {
      * @return {object}
      *   A list of all WAF logs.
      */
-    wafLogs: async function (unfold = false, extend = {}) {
-      const logs = [];
-      const url = `${config.get("endpoint")}/waf/logs`;
-      const query = Object.assign(
-        {
-          per_page: 10,
-        },
-        extend,
-      );
-      const doUnfold = async function (i) {
-        let res;
-        query.page = i;
-        try {
-          res = await get(`${url}?${querystring.stringify(query)}`, {
-            headers,
-          });
-        } catch (err) {
-          console.log(err);
-          return false;
-        }
-        if (res.data.data) {
-          logs.push(...res.data.data);
-        }
-        return res.data.next != "";
-      };
-
-      const options = {
-        url: `${url}?${querystring.stringify(query)}`,
-        headers,
-      };
-
-      const res = await get(options, url, { headers: options.headers });
-
-      if (res.statusCode == 403) {
-        return -1;
+    wafLogs: async function (_all = false, options = {}) {
+      try {
+        const response = await get(`${config.get('endpoint')}/waf/logs`, {
+          headers,
+          params: {
+            page_size: options.page_size || 10,
+            page: options.page || 1
+          }
+        });
+        return handleResponse(response);
+      } catch (error) {
+        throw error;
       }
-
-      if (
-        typeof res.data == "undefined" ||
-        typeof res.data.data == "undefined"
-      ) {
-        return logs;
-      }
-
-      logs.push(...res.data.data);
-      let page = 1;
-      if (unfold && res.data.next != "") {
-        let more;
-        do {
-          page++;
-          more = await doUnfold(page);
-        } while (more && page <= 100);
-      }
-      return logs;
     },
+
+    /**
+     * Get metadata for multiple URLs in a single request.
+     *
+     * @param {Array} urls
+     *   List of URLs to check.
+     *
+     * @return {object}
+     *   The response containing metadata for all URLs.
+     */
+    batchMeta: async function(urls) {
+      try {
+        const options = {
+          url: `${config.get('endpoint')}/url-meta`,
+          headers: {
+            ...headers
+          },
+          body: {
+            "Quant-Url": urls
+          }
+        };
+
+        const response = await post(options.url, options.body, { headers: options.headers });
+        return handleResponse(response);
+      } catch (error) {
+        throw error;
+      }
+    },
+
+    /**
+     * Create or update an edge function.
+     * 
+     * @param {string} file - Path to the function file
+     * @param {string} description - Description of the function
+     * @param {string} [uuid] - Optional UUID for updating existing function
+     * @returns {object} Response from the API
+     */
+    edgeFunction: async function(file, description, uuid = null) {
+      if (!description) {
+        throw new Error("Description is required for edge functions");
+      }
+
+      if (!Buffer.isBuffer(file)) {
+        if (!fs.existsSync(file)) {
+          throw new Error("Function file is not accessible.");
+        }
+        file = fs.readFileSync(file, 'utf8');
+      }
+
+      const body = {
+        content: file.toString(),
+        published: true,
+        desc: description
+      };
+
+      if (uuid) {
+        body.uuid = uuid;
+      }
+
+      try {
+        const response = await post(`${config.get('endpoint')}/functions`, body, { headers });
+        return handleResponse(response);
+      } catch (error) {
+        throw error;
+      }
+    },
+
+    /**
+     * Create or update an edge filter function.
+     * 
+     * @param {string} file - Path to the filter function file
+     * @param {string} description - Description of the filter
+     * @param {string} [uuid] - Optional UUID for updating existing filter
+     * @returns {object} Response from the API
+     */
+    edgeFilter: async function(file, description, uuid = null) {
+      if (!description) {
+        throw new Error("Description is required for edge filters");
+      }
+
+      if (!Buffer.isBuffer(file)) {
+        if (!fs.existsSync(file)) {
+          throw new Error("Filter function file is not accessible.");
+        }
+        file = fs.readFileSync(file, 'utf8');
+      }
+
+      const body = {
+        content: file.toString(),
+        published: true,
+        desc: description
+      };
+
+      if (uuid) {
+        body.uuid = uuid;
+      }
+
+      try {
+        const response = await post(`${config.get('endpoint')}/functions/filter`, body, { headers });
+        return handleResponse(response);
+      } catch (error) {
+        throw error;
+      }
+    },
+
+    /**
+     * Create or update an edge auth function.
+     * 
+     * @param {string} file - Path to the auth function file
+     * @param {string} description - Description of the auth function
+     * @param {string} [uuid] - Optional UUID for updating existing auth function
+     * @returns {object} Response from the API
+     */
+    edgeAuth: async function(file, description, uuid = null) {
+      if (!description) {
+        throw new Error("Description is required for auth functions");
+      }
+
+      if (!Buffer.isBuffer(file)) {
+        if (!fs.existsSync(file)) {
+          throw new Error("Auth function file is not accessible.");
+        }
+        file = fs.readFileSync(file, 'utf8');
+      }
+
+      const body = {
+        content: file.toString(),
+        published: true,
+        desc: description
+      };
+
+      if (uuid) {
+        body.uuid = uuid;
+      }
+
+      try {
+        const response = await post(`${config.get('endpoint')}/functions/auth`, body, { headers });
+        return handleResponse(response);
+      } catch (error) {
+        throw error;
+      }
+    }
   };
 };
-
-module.exports = function () {
-  return module.exports.client.apply(this, arguments);
-};
-
-module.exports.client = client;

@@ -1,136 +1,151 @@
 /**
- * Perform Search API oprtations.
- *
- * @usage
- *   quant search <index|unindex|clear>
+ * Perform Search API operations.
  */
-const chalk = require('chalk');
-const client = require('../quant-client');
+const { text, select, confirm, isCancel } = require('@clack/prompts');
+const color = require('picocolors');
 const config = require('../config');
+const client = require('../quant-client');
 const fs = require('fs');
-const glob = require('glob');
 
-const command = {};
-
-command.command = 'search <status|index|unindex|clear>';
-command.describe = 'Perform search index operations';
-command.builder = (yargs) => {
-  // Add/update search records.
-  yargs.command('index', '<path>', {
-    command: 'index <path>',
-    builder: (yargs) => {
-      yargs.positional('path', {
+const command = {
+  command: 'search <operation>',
+  describe: 'Perform search index operations',
+  
+  builder: (yargs) => {
+    return yargs
+      .positional('operation', {
+        describe: 'Operation to perform',
         type: 'string',
-        describe: 'Path to directory containing JSON files, or an individual JSON file.',
+        choices: ['status', 'index', 'unindex', 'clear']
+      })
+      .option('path', {
+        describe: 'Path to file or URL',
+        type: 'string'
       });
-    },
-    handler: (argv) => {
-      if (!argv.path) {
-        console.error(chalk.yellow('No path provided. Provide a path on disk, e.g: --path=/path/to/files'));
-        return;
-      }
+  },
 
-      console.log(chalk.bold.green('*** Add/update search records ***'));
+  async promptArgs(providedArgs = {}) {
+    let operation = providedArgs.operation;
+    if (!operation) {
+      operation = await select({
+        message: 'Select search operation',
+        options: [
+          { value: 'status', label: 'Show search index status' },
+          { value: 'index', label: 'Add/update items in search index' },
+          { value: 'unindex', label: 'Remove item from search index' },
+          { value: 'clear', label: 'Clear entire search index' }
+        ]
+      });
+      if (isCancel(operation)) return null;
+    }
 
-      if (!config.fromArgs(argv)) {
-        return console.error(chalk.yellow('Quant is not configured, run init.'));
-      }
+    // For clear operation, ask for confirmation
+    if (operation === 'clear') {
+      const shouldClear = await confirm({
+        message: 'Are you sure you want to clear the entire search index? This cannot be undone.',
+        initialValue: false
+      });
+      if (isCancel(shouldClear) || !shouldClear) return null;
+    }
 
-      let jsonFiles = [];
-      fs.stat(argv.path, (error, stats) => {
-        // incase of error
-        if (error) {
-          console.error(error);
-          return;
+    let path = providedArgs.path;
+    if ((operation === 'index' || operation === 'unindex') && !path) {
+      path = await text({
+        message: operation === 'index' 
+          ? 'Enter path to JSON file containing search data'
+          : 'Enter URL to remove from search index',
+        validate: value => !value ? 'Path is required' : undefined
+      });
+      if (isCancel(path)) return null;
+    }
+
+    // For index operation, validate JSON file
+    if (operation === 'index' && path) {
+      try {
+        const fileContent = fs.readFileSync(path, 'utf8');
+        const data = JSON.parse(fileContent);
+        
+        // Validate array structure
+        if (!Array.isArray(data)) {
+          throw new Error('JSON must be an array of records');
         }
 
-        if (stats.isDirectory()) {
-          jsonFiles = glob.sync(argv.path + '/*.json');
+        // Validate required fields
+        data.forEach((record, index) => {
+          if (!record.url || !record.title || !record.content) {
+            throw new Error(`Record at index ${index} missing required fields (url, title, content)`);
+          }
+        });
+
+      } catch (err) {
+        if (err.code === 'ENOENT') {
+          console.log(color.red(`Error: File not found: ${path}`));
         } else {
-          jsonFiles = [argv.path];
+          console.log(color.red('Error: Invalid JSON file'));
+          console.log(color.yellow('Make sure your JSON:'));
+          console.log('1. Uses double quotes for property names');
+          console.log('2. Has valid syntax (no trailing commas)');
+          console.log('3. Follows the required format:');
+          console.log(color.dim(`
+[
+    {
+        "title": "This is a record",
+        "url": "/blog/page",
+        "summary": "The record is small and neat.",
+        "content": "Lots of good content here. But not too much!"
+    },
+    {
+        "title": "Fully featured search record",
+        "url": "/about-us",
+        "summary": "The record contains all the trimmings.",
+        "content": "Lorem ipsum dolor sit amet...",
+        "image": "https://www.example.com/images/about.jpg",
+        "categories": [ "Blog", "Commerce" ],
+        "tags": [ "Tailwind", "QuantCDN" ]
+    }
+]`));
+          console.log('\nError details:', err.message);
         }
-
-        for (let i = 0; i < jsonFiles.length; i++) {
-          client(config)
-              .searchIndex(jsonFiles[i])
-              .then(response => console.log(chalk.green('Success:') + ` Successfully posted search records in ${jsonFiles[i]}`))  
-              .catch((err) => console.log(chalk.red.bold('Error:') + ` ${err}`));
-        }
-      });
-    },
-  });
-
-  // Unindex/remove search record.
-  yargs.command('unindex', '<path>', {
-    command: 'unindex <path>',
-    describe: 'Removes an item from the search index based on URL.',
-    builder: (yargs) => {
-      yargs.positional('path', {
-        type: 'string',
-        describe: 'URL path of the item to unindex.',
-      });
-    },
-    handler: (argv) => {
-      if (!argv.path) {
-        console.error(chalk.yellow('No path provided. Provide a content URL path to remove from index, e.g: /about-us'));
-        return;
+        return null;
       }
+    }
 
-      console.log(chalk.bold.green('*** Remove search record ***'));
+    return { operation, path };
+  },
 
-      if (!config.fromArgs(argv)) {
-        return console.error(chalk.yellow('Quant is not configured, run init.'));
+  async handler(args) {
+    if (!args) {
+      throw new Error('Operation cancelled');
+    }
+
+    if (!await config.fromArgs(args)) {
+      process.exit(1);
+    }
+
+    const quant = client(config);
+
+    try {
+      switch (args.operation) {
+        case 'status':
+          const status = await quant.searchStatus();
+          return `Search index status:\nTotal documents: ${status.index && status.index.entries || 0}`;
+
+        case 'index':
+          await quant.searchIndex(args.path);
+          return 'Successfully added items to search index';
+
+        case 'unindex':
+          await quant.searchRemove(args.path);
+          return `Successfully removed ${args.path} from search index`;
+
+        case 'clear':
+          await quant.searchClearIndex();
+          return 'Successfully cleared search index';
       }
-
-      client(config)
-          .searchRemove(argv.path)
-          .then(response => console.log(chalk.green('Success:') + ` Successfully removed search record for ${argv.path}`))  
-          .catch((err) => console.log(chalk.red.bold('Error:') + ` ${err}`));
-    },
-  });
-
-  // Display search index status.
-  yargs.command('status', '', {
-    command: 'status',
-    describe: 'Display search index status',
-    builder: (yargs) => {
-    },
-    handler: (argv) => {
-      console.log(chalk.bold.green('*** Search index status ***'));
-
-      if (!config.fromArgs(argv)) {
-        return console.error(chalk.yellow('Quant is not configured, run init.'));
-      }
-
-      client(config)
-          .searchStatus()
-          .then(response => {  
-            console.log(chalk.green('Success:') + ` Successfully retrieved search index status`);
-            console.log(response);
-          })
-          .catch((err) => console.log(chalk.red.bold('Error:') + ` ${err}`));
-    },
-  });
-
-  // Clear the entire search index.
-  yargs.command('clear', '', {
-    command: 'clear',
-    describe: 'Clears the entire search index',
-    builder: (yargs) => {
-    },
-    handler: (argv) => {
-      console.log(chalk.bold.green('*** Clear search index ***'));
-
-      if (!config.fromArgs(argv)) {
-        return console.error(chalk.yellow('Quant is not configured, run init.'));
-      }
-
-      client(config)
-          .searchClearIndex()
-          .then(response => console.log(chalk.green('Success:') + ` Successfully cleared search index`))  
-          .catch((err) => console.log(chalk.red.bold('Error:') + ` ${err}`));
-    },
-  });
+    } catch (err) {
+      throw new Error(`Failed to ${args.operation}: ${err.message}`);
+    }
+  }
 };
 
 module.exports = command;
