@@ -1,11 +1,11 @@
 {
   "name": "@quantcdn/quant-cli",
-  "version": "4.0.0",
+  "version": "5.1.1",
   "description": "Deploy tools for QuantCDN",
   "main": "cli.js",
   "packageManager": "npm",
   "engines": {
-    "node": ">=16"
+    "node": ">=20"
   },
   "scripts": {
     "test": "mocha 'tests/**/**/*.test.mjs'",
