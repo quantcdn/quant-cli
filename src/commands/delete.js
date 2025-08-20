@@ -9,6 +9,7 @@ const { text, confirm, isCancel } = require('@clack/prompts');
 const color = require('picocolors');
 const config = require('../config');
 const client = require('../quant-client');
+const deleteResponse = require('../helper/deleteResponse');
 
 const command = {
   command: 'delete <path>',
