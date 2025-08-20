@@ -10,7 +10,7 @@
  *   - Message, the message from the response
  */
 const deleteResponse = function(error) {
-    const reponseData = error.message.match(/Response: (.*)/s);
+    const reponseData = error.message && error.message.match(/Response: (.*)/s);
     if (reponseData) {
         const responseData = JSON.parse(reponseData[1]);
         if (responseData.meta && responseData.meta[0]) {

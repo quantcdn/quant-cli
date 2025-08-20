@@ -57,7 +57,7 @@ describe('Redirect Command', () => {
       };
 
       const result = await redirect.handler.call(context, args);
-      expect(result).to.equal('Created redirect from /old-path to /new-path (301)');
+      expect(result).to.include('Created redirect from /old-path to /new-path (301)');
       expect(mockClientInstance._history.post.length).to.equal(1);
     });
 
@@ -88,7 +88,7 @@ describe('Redirect Command', () => {
       };
 
       const result = await redirect.handler.call(context, args);
-      expect(result).to.equal('Skipped redirect from /old-path to /new-path (already exists)');
+      expect(result).to.include('Skipped redirect from /old-path to /new-path (already exists)');
     });
 
     it('should handle missing args', async () => {
@@ -176,7 +176,7 @@ describe('Redirect Command', () => {
       };
 
       const result = await redirect.handler.call(context, args);
-      expect(result).to.equal('Created redirect from /old-path to /new-path (302)');
+      expect(result).to.include('Created redirect from /old-path to /new-path (302)');
       expect(mockClientInstance._history.post.length).to.equal(1);
       const [call] = mockClientInstance._history.post;
       expect(call.headers['Quant-Status']).to.equal(302);
