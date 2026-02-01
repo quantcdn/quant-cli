@@ -182,4 +182,4 @@ describe('Redirect Command', () => {
       expect(call.headers['Quant-Status']).to.equal(302);
     });
   });
-}); 
+});

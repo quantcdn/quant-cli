@@ -1,18 +1,18 @@
-const { text, confirm, isCancel } = require('@clack/prompts');
-const color = require('picocolors');
-const config = require('../config');
-const client = require('../quant-client');
-const getFiles = require('../helper/getFiles');
-const path = require('path');
-const md5File = require('md5-file');
-const { chunk } = require('../helper/array');
-const revisions = require('../helper/revisions');
-const isMD5Match = require('../helper/is-md5-match');
+import { text, confirm, isCancel } from '@clack/prompts';
+import color from 'picocolors';
+import config from '../config.js';
+import client from '../quant-client.js';
+import getFiles from '../helper/getFiles.js';
+import path from 'path';
+import md5File from 'md5-file';
+import { chunk } from '../helper/array.js';
+import revisions from '../helper/revisions.js';
+import isMD5Match from '../helper/is-md5-match.js';
 
 const command = {
   command: 'deploy [dir]',
   describe: 'Deploy the output of a static generator',
-  
+
   builder: (yargs) => {
     return yargs
       .positional('dir', {
@@ -63,7 +63,7 @@ const command = {
 
   async promptArgs(providedArgs = {}) {
     const configDir = config.get('dir') || 'build';
-    
+
     let dir = providedArgs.dir;
     if (!dir) {
       dir = await text({
@@ -173,14 +173,14 @@ const command = {
           console.log(color.dim(`Skipping ${filepath} (content unchanged)`));
           return;
         }
-        
+
         try {
           const meta = await quant.send(
-            file, 
-            filepath, 
-            true, 
-            args.attachments, 
-            args['skip-purge'], 
+            file,
+            filepath,
+            true,
+            args.attachments,
+            args['skip-purge'],
             args['enable-index-html']
           );
 
@@ -219,7 +219,7 @@ const command = {
     let data;
     try {
       data = await quant.meta(true);
-    } catch (err) {
+    } catch (_err) {
       return 'Deployment completed with warnings';
     }
 
@@ -261,8 +261,8 @@ const command = {
     for (const item of data.records) {
       const remoteUrl = normalizePath(item.url);
 
-      if (relativeFiles.has(remoteUrl) || 
-          relativeFiles.has(remoteUrl + '/') || 
+      if (relativeFiles.has(remoteUrl) ||
+          relativeFiles.has(remoteUrl + '/') ||
           relativeFiles.has(remoteUrl.replace(/\/$/, ''))) {
         continue;
       }
@@ -297,4 +297,4 @@ const command = {
   }
 };
 
-module.exports = command;
+export default command;

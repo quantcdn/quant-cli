@@ -2,17 +2,17 @@ import { expect } from 'chai';
 import fs from 'fs';
 import sinon from 'sinon';
 
-const config = await import('../../src/config.js');
+const config = (await import('../../src/config.js')).default;
 
 describe('Config', () => {
   beforeEach(() => {
     // Reset config to empty state
     config.set({});
-    
+
     // Clean up any test config files
     try {
       fs.unlinkSync('quant.json');
-    } catch (e) {
+    } catch (_e) {
       // Ignore if file doesn't exist
     }
 
@@ -38,9 +38,9 @@ describe('Config', () => {
       process.env.QUANT_CLIENT_ID = 'test-client';
       process.env.QUANT_PROJECT = 'test-project';
       process.env.QUANT_TOKEN = 'test-token';
-      
+
       await config.fromArgs({}, true);
-      
+
       expect(config.get('clientid')).to.equal('test-client');
       expect(config.get('project')).to.equal('test-project');
       expect(config.get('token')).to.equal('test-token');
@@ -53,11 +53,11 @@ describe('Config', () => {
         token: 'json-token',
         endpoint: 'https://custom.api.com/v1'
       };
-      
+
       sinon.stub(fs, 'readFileSync').returns(JSON.stringify(testConfig));
-      
+
       await config.fromArgs({}, true);
-      
+
       expect(config.get('clientid')).to.equal('json-client');
       expect(config.get('project')).to.equal('json-project');
       expect(config.get('token')).to.equal('json-token');
@@ -68,15 +68,15 @@ describe('Config', () => {
       // Set env vars
       process.env.QUANT_CLIENT_ID = 'env-client';
       process.env.QUANT_PROJECT = 'env-project';
-      
+
       // Set CLI args
       const args = {
         clientid: 'cli-client',
         project: 'cli-project'
       };
-      
+
       await config.fromArgs(args, true);
-      
+
       expect(config.get('clientid')).to.equal('cli-client');
       expect(config.get('project')).to.equal('cli-project');
     });
@@ -88,15 +88,15 @@ describe('Config', () => {
         project: 'json-project'
       };
       sinon.stub(fs, 'readFileSync').returns(JSON.stringify(fileConfig));
-      
+
       // Set CLI args
       const args = {
         clientid: 'cli-client',
         project: 'cli-project'
       };
-      
+
       await config.fromArgs(args, true);
-      
+
       expect(config.get('clientid')).to.equal('cli-client');
       expect(config.get('project')).to.equal('cli-project');
     });
@@ -108,13 +108,13 @@ describe('Config', () => {
         project: 'json-project'
       };
       sinon.stub(fs, 'readFileSync').returns(JSON.stringify(fileConfig));
-      
+
       // Set env vars
       process.env.QUANT_CLIENT_ID = 'env-client';
       process.env.QUANT_PROJECT = 'env-project';
-      
+
       await config.fromArgs({}, true);
-      
+
       expect(config.get('clientid')).to.equal('env-client');
       expect(config.get('project')).to.equal('env-project');
     });
@@ -201,15 +201,15 @@ describe('Config', () => {
   describe('save', () => {
     it('should save config to quant.json', () => {
       const writeStub = sinon.stub(fs, 'writeFileSync');
-      
+
       config.set({
         clientid: 'test-client',
         project: 'test-project',
         token: 'test-token'
       });
-      
+
       config.save();
-      
+
       expect(writeStub.calledWith('quant.json')).to.be.true;
       const savedConfig = JSON.parse(writeStub.firstCall.args[1]);
       expect(savedConfig.clientid).to.equal('test-client');
@@ -218,4 +218,4 @@ describe('Config', () => {
     });
 
   });
-}); 
+});

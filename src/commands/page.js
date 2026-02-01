@@ -1,16 +1,16 @@
 /**
  * Deploy a single index.html file to QuantCDN.
  */
-const { text, isCancel } = require('@clack/prompts');
-const config = require('../config');
-const client = require('../quant-client');
-const fs = require('fs');
-const isMD5Match = require('../helper/is-md5-match');
+import { text, isCancel } from '@clack/prompts';
+import config from '../config.js';
+import client from '../quant-client.js';
+import fs from 'fs';
+import isMD5Match from '../helper/is-md5-match.js';
 
 const command = {
   command: 'page <file> <location>',
   describe: 'Make a local page asset available via Quant',
-  
+
   builder: (yargs) => {
     return yargs
       .positional('file', {
@@ -36,7 +36,7 @@ const command = {
     if (!file) {
       file = await text({
         message: 'Enter path to local HTML file',
-      validate: value => !value ? 'File path is required' : undefined
+        validate: value => !value ? 'File path is required' : undefined
       });
       if (isCancel(file)) return null;
     }
@@ -44,8 +44,8 @@ const command = {
     let location = providedArgs.location;
     if (!location) {
       location = await text({
-      message: 'Enter the access URI (where the page will be available)',
-      validate: value => !value ? 'Location is required' : undefined
+        message: 'Enter the access URI (where the page will be available)',
+        validate: value => !value ? 'Location is required' : undefined
       });
       if (isCancel(location)) return null;
     }
@@ -96,4 +96,4 @@ const command = {
   }
 };
 
-module.exports = command;
+export default command;

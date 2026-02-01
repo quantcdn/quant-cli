@@ -4,16 +4,16 @@
  * @usage
  *   quant functions <file>
  */
-const fs = require('fs');
-const config = require('../config');
-const client = require('../quant-client');
-const color = require('picocolors');
-const isMD5Match = require('../helper/is-md5-match');
+import fs from 'fs';
+import config from '../config.js';
+import client from '../quant-client.js';
+import color from 'picocolors';
+import isMD5Match from '../helper/is-md5-match.js';
 
 const command = {
   command: 'functions <file>',
   describe: 'Deploy edge functions from a JSON configuration file',
-  
+
   builder: (yargs) => {
     return yargs
       .positional('file', {
@@ -117,4 +117,4 @@ const command = {
   }
 };
 
-module.exports = command; 
+export default command;

@@ -1,18 +1,18 @@
 /**
  * Deploy an edge auth function.
- * 
+ *
  * @usage
  *   quant auth <file> <description> [uuid]
  */
-const { text, isCancel } = require('@clack/prompts');
-const config = require('../config');
-const client = require('../quant-client');
-const { validateUUID } = require('../helper/validate-uuid');
+import { text, isCancel } from '@clack/prompts';
+import config from '../config.js';
+import client from '../quant-client.js';
+import { validateUUID } from '../helper/validate-uuid.js';
 
 const command = {
   command: 'auth <file> <description> [uuid]',
   describe: 'Deploy an edge auth function',
-  
+
   builder: (yargs) => {
     return yargs
       .positional('file', {
@@ -97,4 +97,4 @@ const command = {
   }
 };
 
-module.exports = command; 
+export default command;

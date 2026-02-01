@@ -11,13 +11,9 @@
  * @return {array}
  *   An array containing chunks.
  */
-const chunk = (array, size = 10) => {
+export function chunk(array, size = 10) {
   if (array.length <= size) {
     return [array];
   }
   return [array.slice(0, size), ...chunk(array.slice(size), size)];
-};
-
-module.exports = {
-  chunk,
-};
+}

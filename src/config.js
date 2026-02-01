@@ -1,6 +1,7 @@
-const fs = require('fs');
-const os = require('os');
-const path = require('path');
+import fs from 'fs';
+import os from 'os';
+import path from 'path';
+import color from 'picocolors';
 
 let config = {};
 
@@ -25,7 +26,7 @@ async function fromArgs(args = {}, silent = false) {
   let fileConfig = {};
   try {
     fileConfig = JSON.parse(fs.readFileSync('quant.json'));
-  } catch (err) {
+  } catch (_err) {
     // Silent fail - we'll handle missing config later
   }
 
@@ -54,9 +55,9 @@ async function fromArgs(args = {}, silent = false) {
   // Handle enable-index-html setting
   if (args['enable-index-html'] !== undefined) {
     const enableIndexHtml = args['enable-index-html'] === true || args['enable-index-html'] === '';
-    
+
     // If setting exists in config, ensure it matches
-    if (config.enableIndexHtml !== undefined && 
+    if (config.enableIndexHtml !== undefined &&
         config.enableIndexHtml !== enableIndexHtml) {
       const currentSetting = config.enableIndexHtml ? 'enabled' : 'disabled';
       const requestedSetting = enableIndexHtml ? 'enable' : 'disable';
@@ -64,7 +65,7 @@ async function fromArgs(args = {}, silent = false) {
         `Cannot ${requestedSetting} index.html URLs - this project was deployed with index.html URLs ${currentSetting}`
       );
     }
-    
+
     // Store the setting if it's the first time
     if (config.enableIndexHtml === undefined) {
       config.enableIndexHtml = enableIndexHtml;
@@ -79,7 +80,6 @@ async function fromArgs(args = {}, silent = false) {
   if (!config.token) missingConfig.push('token');
 
   if (missingConfig.length > 0 && !silent) {
-    const color = require('picocolors');
     console.log(color.red('Missing required configuration:'));
     console.log(color.yellow(`Missing: ${missingConfig.join(', ')}`));
     console.log('\nYou can provide configuration in several ways:');
@@ -123,9 +123,9 @@ function save() {
   fs.writeFileSync('quant.json', JSON.stringify(saveConfig, null, 2));
 }
 
-module.exports = {
+export default {
   fromArgs,
   get,
   set,
-  save,
+  save
 };

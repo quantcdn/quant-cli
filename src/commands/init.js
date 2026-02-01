@@ -1,11 +1,12 @@
-const { text, password, isCancel } = require('@clack/prompts');
-const config = require('../config');
-const client = require('../quant-client');
+import { text, password, isCancel } from '@clack/prompts';
+import fs from 'fs';
+import config from '../config.js';
+import client from '../quant-client.js';
 
 const command = {
   command: 'init',
   describe: 'Initialize a project in the current directory',
-  
+
   builder: (yargs) => {
     return yargs
       .option('dir', {
@@ -123,7 +124,7 @@ const command = {
       // If save failed, clean up the incomplete config file
       try {
         fs.unlinkSync('quant.json');
-      } catch (e) {
+      } catch (_e) {
         // Ignore error if file doesn't exist
       }
       throw new Error(`Unable to connect to quant: ${error.message}`);
@@ -131,4 +132,4 @@ const command = {
   }
 };
 
-module.exports = command;
+export default command;

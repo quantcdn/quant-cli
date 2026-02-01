@@ -2,8 +2,7 @@
  * Prepare URLs for quant.
  */
 
-module.exports = {
-
+export default {
   /**
    * Prepare a URI to work with Quant.
    *
@@ -23,6 +22,5 @@ module.exports = {
       return uri.endsWith('/') ? uri.slice(0, -1) : uri;
     }
     return uri;
-  },
-
+  }
 };

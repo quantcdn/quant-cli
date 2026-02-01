@@ -200,4 +200,4 @@ describe('Functions Command', () => {
       }
     });
   });
-}); 
+});

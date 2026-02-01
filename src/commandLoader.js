@@ -1,34 +1,53 @@
-function loadCommands() {
+import deployCommand from './commands/deploy.js';
+import pageCommand from './commands/page.js';
+import fileCommand from './commands/file.js';
+import redirectCommand from './commands/redirect.js';
+import purgeCommand from './commands/purge.js';
+import waflogsCommand from './commands/waflogs.js';
+import searchCommand from './commands/search.js';
+import scanCommand from './commands/scan.js';
+import functionCommand from './commands/function.js';
+import filterCommand from './commands/function_filter.js';
+import authCommand from './commands/function_auth.js';
+import functionsCommand from './commands/functions.js';
+import unpublishCommand from './commands/unpublish.js';
+import deleteCommand from './commands/delete.js';
+import infoCommand from './commands/info.js';
+import initCommand from './commands/init.js';
+import publishCommand from './commands/publish.js';
+
+export function loadCommands() {
   const commands = {
     // Primary deployment commands
-    'deploy': require('./commands/deploy'),
-    'page': require('./commands/page'),
-    'file': require('./commands/file'),
-    'redirect': require('./commands/redirect'),
-    'purge': require('./commands/purge'),
-    'waflogs': require('./commands/waflogs'),
-    'search': require('./commands/search'),
-    'scan': require('./commands/scan'),
+    'deploy': deployCommand,
+    'page': pageCommand,
+    'file': fileCommand,
+    'redirect': redirectCommand,
+    'purge': purgeCommand,
+    'waflogs': waflogsCommand,
+    'search': searchCommand,
+    'scan': scanCommand,
 
     // Edge functions
-    'function': require('./commands/function'),
-    'filter': require('./commands/function_filter'),
-    'auth': require('./commands/function_auth'),
-    'functions': require('./commands/functions'),
+    'function': functionCommand,
+    'filter': filterCommand,
+    'auth': authCommand,
+    'functions': functionsCommand,
 
     // Destructive operations
-    'unpublish': require('./commands/unpublish'),
-    'delete': require('./commands/delete'),
+    'unpublish': unpublishCommand,
+    'delete': deleteCommand,
 
     // Project management
-    'info': require('./commands/info'),
-    'init': require('./commands/init'),
+    'info': infoCommand,
+    'init': initCommand,
+    'publish': publishCommand
   };
 
   return commands;
 }
 
-function getCommandOptions() {
+export function getCommandOptions() {
   return [
     // Primary deployment commands
     { value: 'deploy', label: 'Deploy an entire directory' },
@@ -61,12 +80,10 @@ function getCommandOptions() {
 
     // Project management
     { value: 'info', label: 'Show project info' },
-    { value: 'init', label: 'Reinitialize project settings' },
+    { value: 'init', label: 'Reinitialize project settings' }
   ];
 }
 
-module.exports = {
-  loadCommands,
-  getCommandOptions,
-  getCommand: (name) => loadCommands()[name]
-}; 
+export function getCommand(name) {
+  return loadCommands()[name];
+}

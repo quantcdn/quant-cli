@@ -4,14 +4,16 @@
  * @usage
  *   quant waflogs
  */
-const { text, confirm, isCancel } = require('@clack/prompts');
-const config = require('../config');
-const client = require('../quant-client');
+import { text, confirm, isCancel } from '@clack/prompts';
+import fs from 'fs';
+import papa from 'papaparse';
+import config from '../config.js';
+import client from '../quant-client.js';
 
 const command = {
   command: 'waflogs',
   describe: 'Access project WAF logs',
-  
+
   builder: (yargs) => {
     return yargs
       .option('fields', {
@@ -68,7 +70,7 @@ const command = {
     let fields = providedArgs.fields;
     if (fields === undefined) {
       fields = await text({
-        message: 'Enter comma-separated field names to show (optional)',
+        message: 'Enter comma-separated field names to show (optional)'
       });
       if (isCancel(fields)) return null;
       // Don't return empty string
@@ -79,7 +81,7 @@ const command = {
     let output = providedArgs.output;
     if (output === undefined) {
       output = await text({
-        message: 'Location to write CSV output (optional)',
+        message: 'Location to write CSV output (optional)'
       });
       if (isCancel(output)) return null;
       // Don't return empty string
@@ -113,7 +115,7 @@ const command = {
     }
 
     const quant = client(config);
-    
+
     try {
 
       let allLogs = [];
@@ -121,9 +123,9 @@ const command = {
       let totalPages = 1;
 
       do {
-        const response = await quant.wafLogs(args.all, { 
+        const response = await quant.wafLogs(args.all, {
           page_size: args.size,
-          page: currentPage 
+          page: currentPage
         });
 
         if (response === -1) {
@@ -154,7 +156,7 @@ const command = {
       }
 
       let output = `Found ${allLogs.length} logs\n`;
-      
+
       if (args.fields) {
         const fields = typeof args.fields === 'string' ? args.fields.split(',') : args.fields;
         allLogs.forEach(log => {
@@ -175,7 +177,7 @@ const command = {
                 Object.entries(meta).forEach(([metaKey, metaValue]) => {
                   output += `${metaKey}: ${metaValue}\n`;
                 });
-              } catch (e) {
+              } catch (_e) {
                 output += `${key}: ${value}\n`;
               }
             } else {
@@ -203,4 +205,4 @@ const command = {
   }
 };
 
-module.exports = command;
+export default command;

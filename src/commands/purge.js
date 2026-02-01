@@ -4,14 +4,14 @@
  * @usage
  *   quant purge <path>
  */
-const { text, confirm, isCancel } = require('@clack/prompts');
-const config = require('../config');
-const client = require('../quant-client');
+import { text, confirm, select, isCancel } from '@clack/prompts';
+import config from '../config.js';
+import client from '../quant-client.js';
 
 const command = {
   command: 'purge <path>',
   describe: 'Purge the cache for a given URL',
-  
+
   builder: (yargs) => {
     return yargs
       .positional('path', {
@@ -82,7 +82,7 @@ const command = {
       if (isCancel(shouldPurge) || !shouldPurge) return null;
     }
 
-    return { 
+    return {
       path,
       'cache-keys': cacheKeys,
       'soft-purge': softPurge
@@ -123,4 +123,4 @@ const command = {
   }
 };
 
-module.exports = command;
+export default command;

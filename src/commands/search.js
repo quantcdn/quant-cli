@@ -1,16 +1,16 @@
 /**
  * Perform Search API operations.
  */
-const { text, select, confirm, isCancel } = require('@clack/prompts');
-const color = require('picocolors');
-const config = require('../config');
-const client = require('../quant-client');
-const fs = require('fs');
+import { text, select, confirm, isCancel } from '@clack/prompts';
+import color from 'picocolors';
+import config from '../config.js';
+import client from '../quant-client.js';
+import fs from 'fs';
 
 const command = {
   command: 'search <operation>',
   describe: 'Perform search index operations',
-  
+
   builder: (yargs) => {
     return yargs
       .positional('operation', {
@@ -51,7 +51,7 @@ const command = {
     let path = providedArgs.path;
     if ((operation === 'index' || operation === 'unindex') && !path) {
       path = await text({
-        message: operation === 'index' 
+        message: operation === 'index'
           ? 'Enter path to JSON file containing search data'
           : 'Enter URL to remove from search index',
         validate: value => !value ? 'Path is required' : undefined
@@ -64,7 +64,7 @@ const command = {
       try {
         const fileContent = fs.readFileSync(path, 'utf8');
         const data = JSON.parse(fileContent);
-        
+
         // Validate array structure
         if (!Array.isArray(data)) {
           throw new Error('JSON must be an array of records');
@@ -126,9 +126,10 @@ const command = {
 
     try {
       switch (args.operation) {
-        case 'status':
+        case 'status': {
           const status = await quant.searchStatus();
           return `Search index status:\nTotal documents: ${status.index && status.index.entries || 0}`;
+        }
 
         case 'index':
           await quant.searchIndex(args.path);
@@ -148,4 +149,4 @@ const command = {
   }
 };
 
-module.exports = command;
+export default command;

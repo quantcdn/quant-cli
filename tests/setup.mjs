@@ -8,4 +8,4 @@ use(sinonChai);
 // Global test helpers
 global.expect = expect;
 global.assert = assert;
-global.sinon = sinon; 
+global.sinon = sinon;

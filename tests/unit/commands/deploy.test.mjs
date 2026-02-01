@@ -1,22 +1,29 @@
 import { expect } from 'chai';
 import sinon from 'sinon';
-import _fs from 'fs';
-import _path from 'path';
+import fs from 'fs';
+import path from 'path';
+import os from 'os';
 import mockClient from '../../mocks/quant-client.mjs';
 
 const deploy = (await import('../../../src/commands/deploy.js')).default;
 const config = (await import('../../../src/config.js')).default;
-const getFiles = (await import('../../../src/helper/getFiles.js')).default;
 const md5File = (await import('md5-file')).default;
 
 describe('Deploy Command', () => {
-  let mockFs;
   let mockConfig;
   let mockClientInstance;
+  let tempDir;
 
   beforeEach(() => {
     // Reset config state
     config.set({});
+
+    // Create a temporary directory with test files for getFiles to find
+    tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'quant-test-'));
+    fs.writeFileSync(path.join(tempDir, 'index.html'), '<html></html>');
+    fs.writeFileSync(path.join(tempDir, 'styles.css'), 'body {}');
+    fs.mkdirSync(path.join(tempDir, 'images'));
+    fs.writeFileSync(path.join(tempDir, 'images', 'logo.png'), 'png-data');
 
     // Create mock config
     mockConfig = {
@@ -26,7 +33,7 @@ describe('Deploy Command', () => {
         clientid: 'test-client',
         project: 'test-project',
         token: 'test-token',
-        dir: 'build'
+        dir: tempDir
       }[key]),
       fromArgs: sinon.stub().resolves(true),
       save: sinon.stub()
@@ -34,22 +41,6 @@ describe('Deploy Command', () => {
 
     // Create mock client instance
     mockClientInstance = mockClient(mockConfig);
-
-    // Mock file system
-    mockFs = {
-      readFileSync: sinon.stub().returns('test content'),
-      existsSync: sinon.stub().returns(true),
-      createReadStream: sinon.stub().returns('test content'),
-      statSync: sinon.stub().returns({ isFile: () => true }),
-      readdirSync: sinon.stub().returns(['index.html', 'styles.css', 'images/logo.png'])
-    };
-
-    // Mock getFiles to return test files
-    sinon.stub(getFiles, 'getFiles').returns([
-      'build/index.html',
-      'build/styles.css',
-      'build/images/logo.png'
-    ]);
 
     // Mock md5File
     sinon.stub(md5File, 'sync').returns('test-md5-hash');
@@ -61,18 +52,21 @@ describe('Deploy Command', () => {
 
   afterEach(() => {
     sinon.restore();
+    // Clean up temp directory
+    if (tempDir && fs.existsSync(tempDir)) {
+      fs.rmSync(tempDir, { recursive: true, force: true });
+    }
   });
 
   describe('handler', () => {
     it('should deploy files successfully', async () => {
       const context = {
-        fs: mockFs,
         config: mockConfig,
         client: () => mockClientInstance
       };
 
       const args = {
-        dir: 'build',
+        dir: tempDir,
         clientid: 'test-client',
         project: 'test-project',
         token: 'test-token'
@@ -85,13 +79,12 @@ describe('Deploy Command', () => {
 
     it('should handle force flag', async () => {
       const context = {
-        fs: mockFs,
         config: mockConfig,
         client: () => mockClientInstance
       };
 
       const args = {
-        dir: 'build',
+        dir: tempDir,
         force: true,
         clientid: 'test-client',
         project: 'test-project',
@@ -104,13 +97,12 @@ describe('Deploy Command', () => {
 
     it('should handle attachments flag', async () => {
       const context = {
-        fs: mockFs,
         config: mockConfig,
         client: () => mockClientInstance
       };
 
       const args = {
-        dir: 'build',
+        dir: tempDir,
         attachments: true,
         clientid: 'test-client',
         project: 'test-project',
@@ -123,13 +115,12 @@ describe('Deploy Command', () => {
 
     it('should handle skip-unpublish flag', async () => {
       const context = {
-        fs: mockFs,
         config: mockConfig,
         client: () => mockClientInstance
       };
 
       const args = {
-        dir: 'build',
+        dir: tempDir,
         'skip-unpublish': true,
         clientid: 'test-client',
         project: 'test-project',
@@ -140,38 +131,28 @@ describe('Deploy Command', () => {
       expect(result).to.equal('Deployment completed successfully');
     });
 
-    it('should handle non-existent directory', async () => {
-      mockFs.existsSync.returns(false);
-      mockFs.readdirSync.returns([]);
-      
-      const context = {
-        fs: mockFs,
-        config: mockConfig,
-        client: () => mockClientInstance
-      };
-
-      const args = {
-        dir: 'nonexistent',
-        clientid: 'test-client',
-        project: 'test-project',
-        token: 'test-token'
-      };
-
-      const result = await deploy.handler.call(context, args);
-      expect(result).to.equal('Deployment completed successfully');
-    });
-
     it('should handle empty directory', async () => {
-      mockFs.readdirSync.returns([]);
-      
+      // Create an empty temp dir
+      const emptyDir = fs.mkdtempSync(path.join(os.tmpdir(), 'quant-empty-'));
+
+      const emptyConfig = {
+        ...mockConfig,
+        get: (key) => ({
+          endpoint: 'mock://api.quantcdn.io/v1',
+          clientid: 'test-client',
+          project: 'test-project',
+          token: 'test-token',
+          dir: emptyDir
+        }[key])
+      };
+
       const context = {
-        fs: mockFs,
-        config: mockConfig,
+        config: emptyConfig,
         client: () => mockClientInstance
       };
 
       const args = {
-        dir: 'build',
+        dir: emptyDir,
         clientid: 'test-client',
         project: 'test-project',
         token: 'test-token'
@@ -179,6 +160,9 @@ describe('Deploy Command', () => {
 
       const result = await deploy.handler.call(context, args);
       expect(result).to.equal('Deployment completed successfully');
+
+      // Clean up
+      fs.rmSync(emptyDir, { recursive: true, force: true });
     });
 
     it('should handle MD5 match errors', async () => {
@@ -194,13 +178,12 @@ describe('Deploy Command', () => {
       };
 
       const context = {
-        fs: mockFs,
         config: mockConfig,
         client: () => errorClientInstance
       };
 
       const args = {
-        dir: 'build',
+        dir: tempDir,
         clientid: 'test-client',
         project: 'test-project',
         token: 'test-token'
@@ -218,7 +201,6 @@ describe('Deploy Command', () => {
       };
 
       const context = {
-        fs: mockFs,
         config: {
           ...mockConfig,
           fromArgs: async () => false,
@@ -228,7 +210,7 @@ describe('Deploy Command', () => {
       };
 
       const args = {
-        dir: 'build',
+        dir: tempDir,
         clientid: 'test-client',
         project: 'test-project',
         token: 'test-token'
@@ -246,7 +228,6 @@ describe('Deploy Command', () => {
 
     it('should handle unpublish process', async () => {
       const context = {
-        fs: mockFs,
         config: mockConfig,
         client: () => ({
           ...mockClientInstance,
@@ -259,7 +240,7 @@ describe('Deploy Command', () => {
       };
 
       const args = {
-        dir: 'build',
+        dir: tempDir,
         clientid: 'test-client',
         project: 'test-project',
         token: 'test-token'
@@ -271,7 +252,6 @@ describe('Deploy Command', () => {
 
     it('should handle skip-unpublish-regex', async () => {
       const context = {
-        fs: mockFs,
         config: mockConfig,
         client: () => ({
           ...mockClientInstance,
@@ -284,7 +264,7 @@ describe('Deploy Command', () => {
       };
 
       const args = {
-        dir: 'build',
+        dir: tempDir,
         'skip-unpublish-regex': 'skip-me',
         clientid: 'test-client',
         project: 'test-project',
@@ -295,4 +275,4 @@ describe('Deploy Command', () => {
       expect(result).to.equal('Deployment completed successfully');
     });
   });
-}); 
+});

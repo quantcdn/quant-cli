@@ -1,18 +1,18 @@
 /**
  * Deploy an edge function.
- * 
+ *
  * @usage
  *   quant function <file> <description> [uuid]
  */
-const { text, isCancel } = require('@clack/prompts');
-const config = require('../config');
-const client = require('../quant-client');
-const { validateUUID } = require('../helper/validate-uuid');
+import { text, isCancel } from '@clack/prompts';
+import config from '../config.js';
+import client from '../quant-client.js';
+import { validateUUID } from '../helper/validate-uuid.js';
 
 const command = {
   command: 'function <file> <description> [uuid]',
   describe: 'Deploy an edge function',
-  
+
   builder: (yargs) => {
     return yargs
       .positional('file', {
@@ -61,7 +61,7 @@ const command = {
     let uuid = providedArgs.uuid;
     if (uuid === undefined) {
       uuid = await text({
-        message: 'Enter UUID to update (optional)',
+        message: 'Enter UUID to update (optional)'
       });
       if (isCancel(uuid)) return null;
     }
@@ -92,4 +92,4 @@ const command = {
   }
 };
 
-module.exports = command; 
+export default command;

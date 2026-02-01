@@ -1,4 +1,4 @@
-const path = require('path');
+import path from 'path';
 
 /**
  * Convert directory separators to posix standard.
@@ -11,6 +11,6 @@ const path = require('path');
  * @return {string}
  *   A normalised path.
  */
-module.exports = (str, sep = path.sep) => {
+export default function normalizePaths(str, sep = path.sep) {
   return str.split(sep).join(path.posix.sep);
-};
+}

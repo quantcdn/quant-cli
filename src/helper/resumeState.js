@@ -2,9 +2,9 @@
  * Manage a resume state.
  */
 
-const chalk = require('chalk');
-const fs = require('fs');
-const {homedir} = require('os');
+import chalk from 'chalk';
+import fs from 'fs';
+import { homedir } from 'os';
 
 const outputDir = `${homedir()}/.quant`;
 
@@ -16,7 +16,7 @@ const outputDir = `${homedir()}/.quant`;
  * @param {string} resumeFile
  *   The name of the resume file.
  */
-const write = (crawl, resumeFile = `quant-resume`) => {
+export function write(crawl, resumeFile = 'quant-resume') {
   console.log(chalk.bold.blue('Stopping crawl...'));
   crawl.stop();
   console.log(chalk.bold.blue('Writing resume state to disk...'));
@@ -37,17 +37,14 @@ const write = (crawl, resumeFile = `quant-resume`) => {
   fs.writeSync(fd, '[');
   crawl.queue.forEach((item, idx, arr) => {
     item.status = item.fetched !== true ? 'queued' : item.status;
-    join = idx !== arr.length - 1 ? ',' : '\n';
+    const join = idx !== arr.length - 1 ? ',' : '\n';
     fs.writeSync(fd, `${JSON.stringify(item, null, 2)}${join}`);
   });
   fs.writeSync(fd, ']');
 
   console.log(chalk.bold.green('✅ DONE: Wrote resume state to ' + resumeFile));
-};
+}
 
-module.exports = {
-  write,
-  default: {
-    write,
-  },
+export default {
+  write
 };

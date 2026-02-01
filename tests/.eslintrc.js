@@ -22,9 +22,9 @@ module.exports = {
   },
   rules: {
     'no-console': 'off',
-    'no-unused-vars': ['error', { 
+    'no-unused-vars': ['error', {
       'argsIgnorePattern': '^_',
       'varsIgnorePattern': '^_'
     }]
   }
-}; 
+};

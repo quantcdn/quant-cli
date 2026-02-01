@@ -1,17 +1,17 @@
 /**
- * Unpublish a QuantCDN url.
+ * Publish a QuantCDN url.
  *
  * @usage
  *   quant publish <path>
  */
-const { text, isCancel } = require('@clack/prompts');
-const config = require('../config');
-const client = require('../quant-client');
+import { text, isCancel } from '@clack/prompts';
+import config from '../config.js';
+import client from '../quant-client.js';
 
 const command = {
   command: 'publish [path]',
   describe: 'Publish an asset',
-  
+
   builder: (yargs) => {
     return yargs
       .positional('path', {
@@ -88,4 +88,4 @@ const command = {
   }
 };
 
-module.exports = command;
+export default command;

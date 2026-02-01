@@ -1,14 +1,15 @@
-const fs = require('fs');
-const path = require('path');
+import fs from 'fs';
+import path from 'path';
+import config from '../config.js';
 
 let isEnabled = false;
 let revisions = {};
 let revisionFile;
 
-function load(file) {
+export function load(file) {
   // If no file path provided, use current working directory
   if (!file) {
-    const projectName = require('../config').get('project');
+    const projectName = config.get('project');
     file = path.resolve(process.cwd(), `quant-revision-log_${projectName}`);
   }
 
@@ -17,22 +18,22 @@ function load(file) {
   try {
     const data = fs.readFileSync(revisionFile);
     revisions = JSON.parse(data);
-  } catch (err) {
+  } catch (_err) {
     // File doesn't exist or is invalid JSON - start with empty revisions
     revisions = {};
   }
 }
 
-function save() {
+export function save() {
   if (!revisionFile) {
-    const projectName = require('../config').get('project');
+    const projectName = config.get('project');
     revisionFile = path.resolve(process.cwd(), `quant-revision-log_${projectName}`);
   }
 
   fs.writeFileSync(revisionFile, JSON.stringify(revisions, null, 2));
 }
 
-function store(meta) {
+export function store(meta) {
   if (!isEnabled) {
     return;
   }
@@ -40,7 +41,7 @@ function store(meta) {
   revisions[meta.url] = meta;
 }
 
-function has(url, md5) {
+export function has(url, md5) {
   if (!isEnabled) {
     return false;
   }
@@ -48,7 +49,7 @@ function has(url, md5) {
   return revisions[url] && revisions[url].md5 === md5;
 }
 
-function enabled(value = null) {
+export function enabled(value = null) {
   if (value !== null) {
     isEnabled = value;
   }
@@ -56,10 +57,10 @@ function enabled(value = null) {
   return isEnabled;
 }
 
-module.exports = {
+export default {
   load,
   save,
   store,
   has,
-  enabled,
+  enabled
 };

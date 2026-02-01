@@ -61,7 +61,7 @@ describe('File Command', () => {
       const result = await file.handler.call(context, args);
       expect(result).to.equal('Added [test.css]');
       expect(mockClientInstance._history.post.length).to.equal(1);
-      
+
       const [call] = mockClientInstance._history.post;
       expect(call.headers['Quant-File-Url']).to.equal('/css/test.css');
     });
@@ -85,7 +85,7 @@ describe('File Command', () => {
 
       const result = await file.handler.call(context, args);
       expect(result).to.equal('Added [prompted.css]');
-      
+
       const [call] = mockClientInstance._history.post;
       expect(call.headers['Quant-File-Url']).to.equal('/css/prompted.css');
     });
@@ -193,4 +193,4 @@ describe('File Command', () => {
       }
     });
   });
-}); 
+});

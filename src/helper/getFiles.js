@@ -2,9 +2,10 @@
  * Get a file list for a given directory.
  */
 
-const fs = require('fs');
-const {promisify} = require('util');
-const {resolve} = require('path');
+import fs from 'fs';
+import { promisify } from 'util';
+import { resolve } from 'path';
+
 const readdir = promisify(fs.readdir);
 const stat = promisify(fs.stat);
 
@@ -19,13 +20,13 @@ const stat = promisify(fs.stat);
  * @return {array}
  *   An array of files.
  */
-const getFiles = async function(dir, exclusions = []) {
+export async function getFiles(dir, exclusions = []) {
   const subdirs = await readdir(dir);
   let files = await Promise.all(
-      subdirs.map(async (subdir) => {
-        const res = resolve(dir, subdir);
-        return (await stat(res)).isDirectory() ? getFiles(res) : res;
-      }),
+    subdirs.map(async (subdir) => {
+      const res = resolve(dir, subdir);
+      return (await stat(res)).isDirectory() ? getFiles(res) : res;
+    })
   );
 
   // Ensure that quant.json is always excluded.
@@ -33,9 +34,6 @@ const getFiles = async function(dir, exclusions = []) {
   const matcher = new RegExp(exclusions.join('|'), 'gi');
   files = files.filter((i) => matcher.test(i) === false);
   return files.reduce((a, f) => a.concat(f), []);
-};
+}
 
-module.exports = function() {
-  return module.exports.getFiles.apply(this, arguments);  
-};
-module.exports.getFiles = getFiles;
+export default getFiles;

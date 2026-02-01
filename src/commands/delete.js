@@ -5,15 +5,15 @@
  *   quant delete <path>
  */
 
-const { text, confirm, isCancel } = require('@clack/prompts');
-const color = require('picocolors');
-const config = require('../config');
-const client = require('../quant-client');
+import { text, confirm, isCancel } from '@clack/prompts';
+import color from 'picocolors';
+import config from '../config.js';
+import client from '../quant-client.js';
 
 const command = {
   command: 'delete <path>',
   describe: 'Delete a deployed path from Quant',
-  
+
   builder: (yargs) => {
     return yargs
       .positional('path', {
@@ -84,7 +84,7 @@ const command = {
 
     try {
       const response = await quant.delete(args.path);
-      
+
       // Check if the response indicates success
       if (response && !response.error && response.meta && response.meta[0]) {
         const meta = response.meta[0];
@@ -103,7 +103,7 @@ const command = {
         const match = err.message.match(/Response: (.*)/s);
         if (match) {
           const responseData = JSON.parse(match[1]);
-          
+
           // Check if this was actually a successful deletion
           if (!responseData.error && responseData.meta && responseData.meta[0]) {
             const meta = responseData.meta[0];
@@ -115,14 +115,14 @@ const command = {
             }
           }
         }
-      } catch (parseError) {
+      } catch (_parseError) {
         // If we can't parse the response, continue with original error
       }
-      
+
       // For actual errors
       throw new Error(`Cannot delete path (${args.path || 'undefined'}): ${err.message}`);
     }
   }
 };
 
-module.exports = command;
+export default command;

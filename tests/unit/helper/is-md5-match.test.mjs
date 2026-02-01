@@ -53,4 +53,4 @@ describe('isMD5Match Helper', () => {
   it('should handle undefined error', () => {
     expect(isMD5Match(undefined)).to.be.false;
   });
-}); 
+});

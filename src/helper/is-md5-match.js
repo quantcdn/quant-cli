@@ -1,10 +1,10 @@
 /**
  * Check if an error indicates an MD5 match
- * 
+ *
  * @param {Error} error - The error to check
  * @returns {boolean} - True if the error indicates an MD5 match
  */
-function isMD5Match(error) {
+export default function isMD5Match(error) {
   if (!error) return false;
 
   // Check for any kind of MD5 match message
@@ -24,5 +24,3 @@ function isMD5Match(error) {
 
   return false;
 }
-
-module.exports = isMD5Match; 

@@ -4,13 +4,13 @@
  * @usage
  *    quant info
  */
-const config = require('../config');
-const client = require('../quant-client');
+import config from '../config.js';
+import client from '../quant-client.js';
 
 const command = {
   command: 'info',
   describe: 'Show information about current configuration',
-  
+
   builder: (yargs) => {
     return yargs;
   },
@@ -26,7 +26,7 @@ const command = {
     }
 
     const quant = client(config);
-    
+
     try {
       await quant.ping();
     } catch (err) {
@@ -37,14 +37,14 @@ const command = {
     output += `Endpoint: ${config.get('endpoint')}\n`;
     output += `Customer: ${config.get('clientid')}\n`;
     output += `Project: ${config.get('project')}\n`;
-    output += `Token: ****\n`;
+    output += 'Token: ****\n';
 
     try {
       const meta = await quant.meta();
       if (meta && meta.total_records) {
         output += `\nTotal records: ${meta.total_records}`;
       }
-    } catch (err) {
+    } catch (_err) {
       output += '\nCould not fetch metadata';
     }
 
@@ -52,4 +52,4 @@ const command = {
   }
 };
 
-module.exports = command;
+export default command;

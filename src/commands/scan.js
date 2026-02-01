@@ -1,20 +1,20 @@
 /**
  * Scan local files and validate checksums.
  */
-const { text, confirm, isCancel } = require('@clack/prompts');
-const config = require('../config');
-const client = require('../quant-client');
-const getFiles = require('../helper/getFiles');
-const path = require('path');
-const md5File = require('md5-file');
-const revisions = require('../helper/revisions');
-const color = require('picocolors');
-const { chunk } = require('../helper/array');
+import { text, confirm, isCancel } from '@clack/prompts';
+import config from '../config.js';
+import client from '../quant-client.js';
+import getFiles from '../helper/getFiles.js';
+import path from 'path';
+import md5File from 'md5-file';
+import revisions from '../helper/revisions.js';
+import color from 'picocolors';
+import { chunk } from '../helper/array.js';
 
 const command = {
   command: 'scan [options]',
   describe: 'Validate local file checksums',
-  
+
   builder: (yargs) => {
     return yargs
       .option('diff-only', {
@@ -60,7 +60,7 @@ const command = {
     let skipUnpublishRegex = providedArgs['skip-unpublish-regex'];
     if (skipUnpublishRegex === undefined) {
       skipUnpublishRegex = await text({
-        message: 'Enter regex pattern to skip unpublish (optional)',
+        message: 'Enter regex pattern to skip unpublish (optional)'
       });
       if (isCancel(skipUnpublishRegex)) return null;
     }
@@ -90,7 +90,7 @@ const command = {
     try {
       metadata = await quant.meta(true);
       console.log('Metadata fetched successfully');
-    } catch (err) {
+    } catch (_err) {
       throw new Error('Failed to fetch metadata from Quant');
     }
 
@@ -114,20 +114,20 @@ const command = {
     const normalizePath = (filepath) => {
       // Convert to lowercase and ensure leading slash
       let normalizedPath = '/' + filepath.toLowerCase();
-      
+
       // Special cases for HTML files
       if (!args['enable-index-html'] && normalizedPath.endsWith('/index.html')) {
         // Case 1: Root index.html -> /
         if (normalizedPath === '/index.html') {
           return '/';
         }
-        
+
         // Case 2: Directory index.html -> directory path
         if (normalizedPath.endsWith('/index.html')) {
           return normalizedPath.slice(0, -11); // Remove index.html including the slash
         }
       }
-      
+
       return normalizedPath;
     };
 
@@ -151,7 +151,7 @@ const command = {
     // Process files in batches
     const batchSize = 20;
     const batches = chunk(files, batchSize);
-    
+
     for (let i = 0; i < batches.length; i++) {
       const batch = batches[i];
       const batchPaths = batch.map(file => {
@@ -167,13 +167,13 @@ const command = {
       process.stdout.write(`${spinChar} ${progress} Checking batch of files...`);
 
       try {
-        const response = await quant.batchMeta(batchPaths);        
+        const response = await quant.batchMeta(batchPaths);
         // Process each file in the batch
         for (let j = 0; j < batch.length; j++) {
           const file = batch[j];
           const filepath = path.relative(p, file);
           let localPath = '/' + filepath.toLowerCase();
-          
+
           // Normalize path
           localPath = normalizePath(filepath);
 
@@ -202,7 +202,7 @@ const command = {
             results.notFound.push(filepath);
           }
         }
-      } catch (err) {
+      } catch (_err) {
         // Fall back to checking files individually
         for (const file of batch) {
           const filepath = path.relative(p, file);
@@ -215,10 +215,10 @@ const command = {
     // Find paths to unpublish from initial metadata
     const processedUrls = new Set(); // Track what we've already processed
     const skippedByRegex = new Set(); // Track files skipped by regex
-    
+
     if (!args['skip-unpublish'] && metadata && metadata.records) {
       const skipPattern = args['skip-unpublish-regex'] ? new RegExp(args['skip-unpublish-regex']) : null;
-      
+
       metadata.records.forEach(record => {
         if (!record.url || processedUrls.has(record.url)) return;
 
@@ -259,7 +259,7 @@ const command = {
 
     // Format the results as a string
     let output = '\nScan Results:\n';
-    
+
     if (results.upToDate.length > 0 && !args['diff-only']) {
       output += color.green('\nUp to date:') + `\n${results.upToDate.join('\n')}\n`;
     }
@@ -299,4 +299,4 @@ const command = {
   }
 };
 
-module.exports = command;
+export default command;

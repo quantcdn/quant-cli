@@ -1,10 +1,11 @@
 #!/usr/bin/env node
 
-const { intro, outro, select, confirm, isCancel } = require('@clack/prompts');
-const color = require('picocolors');
-const { getCommandOptions, getCommand, loadCommands } = require('./src/commandLoader');
-const config = require('./src/config');
-const yargs = require('yargs');
+import { intro, outro, select, confirm, isCancel } from '@clack/prompts';
+import color from 'picocolors';
+import { getCommandOptions, getCommand, loadCommands } from './src/commandLoader.js';
+import config from './src/config.js';
+import yargs from 'yargs';
+import { hideBin } from 'yargs/helpers';
 
 async function showActiveConfig() {
   // Try to load config first
@@ -101,29 +102,29 @@ async function interactiveMode() {
 }
 
 function cliMode() {
-  let yargsInstance = yargs(process.argv.slice(2))
+  let yargsInstance = yargs(hideBin(process.argv))
     .strict()
     .help()
     // Global options
     .option('clientid', {
       alias: 'c',
       describe: 'Project customer id for QuantCDN',
-      type: 'string',
+      type: 'string'
     })
     .option('project', {
       alias: 'p',
       describe: 'Project name for QuantCDN',
-      type: 'string',
+      type: 'string'
     })
     .option('token', {
       alias: 't',
       describe: 'Project token for QuantCDN',
-      type: 'string',
+      type: 'string'
     })
     .option('endpoint', {
       alias: 'e',
       describe: 'API endpoint for QuantCDN',
-      type: 'string',
+      type: 'string'
     });
 
   // Add all commands to yargs

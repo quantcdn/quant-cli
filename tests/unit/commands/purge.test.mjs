@@ -174,4 +174,4 @@ describe('Purge Command', () => {
       }
     });
   });
-}); 
+});

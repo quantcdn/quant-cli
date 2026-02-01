@@ -2,14 +2,14 @@
  * A quant client.
  */
 
-const axios = require("axios");
-const fs = require("fs");
-const path = require("path");
-const mime = require("mime-types");
-const querystring = require("querystring");
-const quantURL = require("./helper/quant-url");
+import axios from 'axios';
+import fs from 'fs';
+import path from 'path';
+import mime from 'mime-types';
+import querystring from 'querystring';
+import quantURL from './helper/quant-url.js';
 
-module.exports = function (config) {
+export default function (config) {
   // Set up headers with correct Quant header names
   const headers = {
     'Content-Type': 'application/json',
@@ -58,27 +58,27 @@ module.exports = function (config) {
     }
 
     const body =
-      typeof response.data == "string"
+      typeof response.data == 'string'
         ? JSON.parse(response.data)
         : response.data;
 
-    if (typeof body.errors != "undefined") {
-      let msg = "";
-      for (i in body.errors) {
-        msg += body.errors[i].errorMsg + "\n";
+    if (typeof body.errors != 'undefined') {
+      let msg = '';
+      for (let i in body.errors) {
+        msg += body.errors[i].errorMsg + '\n';
       }
       throw new Error(`${msg}\nResponse: ${JSON.stringify(body, null, 2)}`);
     }
 
     if (response.statusCode == 400) {
-      if (typeof body.errorMsg != "undefined") {
+      if (typeof body.errorMsg != 'undefined') {
         throw new Error(`${body.errorMsg}\nResponse: ${JSON.stringify(body, null, 2)}`);
       }
       throw new Error(`Critical error...\nResponse: ${JSON.stringify(body, null, 2)}`);
     }
 
-    if (body.error || (typeof body.errorMsg != "undefined" && body.errorMsg.length > 0)) {
-      const msg = typeof body.errorMsg != "undefined" ? body.errorMsg : body.msg;
+    if (body.error || (typeof body.errorMsg != 'undefined' && body.errorMsg.length > 0)) {
+      const msg = typeof body.errorMsg != 'undefined' ? body.errorMsg : body.msg;
       throw new Error(`${msg}\nResponse: ${JSON.stringify(body, null, 2)}`);
     }
 
@@ -104,7 +104,7 @@ module.exports = function (config) {
      */
     ping: async function () {
       try {
-        const res = await get(`/ping`);
+        const res = await get('/ping');
         return handleResponse(res);
       } catch (error) {
         throw new Error(formatError(error));
@@ -136,12 +136,12 @@ module.exports = function (config) {
           page_size: 500,
           published: true,
           deleted: false,
-          sort_field: "last_modified",
-          sort_direction: "desc",
+          sort_field: 'last_modified',
+          sort_direction: 'desc'
         },
-        extend,
+        extend
       );
-      const url = `${config.get("endpoint")}/global-meta?${querystring.stringify(query)}`;
+      const url = `${config.get('endpoint')}/global-meta?${querystring.stringify(query)}`;
       const doUnfold = async function (i) {
         const res = await get(`${url}&page=${i}`, { headers });
         if (res.data.global_meta && res.data.global_meta.records) {
@@ -149,8 +149,8 @@ module.exports = function (config) {
             records.push({
               url: item.meta.url,
               md5: item.meta.md5,
-              type: item.meta.type,
-            }),
+              type: item.meta.type
+            })
           );
         }
       };
@@ -170,8 +170,8 @@ module.exports = function (config) {
           records.push({
             url: item.meta.url,
             md5: item.meta.md5,
-            type: item.meta.type,
-          }),
+            type: item.meta.type
+          })
         );
       }
 
@@ -186,7 +186,7 @@ module.exports = function (config) {
       return {
         total_pages: res.data.global_meta.total_pages,
         total_records: res.data.global_meta.total_records,
-        records,
+        records
       };
     },
 
@@ -221,21 +221,21 @@ module.exports = function (config) {
       skipPurge = false,
       includeIndex = false,
       extraHeaders = {},
-      encoding = "utf-8",
+      encoding = 'utf-8'
     ) {
       const mimeType = mime.lookup(file);
-      if (mimeType == "text/html") {
+      if (mimeType == 'text/html') {
         if (!location) {
-          const p = path.resolve(process.cwd(), config.get("dir"));
+          const p = path.resolve(process.cwd(), config.get('dir'));
           // If a location isn't given, calculate it.
           location = path.relative(p, file);
         }
 
         location = quantURL.prepare(location);
 
-        if (!location.endsWith(".html") && includeIndex) {
+        if (!location.endsWith('.html') && includeIndex) {
           location = `${location}/index.html`;
-          location = location.replace(/^\/\//, "/");
+          location = location.replace(/^\/\//, '/');
         }
 
         return await this.markup(
@@ -245,7 +245,7 @@ module.exports = function (config) {
           attachments,
           extraHeaders,
           encoding,
-          skipPurge,
+          skipPurge
         );
       } else {
         return await this.file(file, location, false, extraHeaders, skipPurge);
@@ -279,36 +279,36 @@ module.exports = function (config) {
       published = true,
       attachments = false,
       extraHeaders = {},
-      encoding = "utf-8",
-      skipPurge = false,
+      encoding = 'utf-8',
+      skipPurge = false
     ) {
       if (!Buffer.isBuffer(file)) {
         if (!location) {
-          const p = path.resolve(process.cwd(), config.get("dir"));
+          const p = path.resolve(process.cwd(), config.get('dir'));
           // If a location isn't given, calculate it.
           location = path.relative(p, file);
         }
         file = fs.readFileSync(file, [encoding]);
       }
 
-      const content = file.toString("utf8");
-      location = location.startsWith("/") ? location : `/${location}`;
+      const content = file.toString('utf8');
+      location = location.startsWith('/') ? location : `/${location}`;
 
       if (skipPurge) {
-        headers["Quant-Skip-Purge"] = "true";
+        headers['Quant-Skip-Purge'] = 'true';
       }
 
       const options = {
-        url: `${config.get("endpoint")}`,
+        url: `${config.get('endpoint')}`,
         body: {
           url: location,
           find_attachments: attachments,
           content,
-          published,
+          published
         },
         headers: {
-          ...headers,
-        },
+          ...headers
+        }
       };
 
       if (Object.entries(extraHeaders).length > 0) {
@@ -316,7 +316,7 @@ module.exports = function (config) {
       }
 
       const res = await post(options.url, options.body, {
-        headers: options.headers,
+        headers: options.headers
       });
       return handleResponse(res);
     },
@@ -345,48 +345,48 @@ module.exports = function (config) {
       location,
       _absolute = false,
       extraHeaders = {},
-      skipPurge = false,
+      skipPurge = false
     ) {
       if (!Buffer.isBuffer(local)) {
         if (!location) {
-          const p = path.resolve(process.cwd(), config.get("dir"));
+          const p = path.resolve(process.cwd(), config.get('dir'));
           // If a location isn't given, calculate it.
           location = path.relative(p, local);
-          location.replace(path.basename(location), "");
+          location.replace(path.basename(location), '');
         }
         if (!fs.existsSync(local)) {
-          throw new Error("File is not accessible.");
+          throw new Error('File is not accessible.');
         }
         local = fs.createReadStream(local);
       }
 
       const formData = {
-        data: local,
+        data: local
       };
 
-      location = location.startsWith("/") ? location : `/${location}`;
+      location = location.startsWith('/') ? location : `/${location}`;
 
       if (skipPurge) {
-        headers["Quant-Skip-Purge"] = "true";
+        headers['Quant-Skip-Purge'] = 'true';
       }
 
       const options = {
-        url: config.get("endpoint"),
+        url: config.get('endpoint'),
         json: true,
         headers: {
           ...headers,
-          "Content-Type": "multipart/form-data",
-          "Quant-File-Url": location,
+          'Content-Type': 'multipart/form-data',
+          'Quant-File-Url': location
         },
-        formData,
+        formData
       };
 
       if (Object.entries(extraHeaders).length > 0) {
-        options.headers["Quant-File-Headers"] = JSON.stringify(extraHeaders);
+        options.headers['Quant-File-Headers'] = JSON.stringify(extraHeaders);
       }
 
       const res = await post(options.url, options.formData, {
-        headers: options.headers,
+        headers: options.headers
       });
       return handleResponse(res);
     },
@@ -408,16 +408,16 @@ module.exports = function (config) {
       const url = quantURL.prepare(location);
 
       if (!revision) {
-        throw Error("Invalid revision ID provided.");
+        throw Error('Invalid revision ID provided.');
       }
 
       const options = {
-        url: `${config.get("endpoint")}/publish/${revision}`,
+        url: `${config.get('endpoint')}/publish/${revision}`,
         headers: {
           ...headers,
-          "Quant-Url": url,
+          'Quant-Url': url
         },
-        json: true,
+        json: true
       };
       const res = await patch(options.url, {}, { headers: options.headers });
       return handleResponse(res);
@@ -437,12 +437,12 @@ module.exports = function (config) {
       url = quantURL.prepare(url);
 
       const options = {
-        url: `${config.get("endpoint")}/unpublish`,
+        url: `${config.get('endpoint')}/unpublish`,
         headers: {
           ...headers,
-          "Quant-Url": url,
+          'Quant-Url': url
         },
-        json: true,
+        json: true
       };
 
       const res = await patch(options.url, {}, { headers: options.headers });
@@ -467,21 +467,21 @@ module.exports = function (config) {
      */
     redirect: async function (from, to, author, status = 302) {
       const options = {
-        url: `${config.get("endpoint")}/redirect`,
+        url: `${config.get('endpoint')}/redirect`,
         headers: {
-          ...headers,
+          ...headers
         },
         json: true,
         body: {
           url: from,
           redirect_url: to,
           redirect_http_code: status,
-          published: true,
-        },
+          published: true
+        }
       };
 
       if (status < 300 || status > 400) {
-        throw new Error("A valid redirect status code is required");
+        throw new Error('A valid redirect status code is required');
       }
 
       if (author) {
@@ -489,7 +489,7 @@ module.exports = function (config) {
       }
 
       const res = await post(options.url, options.body, {
-        headers: options.headers,
+        headers: options.headers
       });
       return handleResponse(res);
     },
@@ -504,15 +504,15 @@ module.exports = function (config) {
      *
      * @throw Error.
      */
-    delete: async function (path) {
-      path = path.replace("index.html", "");
+    delete: async function (deletePath) {
+      deletePath = deletePath.replace('index.html', '');
 
       const options = {
-        url: `${config.get("endpoint")}/delete/all`,
+        url: `${config.get('endpoint')}/delete/all`,
         headers: {
           ...headers,
-          "Quant-Url": path,
-        },
+          'Quant-Url': deletePath
+        }
       };
 
       const res = await del(options.url, { headers: options.headers });
@@ -533,18 +533,18 @@ module.exports = function (config) {
      * @throws Error.
      */
     revision: async function (url, revision = false) {
-      const path = revision ? revision : "published";
+      const revisionPath = revision ? revision : 'published';
 
-      url = url.indexOf("/") == 0 ? url : `/${url}`;
+      url = url.indexOf('/') == 0 ? url : `/${url}`;
       url = url.toLowerCase();
-      url = url.replace(/\/?index\.html/, "");
+      url = url.replace(/\/?index\.html/, '');
 
       const options = {
-        url: `${config.get("endpoint")}/revisions/${path}`,
+        url: `${config.get('endpoint')}/revisions/${revisionPath}`,
         headers: {
           ...headers,
-          "Quant-Url": url,
-        },
+          'Quant-Url': url
+        }
       };
       const res = await get(options.url, { headers: options.headers });
       return handleResponse(res);
@@ -563,9 +563,9 @@ module.exports = function (config) {
      *
      * @throws Error.
      */
-    revisions: async function (path) {
+    revisions: async function (revisionPath) {
       try {
-        const response = await get(`${config.get('endpoint')}/meta/${path}`, { headers });
+        const response = await get(`${config.get('endpoint')}/meta/${revisionPath}`, { headers });
         return handleResponse(response);
       } catch (error) {
         throw error;
@@ -589,7 +589,7 @@ module.exports = function (config) {
      */
     purge: async function(url, cacheKeys, options = {}) {
       const purgeHeaders = { ...headers };
-      
+
       if (cacheKeys) {
         purgeHeaders['Cache-Keys'] = cacheKeys;
       } else {
@@ -612,22 +612,22 @@ module.exports = function (config) {
      * @throws Error
      */
     searchIndex: async function (filePath) {
-      let data = "";
+      let data = '';
 
       // filePath is a JSON file we send the raw content of.
       try {
-        data = JSON.parse(fs.readFileSync(filePath, "utf8"));
+        data = JSON.parse(fs.readFileSync(filePath, 'utf8'));
       } catch (err) {
         console.error(err);
         return;
       }
 
       const options = {
-        url: `${config.get("endpoint")}/search`,
+        url: `${config.get('endpoint')}/search`,
         headers: {
-          ...headers,
+          ...headers
         },
-        body: data,
+        body: data
       };
       try {
         const res = await post(options.url, options.body, { headers: options.headers });
@@ -646,11 +646,11 @@ module.exports = function (config) {
      */
     searchRemove: async function (url) {
       const options = {
-        url: `${config.get("endpoint")}/search`,
+        url: `${config.get('endpoint')}/search`,
         headers: {
           ...headers,
-          "Quant-Url": url,
-        },
+          'Quant-Url': url
+        }
       };
       try {
         const res = await del(options.url, { headers: options.headers });
@@ -667,11 +667,11 @@ module.exports = function (config) {
      */
     searchClearIndex: async function () {
       const options = {
-        url: `${config.get("endpoint")}/search/all`,
+        url: `${config.get('endpoint')}/search/all`,
         headers: {
-          ...headers,
+          ...headers
         },
-        json: true,
+        json: true
       };
       try {
         const res = await del(options.url, { headers: options.headers });
@@ -688,11 +688,11 @@ module.exports = function (config) {
      */
     searchStatus: async function () {
       const options = {
-        url: `${config.get("endpoint")}/search`,
+        url: `${config.get('endpoint')}/search`,
         headers: {
-          ...headers,
+          ...headers
         },
-        json: true,
+        json: true
       };
       try {
         const res = await get(options.url, { headers: options.headers });
@@ -745,7 +745,7 @@ module.exports = function (config) {
             ...headers
           },
           body: {
-            "Quant-Url": urls
+            'Quant-Url': urls
           }
         };
 
@@ -758,7 +758,7 @@ module.exports = function (config) {
 
     /**
      * Create or update an edge function.
-     * 
+     *
      * @param {string} file - Path to the function file
      * @param {string} description - Description of the function
      * @param {string} [uuid] - Optional UUID for updating existing function
@@ -766,12 +766,12 @@ module.exports = function (config) {
      */
     edgeFunction: async function(file, description, uuid = null) {
       if (!description) {
-        throw new Error("Description is required for edge functions");
+        throw new Error('Description is required for edge functions');
       }
 
       if (!Buffer.isBuffer(file)) {
         if (!fs.existsSync(file)) {
-          throw new Error("Function file is not accessible.");
+          throw new Error('Function file is not accessible.');
         }
         file = fs.readFileSync(file, 'utf8');
       }
@@ -796,7 +796,7 @@ module.exports = function (config) {
 
     /**
      * Create or update an edge filter function.
-     * 
+     *
      * @param {string} file - Path to the filter function file
      * @param {string} description - Description of the filter
      * @param {string} [uuid] - Optional UUID for updating existing filter
@@ -804,12 +804,12 @@ module.exports = function (config) {
      */
     edgeFilter: async function(file, description, uuid = null) {
       if (!description) {
-        throw new Error("Description is required for edge filters");
+        throw new Error('Description is required for edge filters');
       }
 
       if (!Buffer.isBuffer(file)) {
         if (!fs.existsSync(file)) {
-          throw new Error("Filter function file is not accessible.");
+          throw new Error('Filter function file is not accessible.');
         }
         file = fs.readFileSync(file, 'utf8');
       }
@@ -834,7 +834,7 @@ module.exports = function (config) {
 
     /**
      * Create or update an edge auth function.
-     * 
+     *
      * @param {string} file - Path to the auth function file
      * @param {string} description - Description of the auth function
      * @param {string} [uuid] - Optional UUID for updating existing auth function
@@ -842,12 +842,12 @@ module.exports = function (config) {
      */
     edgeAuth: async function(file, description, uuid = null) {
       if (!description) {
-        throw new Error("Description is required for auth functions");
+        throw new Error('Description is required for auth functions');
       }
 
       if (!Buffer.isBuffer(file)) {
         if (!fs.existsSync(file)) {
-          throw new Error("Auth function file is not accessible.");
+          throw new Error('Auth function file is not accessible.');
         }
         file = fs.readFileSync(file, 'utf8');
       }
@@ -870,4 +870,4 @@ module.exports = function (config) {
       }
     }
   };
-};
+}

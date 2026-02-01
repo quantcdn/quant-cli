@@ -14,4 +14,4 @@ export default function mockAxiosForDeploy() {
   sinon.stub(axios, 'create').returns(mockInstance);
 
   return mockInstance;
-} 
+}

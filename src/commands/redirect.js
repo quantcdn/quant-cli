@@ -4,15 +4,15 @@
  * @usage
  *   quant redirect <from> <to> [status]
  */
-const { text, select, isCancel } = require('@clack/prompts');
-const config = require('../config');
-const client = require('../quant-client');
-const isMD5Match = require('../helper/is-md5-match');
+import { text, select, isCancel } from '@clack/prompts';
+import config from '../config.js';
+import client from '../quant-client.js';
+import isMD5Match from '../helper/is-md5-match.js';
 
 const command = {
   command: 'redirect <from> <to> [status]',
   describe: 'Create a redirect',
-  
+
   builder: (yargs) => {
     return yargs
       .positional('from', {
@@ -100,4 +100,4 @@ const command = {
   }
 };
 
-module.exports = command;
+export default command;

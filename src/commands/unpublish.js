@@ -4,15 +4,15 @@
  * @usage
  *   quant unpublish <path>
  */
-const { text, isCancel } = require('@clack/prompts');
-const color = require('picocolors');
-const config = require('../config');
-const client = require('../quant-client');
+import { text, isCancel } from '@clack/prompts';
+import color from 'picocolors';
+import config from '../config.js';
+import client from '../quant-client.js';
 
 const command = {
   command: 'unpublish <path>',
   describe: 'Unpublish an asset',
-  
+
   builder: (yargs) => {
     return yargs
       .positional('path', {
@@ -53,7 +53,7 @@ const command = {
 
     try {
       const response = await quant.unpublish(args.path);
-      
+
       // Check if the response indicates success
       if (response && !response.error) {
         return color.green(`Successfully unpublished [${args.path}]`);
@@ -65,7 +65,7 @@ const command = {
       try {
         if (err.response?.data) {
           const data = err.response.data;
-          
+
           // Check for specific error messages
           if (data.errorMsg) {
             if (data.errorMsg.includes('not found') || data.errorMsg.includes('does not exist')) {
@@ -83,16 +83,16 @@ const command = {
 
           throw new Error(`Failed to unpublish: ${err.message}\nResponse: ${JSON.stringify(data, null, 2)}`);
         }
-        
+
         const match = err.message.match(/Response: (.*)/s);
         if (match) {
           const responseData = JSON.parse(match[1]);
-          
+
           // Check if this was actually a successful unpublish
           if (!responseData.error) {
             return color.green(`Successfully unpublished [${args.path}]`);
           }
-          
+
           // Check if the path was already unpublished
           if (responseData.errorMsg) {
             if (responseData.errorMsg.includes('not found') || responseData.errorMsg.includes('does not exist')) {
@@ -103,18 +103,18 @@ const command = {
             }
           }
         }
-      } catch (parseError) {
+      } catch (_parseError) {
         // If we can't parse the response, continue with original error
       }
-      
+
       // For actual errors
       if (err.response?.status === 404) {
         return color.dim(`Path [${args.path}] does not exist or is already unpublished`);
       }
-      
+
       throw new Error(`Failed to unpublish: ${err.message}`);
     }
   }
 };
 
-module.exports = command;
+export default command;
