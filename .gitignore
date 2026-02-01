@@ -5,3 +5,4 @@ report
 quant*.json
 yarn.lock
 .DS_store
+coverage
