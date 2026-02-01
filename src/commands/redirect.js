@@ -4,10 +4,12 @@
  * @usage
  *   quant redirect <from> <to> [status]
  */
-import { text, select, isCancel } from '@clack/prompts';
+import { text, select, isCancel, confirm } from '@clack/prompts';
+import color from 'picocolors';
 import config from '../config.js';
 import client from '../quant-client.js';
 import isMD5Match from '../helper/is-md5-match.js';
+import deleteResponse from '../helper/deleteResponse.js';
 
 const command = {
   command: 'redirect <from> <to> [status]',
@@ -30,11 +32,34 @@ const command = {
         type: 'number',
         default: 302,
         choices: [301, 302, 303, 307, 308]
+      })
+      .option('delete', {
+        describe: 'Delete the redirect',
+        alias: ['d'],
+        type: 'boolean',
+        default: false
+      })
+      .option('force', {
+        describe: 'Delete without confirmation',
+        alias: ['f'],
+        type: 'boolean',
+        default: false
       });
   },
 
   async promptArgs(providedArgs = {}) {
+    let isDelete = providedArgs.delete === true;
     let from = providedArgs.from;
+
+    if (isDelete) {
+      from = await text({
+        message: 'Enter URL to redirect from',
+        validate: value => !value ? 'From URL is required' : undefined
+      });
+      if (isCancel(from)) return null;
+      return { from, to: null, status: null, delete: true, force: providedArgs.force};
+    }
+
     if (!from) {
       from = await text({
         message: 'Enter URL to redirect from',
@@ -68,7 +93,7 @@ const command = {
       if (isCancel(status)) return null;
     }
 
-    return { from, to, status };
+    return { from, to, status, delete: false, force: false };
   },
 
   async handler(args) {
@@ -89,11 +114,36 @@ const command = {
     const status = args.status || 302;
 
     try {
-      await quant.redirect(args.from, args.to, null, status);
-      return `Created redirect from ${args.from} to ${args.to} (${status})`;
+      if (args.delete) {
+        if (!args.force) {
+          const shouldDelete = await confirm({
+            message: 'This will delete the redirect. Are you sure?',
+            initialValue: false,
+            active: 'Yes',
+            inactive: 'No'
+          });
+          if (isCancel(shouldDelete) || !shouldDelete) {
+            throw new Error('Operation cancelled');
+          }
+        }
+        await quant.delete(args.from);
+        return color.green(`Deleted redirect from ${args.from}`);
+      } else {
+        await quant.redirect(args.from, args.to, null, status);
+        return color.green(`Created redirect from ${args.from} to ${args.to} (${status})`);
+      }
     } catch (err) {
+      const [ok, message] = deleteResponse(err);
+      if (ok) {
+        if (message === 'success') {
+          return color.green('Redirect was deleted');
+        }
+        if (message === 'already deleted') {
+          return color.dim('Redirect was already deleted');
+        }
+      }
       if (isMD5Match(err)) {
-        return `Skipped redirect from ${args.from} to ${args.to} (already exists)`;
+        return color.dim(`Skipped redirect from ${args.from} to ${args.to} (already exists)`);
       }
       throw new Error(`Failed to create redirect: ${err.message}`);
     }

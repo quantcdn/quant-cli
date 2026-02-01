@@ -9,6 +9,7 @@ import { text, confirm, isCancel } from '@clack/prompts';
 import color from 'picocolors';
 import config from '../config.js';
 import client from '../quant-client.js';
+import deleteResponse from '../helper/deleteResponse.js';
 
 const command = {
   command: 'delete <path>',
@@ -100,19 +101,13 @@ const command = {
     } catch (err) {
       // If we have a response in the error message, try to parse it
       try {
-        const match = err.message.match(/Response: (.*)/s);
-        if (match) {
-          const responseData = JSON.parse(match[1]);
-
-          // Check if this was actually a successful deletion
-          if (!responseData.error && responseData.meta && responseData.meta[0]) {
-            const meta = responseData.meta[0];
-            if (meta.deleted) {
-              return color.green(`Successfully removed [${args.path}]`);
-            }
-            if (meta.deleted_timestamp) {
-              return color.dim(`Path [${args.path}] was already deleted`);
-            }
+        const [ok, message] = deleteResponse(err);
+        if (ok) {
+          if (message === 'success') {
+            return color.green(`Successfully removed [${args.path}]`);
+          }
+          if (message === 'already deleted') {
+            return color.dim(`Path [${args.path}] was already deleted`);
           }
         }
       } catch (_parseError) {
