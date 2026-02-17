@@ -78,7 +78,6 @@ const command = {
     if (isCancel(dir)) return null;
 
     return {
-      endpoint: 'https://api.quantcdn.io/v1',
       clientid,
       project,
       token,

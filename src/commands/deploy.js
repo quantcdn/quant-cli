@@ -167,10 +167,10 @@ const command = {
     for (let i = 0; i < files.length; i++) {
       await Promise.all(files[i].map(async (file) => {
         const filepath = path.relative(p, file);
-        const md5 = md5File.sync(file);
+        const md5 = await md5File(file);
 
         if (!args.force && revisions.has(filepath, md5)) {
-          console.log(color.dim(`Skipping ${filepath} (content unchanged)`));
+          console.log(color.dim(`Skipping ${filepath} (unchanged)`));
           return;
         }
 
@@ -184,17 +184,13 @@ const command = {
             args['enable-index-html']
           );
 
+          revisions.store({ url: filepath, md5 });
           console.log(color.green('✓'), filepath);
           return meta;
         } catch (err) {
           if (!args.force && isMD5Match(err)) {
-            if (revisions.enabled()) {
-              revisions.store({
-                url: filepath,
-                md5: md5
-              });
-            }
-            console.log(color.dim(`Skipping ${filepath} (content unchanged)`));
+            revisions.store({ url: filepath, md5 });
+            console.log(color.dim(`Skipping ${filepath} (unchanged, md5 match)`));
             return;
           }
 
