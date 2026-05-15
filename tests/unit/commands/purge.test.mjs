@@ -117,6 +117,24 @@ describe('Purge Command', () => {
       }
     });
 
+    it('should reject when neither path nor cache-keys provided', async () => {
+      const context = {
+        config: mockConfig,
+        client: () => mockClientInstance
+      };
+
+      try {
+        await purge.handler.call(context, {
+          clientid: 'test-client',
+          project: 'test-project',
+          token: 'test-token'
+        });
+        expect.fail('Should have thrown error');
+      } catch (err) {
+        expect(err.message).to.equal('Provide either a path or --cache-keys.');
+      }
+    });
+
     it('should handle config fromArgs failure', async () => {
       const exit = process.exit;
       process.exit = (_code) => {

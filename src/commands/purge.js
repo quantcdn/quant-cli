@@ -9,27 +9,32 @@ import config from '../config.js';
 import client from '../quant-client.js';
 
 const command = {
-  command: 'purge <path>',
-  describe: 'Purge the cache for a given URL',
+  command: 'purge [path]',
+  describe: 'Purge the cache for a given URL or set of cache keys',
 
   builder: (yargs) => {
     return yargs
       .positional('path', {
-        describe: 'Path to purge from cache',
+        describe: 'Path to purge from cache (mutually exclusive with --cache-keys)',
         type: 'string',
         coerce: (arg) => {
           return arg.replace(/^["']|["']$/g, '');
         }
       })
       .option('cache-keys', {
-        describe: 'Cache keys to purge (space separated)',
-        type: 'string',
-        conflicts: 'path'
+        describe: 'Cache keys to purge, space separated (mutually exclusive with path)',
+        type: 'string'
       })
       .option('soft-purge', {
         describe: 'Mark content as stale rather than delete from edge caches',
         type: 'boolean',
         default: false
+      })
+      .check((argv) => {
+        if (argv.path && argv['cache-keys']) {
+          throw new Error('Provide either a path or --cache-keys, not both.');
+        }
+        return true;
       });
   },
 
@@ -92,6 +97,10 @@ const command = {
   async handler(args) {
     if (!args) {
       throw new Error('Operation cancelled');
+    }
+
+    if (!args.path && !args['cache-keys']) {
+      throw new Error('Provide either a path or --cache-keys.');
     }
 
     const context = {
