@@ -4,5 +4,8 @@
   "node-option": [
     "experimental-vm-modules",
     "no-warnings"
+  ],
+  "require": [
+    "./tests/setup.mjs"
   ]
-} 
+}

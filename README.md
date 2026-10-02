@@ -225,3 +225,48 @@ npm run test
 ## Contributing
 
 Issues and feature requests are managed via Github and pull requests are welcomed.
+
+### Deploy edge rules with a project-scoped portal token
+
+```sh
+# QUANT_API_TOKEN: separate project-scoped token with projects:read,
+# rules:read and rules:write. QUANT_BASE_URL: the owning portal's /api/v2 URL.
+quant rules edge-rules.json --functions edge-functions.json -c CUSTOMER -p PROJECT --dry-run
+quant functions edge-functions.json -c CUSTOMER -p PROJECT
+quant rules edge-rules.json --functions edge-functions.json -c CUSTOMER -p PROJECT
+```
+
+`quant rules` never uses your content write token or upload endpoint. It requires
+an explicit portal URL and will not follow redirects. `--dry-run` validates
+permissions and previews changes without writing rules.
+
+Rules JSON uses `version: 1`, a stable `namespace`, and a `rules` array. Each rule
+has a stable `id`, `type` (`function`, `auth`, or `filter`), `urls`, an explicit
+numeric `weight` (lower runs first), and either `function_ref` or `function_uuid`.
+Optional fields are `name`, `domains`, `methods`, and `disabled`.
+`function_ref` resolves an `id` in the functions manifest, with matching type.
+Functions may provide an explicit UUID; otherwise an `id` produces a stable UUID
+per customer and project. Existing manifests with UUIDs remain supported.
+
+```json
+{
+  "version": 1,
+  "namespace": "orbit",
+  "rules": [{"id":"api","type":"function","urls":["/api/*"],"weight":10,"function_ref":"orbit-api-v1"}]
+}
+```
+
+Deploys update only entries with matching namespace/ID and preserve other rules.
+Omitted entries are preserved; disable a rule explicitly with `disabled: true`.
+Place authentication rules before the functions they protect using lower weights;
+weights from -100000 to 100000 are allowed, and a negative weight runs before any
+rule added in the dashboard or API.
+
+Rules deployed this way are managed in code: the dashboard and the rules API show
+them read-only. If one was changed outside code anyway, the deploy writes nothing,
+exits non-zero and lists each changed field (values only for matchers and weight).
+Re-run with `--force` to overwrite those rules with the manifest. `--force` never
+takes over a rule this manifest did not create (a rule ID collision).
+
+Portal-issued template tokens expire after one year; rotate the token and update
+`QUANT_API_TOKEN` before expiry.

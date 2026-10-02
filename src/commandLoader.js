@@ -10,6 +10,7 @@ import functionCommand from './commands/function.js';
 import filterCommand from './commands/function_filter.js';
 import authCommand from './commands/function_auth.js';
 import functionsCommand from './commands/functions.js';
+import rulesCommand from './commands/rules.js';
 import unpublishCommand from './commands/unpublish.js';
 import deleteCommand from './commands/delete.js';
 import infoCommand from './commands/info.js';
@@ -33,6 +34,7 @@ export function loadCommands() {
     'filter': filterCommand,
     'auth': authCommand,
     'functions': functionsCommand,
+    'rules': rulesCommand,
 
     // Destructive operations
     'unpublish': unpublishCommand,
@@ -67,6 +69,7 @@ export function getCommandOptions() {
     { value: 'filter', label: 'Deploy an edge filter' },
     { value: 'auth', label: 'Deploy an edge auth function' },
     { value: 'functions', label: 'Deploy multiple edge functions from JSON' },
+    { value: 'rules', label: 'Deploy managed rules from JSON' },
 
     // Visual separator
     { value: 'separator2', label: '───────────────────────', disabled: true },
