@@ -136,7 +136,8 @@ function cliMode() {
       builder: command.builder,
       handler: async (argv) => {
         try {
-          await showActiveConfig();
+          // Rules have a separate portal endpoint and credential.
+          if (_name !== 'rules') await showActiveConfig();
           const result = await command.handler(argv);
           if (result) {
             console.log(result);

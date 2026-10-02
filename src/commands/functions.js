@@ -5,6 +5,7 @@
  *   quant functions <file>
  */
 import fs from 'fs';
+import { functionUuid } from '../helper/function-identity.js';
 import config from '../config.js';
 import client from '../quant-client.js';
 import color from 'picocolors';
@@ -49,9 +50,21 @@ const command = {
       throw new Error(`Failed to read functions file: ${err.message}`);
     }
 
+    // Validate identities before uploading anything; duplicate IDs would overwrite
+    // the same function and make declarative rule references ambiguous.
+    if (!Array.isArray(functions)) throw new Error('Functions manifest must be an array');
+    const ids = new Set();
+    for (const func of functions) {
+      if (func.id === undefined) continue;
+      functionUuid(context.config.get('clientid'), context.config.get('project'), func.id);
+      if (ids.has(func.id)) throw new Error(`Duplicate function id: ${func.id}`);
+      ids.add(func.id);
+    }
+
     // Process each function
     for (const func of functions) {
-      const { type, path, description, uuid } = func;
+      const { type, path, description } = func;
+      const uuid = func.uuid || (func.id ? functionUuid(context.config.get('clientid'), context.config.get('project'), func.id) : undefined);
 
       // Validate required fields
       if (!type || !path || !description) {

@@ -1,5 +1,6 @@
 import { expect } from 'chai';
 import sinon from 'sinon';
+import { functionUuid } from '../../../src/helper/function-identity.js';
 import _fs from 'fs';
 import _path from 'path';
 import mockClient from '../../mocks/quant-client.mjs';
@@ -46,6 +47,24 @@ describe('Functions Command', () => {
   });
 
   describe('handler', () => {
+    it('uses the same stable identity as rules references when uploading', async () => {
+      readFileSync.returns(JSON.stringify([{ id: 'api', type: 'function', path: './api.js', description: 'API' }]));
+      const edgeFunction = sinon.stub().resolves({});
+      await functions.handler.call({ config: mockConfig, client: () => ({ edgeFunction }) }, { file: 'functions.json' });
+      expect(edgeFunction.firstCall.args[2]).to.equal(functionUuid('test-client', 'test-project', 'api'));
+    });
+
+    it('rejects duplicate function ids before the first upload', async () => {
+      const fn = { id: 'api', type: 'function', path: './api.js', description: 'API' };
+      readFileSync.returns(JSON.stringify([fn, fn]));
+      const edgeFunction = sinon.stub();
+      try {
+        await functions.handler.call({ config: mockConfig, client: () => ({ edgeFunction }) }, { file: 'functions.json' });
+        expect.fail('duplicate must fail');
+      } catch (error) { expect(error.message).to.include('Duplicate function id'); }
+      expect(edgeFunction.called).to.equal(false);
+    });
+
     it('should deploy auth functions', async () => {
       const mockJson = [{
         type: 'auth',
