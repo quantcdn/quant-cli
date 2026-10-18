@@ -1,19 +1,20 @@
 import fs from 'node:fs';
 import axios from 'axios';
 import { text, isCancel } from '@clack/prompts';
-import { functionUuid } from '../helper/function-identity.js';
+import { assertManifest, RULE_UUID } from '../helper/functions-manifest.js';
 
-export function resolveRules(manifest, functions, customer, project) {
+/**
+ * The rules manifest with each function_ref resolved to its function's uuid.
+ * Every function in the manifest names its uuid (none is derived), so the
+ * customer and project do not change the result. The caller validates
+ * `functions` first (assertManifest): this does not check it again.
+ */
+export function resolveRules(manifest, functions) {
   if (!manifest || manifest.version !== 1 || !/^[a-z][a-z0-9-]{0,47}$/.test(manifest.namespace) || !Array.isArray(manifest.rules)) {
     throw new Error('Rules manifest requires version: 1, namespace and a rules array');
   }
   if (Buffer.byteLength(JSON.stringify(manifest)) > 65536 || manifest.rules.length > 100) throw new Error('Rules manifest exceeds size limits');
-  const ids = new Map();
-  for (const fn of functions) {
-    if (!fn.id) continue;
-    if (ids.has(fn.id)) throw new Error(`Duplicate function id: ${fn.id}`);
-    ids.set(fn.id, fn);
-  }
+  const ids = new Map(functions.filter(fn => fn.id).map(fn => [fn.id, fn]));
   const seen = new Set();
   return { ...manifest, rules: manifest.rules.map(rule => {
     if (!rule || !/^[a-z][a-z0-9-]{0,47}$/.test(rule.id) || seen.has(rule.id)) throw new Error('Rules require unique lowercase ids');
@@ -26,10 +27,10 @@ export function resolveRules(manifest, functions, customer, project) {
       if (!fn) throw new Error(`Unknown function reference: ${rule.function_ref}`);
       const type = fn.type === 'edge' ? 'function' : fn.type;
       if (type !== rule.type) throw new Error(`Function type does not match rule: ${rule.id}`);
-      result.function_uuid = fn.uuid || functionUuid(customer, project, fn.id);
+      result.function_uuid = fn.uuid;
       delete result.function_ref;
     }
-    if (!/^[a-f\d]{8}-[a-f\d]{4}-[1-5][a-f\d]{3}-[89ab][a-f\d]{3}-[a-f\d]{12}$/i.test(result.function_uuid || '')) throw new Error(`Invalid function UUID for rule: ${rule.id}`);
+    if (!RULE_UUID.test(result.function_uuid || '')) throw new Error(`Invalid function UUID for rule: ${rule.id} (the rules API needs an RFC 4122 UUID, version 1-5)`);
     return result;
   }) };
 }
@@ -112,8 +113,10 @@ export default {
     const options = rulesOptions(args);
     const manifest = JSON.parse(fs.readFileSync(args.file, 'utf8'));
     const functions = args.functions ? JSON.parse(fs.readFileSync(args.functions, 'utf8')) : [];
-    if (!Array.isArray(functions)) throw new Error('Functions manifest must be an array');
-    const body = resolveRules(manifest, functions, options.customer, options.project);
+    // The same check as `quant functions`, so a rule never resolves through an
+    // entry that the functions deploy would refuse.
+    if (args.functions) assertManifest(functions, args.functions);
+    const body = resolveRules(manifest, functions);
     const url = `${options.base}/organizations/${encodeURIComponent(options.customer)}/projects/${encodeURIComponent(options.project)}/rules/deploy`;
     let response;
     try {

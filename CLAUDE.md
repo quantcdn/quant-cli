@@ -53,7 +53,7 @@ export default {
 }
 ```
 
-`src/commandLoader.js` registers all 17 commands and provides the interactive mode menu options.
+`src/commandLoader.js` registers every command and provides the interactive mode menu options.
 
 ### Configuration (`src/config.js`)
 
@@ -65,7 +65,11 @@ Axios-based wrapper for the QuantCDN API. Manages auth headers (`Quant-Customer`
 
 ### Helpers (`src/helper/`)
 
-Utility modules: array chunking, file discovery with glob, MD5 comparison, path normalization, URL preparation, deployment resume state, revision tracking, UUID validation, delete response parsing.
+Utility modules: array chunking, file discovery with glob, MD5 comparison, path normalization, URL preparation, deployment resume state, revision tracking, delete response parsing, the edge function manifest schema (`functions-manifest.js`) and the shared single-function command (`single-function-command.js`).
+
+### Edge function identity (7.0.0)
+
+Every function is named by an explicit `uuid`; no code derives one. `functions-manifest.js` is the manifest schema and must stay identical to the Quant portal's `App\Helpers\TemplateManifestPaths` (rules and message text, including message order). UUIDs are checked for shape only (any version digit), except a function a rule references, which needs RFC 4122 v1-5 (`RULE_UUID`). `quant functions-add` is the only command that creates a UUID.
 
 ## Code Style
 

@@ -82,22 +82,25 @@ quant <command> [options]
   ```
 
 ### Edge Functions
-- `quant function <file> <description> [uuid]` - Deploy an edge function
+Every function is named by a UUID. The UUID is its identity: keep it in your
+repository and never change it after the first deploy. From 7.0.0 no command
+creates or derives a UUID for you, except `quant functions-add`.
+
+- `quant functions-add <manifest> <path> --description <text> [--type function|auth|filter] [--id <slug>]` - Add a function to a manifest with a new UUID. It uploads nothing, creates the manifest if it does not exist, and prints only the new UUID.
   ```bash
-  quant function handler.js "My edge function"                                     # Deploy new function
-  quant function handler.js "Updated function" 019361ae-2516-788a-8f50-e803ff561c34  # Update existing
+  quant functions-add quant/edge-functions.json quant/edge-functions/api.js --description "API" --id my-api
   ```
 
-- `quant filter <file> <description> [uuid]` - Deploy an edge filter function
+- `quant functions <manifest>` - Deploy every function in a manifest. The whole manifest is checked before the first upload: each entry needs `uuid`, `path`, `type` (`function`, `edge`, `auth` or `filter`) and `description`; `id` is optional (lowercase slug, unique).
   ```bash
-  quant filter filter.js "My edge filter"                                         # Deploy new filter
-  quant filter filter.js "Updated filter" 019361ae-2516-788a-8f50-e803ff561c34   # Update existing
+  quant functions quant/edge-functions.json
   ```
 
-- `quant auth <file> <description> [uuid]` - Deploy an edge auth function
+- `quant function <file> <description> <uuid>` - Deploy one edge function
+- `quant filter <file> <description> <uuid>` - Deploy one edge filter function
+- `quant auth <file> <description> <uuid>` - Deploy one edge auth function (it returns 201 to let the request continue)
   ```bash
-  quant auth auth.js "My auth function"                                          # Deploy new auth function
-  quant auth auth.js "Updated auth" 019361ae-2516-788a-8f50-e803ff561c34        # Update existing
+  quant function handler.js "My edge function" 43aec1f0-095b-4a76-a9c8-934bf3d49d59
   ```
 
 ### Search
@@ -206,14 +209,43 @@ quant purge "/*"                              # Purge all content
 quant purge --cache-keys="key1 key2"          # Purge specific cache keys
 quant purge /about --soft-purge               # Soft purge a path
 
-# Deploy edge functions
-quant function handler.js "My edge function"   # Deploy a new function
-quant auth auth.js "My auth function"          # Deploy an auth function
-quant filter filter.js "My edge filter"        # Deploy a filter function
+# Deploy edge functions (the UUID is the function's identity)
+quant functions-add quant/edge-functions.json quant/edge-functions/api.js --description "API" --id my-api
+quant functions quant/edge-functions.json
+quant function handler.js "My edge function" 43aec1f0-095b-4a76-a9c8-934bf3d49d59
 
 # Check deployment status
 quant scan --diff-only
 ```
+
+## Upgrading from 6.x to 7.0.0
+
+7.0.0 is a breaking release for edge functions only:
+
+- Every entry in a functions manifest needs an explicit `uuid`. 6.x derived a
+  UUID from `id` when `uuid` was missing; 7.0.0 refuses the manifest before any
+  upload and names each entry. To keep a function that 6.x deployed by `id`,
+  copy its UUID from the dashboard (Compute > Edge Functions) into the entry.
+  6.x derived it from the customer, the project and the `id`, so you can also
+  print it locally:
+  ```bash
+  node -e 'const h=require("crypto").createHash("sha256").update(JSON.stringify(process.argv.slice(1,4))).digest("hex");console.log(`${h.slice(0,8)}-${h.slice(8,12)}-4${h.slice(13,16)}-a${h.slice(17,20)}-${h.slice(20,32)}`)' CUSTOMER PROJECT FUNCTION_ID
+  ```
+  A Studio branch environment is its own project, so 6.x gave it a different
+  UUID than its parent: commit the parent's UUID.
+- `quant function`, `quant auth` and `quant filter` require the `<uuid>`
+  argument. Without one, 6.x created a new function on every run.
+- `uuid` values are checked for shape only (8-4-4-4-12 hex), so existing UUIDs
+  with any version digit keep working.
+- The whole manifest is checked against the full schema before any upload,
+  the same check the Quant portal uses: `type` must be lowercase (`function`,
+  `edge`, `auth` or `filter`), `description` must not be blank, `uuid` and `id`
+  must be unique, and every entry must be an object. 6.x accepted some of these.
+- `quant function`, `quant auth` and `quant filter` now print
+  `Deployed <kind> [<uuid>]` (6.x printed `Created ...` or `Updated ...`).
+- New: `quant functions-add` adds an entry with a new UUID.
+
+Pipelines that use deploy-action `v6` keep CLI 6.3.0 and are not affected.
 
 ## Testing
 
@@ -231,9 +263,9 @@ Issues and feature requests are managed via Github and pull requests are welcome
 ```sh
 # QUANT_API_TOKEN: separate project-scoped token with projects:read,
 # rules:read and rules:write. QUANT_BASE_URL: the owning portal's /api/v2 URL.
-quant rules edge-rules.json --functions edge-functions.json -c CUSTOMER -p PROJECT --dry-run
-quant functions edge-functions.json -c CUSTOMER -p PROJECT
-quant rules edge-rules.json --functions edge-functions.json -c CUSTOMER -p PROJECT
+quant rules quant/edge-rules.json --functions quant/edge-functions.json -c CUSTOMER -p PROJECT --dry-run
+quant functions quant/edge-functions.json -c CUSTOMER -p PROJECT
+quant rules quant/edge-rules.json --functions quant/edge-functions.json -c CUSTOMER -p PROJECT
 ```
 
 `quant rules` never uses your content write token or upload endpoint. It requires
@@ -244,9 +276,12 @@ Rules JSON uses `version: 1`, a stable `namespace`, and a `rules` array. Each ru
 has a stable `id`, `type` (`function`, `auth`, or `filter`), `urls`, an explicit
 numeric `weight` (lower runs first), and either `function_ref` or `function_uuid`.
 Optional fields are `name`, `domains`, `methods`, and `disabled`.
-`function_ref` resolves an `id` in the functions manifest, with matching type.
-Functions may provide an explicit UUID; otherwise an `id` produces a stable UUID
-per customer and project. Existing manifests with UUIDs remain supported.
+`function_ref` resolves an `id` in the functions manifest, with matching type, to
+that entry's `uuid`. The functions manifest is checked the same way as by
+`quant functions`. A function a rule references needs an RFC 4122 UUID
+(version 1-5), because the rules API requires one; `quant functions-add`
+writes version 4 UUIDs. Use `function_uuid` only for a function the manifest
+does not define.
 
 ```json
 {
