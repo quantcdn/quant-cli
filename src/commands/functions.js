@@ -5,7 +5,7 @@
  *   quant functions <file>
  */
 import fs from 'fs';
-import { functionUuid } from '../helper/function-identity.js';
+import { assertManifest } from '../helper/functions-manifest.js';
 import config from '../config.js';
 import client from '../quant-client.js';
 import color from 'picocolors';
@@ -50,34 +50,20 @@ const command = {
       throw new Error(`Failed to read functions file: ${err.message}`);
     }
 
-    // Validate identities before uploading anything; duplicate IDs would overwrite
-    // the same function and make declarative rule references ambiguous.
-    if (!Array.isArray(functions)) throw new Error('Functions manifest must be an array');
-    const ids = new Set();
-    for (const func of functions) {
-      if (func.id === undefined) continue;
-      functionUuid(context.config.get('clientid'), context.config.get('project'), func.id);
-      if (ids.has(func.id)) throw new Error(`Duplicate function id: ${func.id}`);
-      ids.add(func.id);
+    // Validate the whole manifest, and that every file exists, before the first
+    // upload: a refused manifest changes nothing. Every entry names its function
+    // by an explicit uuid (quant functions-add writes one); none is derived.
+    assertManifest(functions, args.file);
+    const missing = functions.filter(func => !fs.existsSync(func.path));
+    if (missing.length > 0) {
+      throw new Error(`Function file not found: ${missing.map(func => func.path).join(', ')}`);
     }
 
-    // Process each function
     for (const func of functions) {
-      const { type, path, description } = func;
-      const uuid = func.uuid || (func.id ? functionUuid(context.config.get('clientid'), context.config.get('project'), func.id) : undefined);
-
-      // Validate required fields
-      if (!type || !path || !description) {
-        throw new Error('Each function must have type, path, and description');
-      }
-
-      // Validate file exists
-      if (!fs.existsSync(path)) {
-        throw new Error(`Function file not found: ${path}`);
-      }
+      const { type, path, description, uuid } = func;
 
       try {
-        switch (type.toLowerCase()) {
+        switch (type) {
           case 'auth':
             try {
               await quant.edgeAuth(path, description, uuid);

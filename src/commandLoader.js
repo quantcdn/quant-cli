@@ -10,6 +10,7 @@ import functionCommand from './commands/function.js';
 import filterCommand from './commands/function_filter.js';
 import authCommand from './commands/function_auth.js';
 import functionsCommand from './commands/functions.js';
+import functionsAddCommand from './commands/functions-add.js';
 import rulesCommand from './commands/rules.js';
 import unpublishCommand from './commands/unpublish.js';
 import deleteCommand from './commands/delete.js';
@@ -34,6 +35,7 @@ export function loadCommands() {
     'filter': filterCommand,
     'auth': authCommand,
     'functions': functionsCommand,
+    'functions-add': functionsAddCommand,
     'rules': rulesCommand,
 
     // Destructive operations
@@ -69,6 +71,7 @@ export function getCommandOptions() {
     { value: 'filter', label: 'Deploy an edge filter' },
     { value: 'auth', label: 'Deploy an edge auth function' },
     { value: 'functions', label: 'Deploy multiple edge functions from JSON' },
+    { value: 'functions-add', label: 'Add an edge function to a manifest (new UUID)' },
     { value: 'rules', label: 'Deploy managed rules from JSON' },
 
     // Visual separator

@@ -3,23 +3,45 @@ import sinon from 'sinon';
 import fs from 'node:fs';
 import axios from 'axios';
 import rules, { resolveRules, rulesOptions } from '../../../src/commands/rules.js';
-import { functionUuid } from '../../../src/helper/function-identity.js';
 const manifest = () => ({ version: 1, namespace: 'orbit', rules: [{ id: 'api', type: 'function', urls: ['/api/*'], weight: 0, function_ref: 'orbit-api-v1' }] });
-const functions = [{ id: 'orbit-api-v1', type: 'function', path: 'api.js' }];
+const FN_UUID = '43aec1f0-095b-4a76-a9c8-934bf3d49d59';
+const functions = [{ id: 'orbit-api-v1', type: 'function', path: 'api.js', description: 'API', uuid: FN_UUID }];
 describe('Rules deployment', () => {
   afterEach(() => sinon.restore());
-  it('resolves stable per-project function references', () => {
-    const result = resolveRules(manifest(), functions, 'org', 'site');
-    expect(result.rules[0].function_uuid).to.equal(functionUuid('org', 'site', 'orbit-api-v1'));
+  it('resolves function_ref to the uuid the functions manifest names', () => {
+    const result = resolveRules(manifest(), functions);
+    expect(result.rules[0].function_uuid).to.equal(FN_UUID);
     expect(result.rules[0]).not.to.have.property('function_ref');
-    expect(result.rules[0].function_uuid).not.to.equal(functionUuid('org', 'other', 'orbit-api-v1'));
   });
   it('rejects unknown references, duplicate ids and auth/function mismatches', () => {
-    expect(() => resolveRules(manifest(), [], 'org', 'site')).to.throw('Unknown');
+    expect(() => resolveRules(manifest(), [])).to.throw('Unknown');
     const m = manifest(); m.rules.push(m.rules[0]);
-    expect(() => resolveRules(m, functions, 'org', 'site')).to.throw('unique');
+    expect(() => resolveRules(m, functions)).to.throw('unique');
     const a = manifest(); a.rules[0].type = 'auth';
-    expect(() => resolveRules(a, functions, 'org', 'site')).to.throw('does not match');
+    expect(() => resolveRules(a, functions)).to.throw('does not match');
+  });
+  it('refuses a referenced function whose uuid the rules API cannot take', () => {
+    const v8 = [{ ...functions[0], uuid: '019361ae-2516-888a-8f50-e803ff561c34' }];
+    expect(() => resolveRules(manifest(), v8)).to.throw('Invalid function UUID for rule: api');
+  });
+  it('refuses a functions manifest without uuids before any request', async () => {
+    const noUuid = [{ id: 'orbit-api-v1', type: 'function', path: 'api.js', description: 'API' }];
+    sinon.stub(fs, 'readFileSync').callsFake(path => path === 'rules.json' ? JSON.stringify(manifest()) : JSON.stringify(noUuid));
+    const post = sinon.stub(axios, 'post');
+    try {
+      await rules.handler({ file: 'rules.json', functions: 'quant/edge-functions.json', c: 'org', p: 'site', 'api-token': 's', 'api-base-url': 'https://portal.test/api/v2' });
+      expect.fail('must fail');
+    } catch (error) { expect(error.message).to.include('Entry 0 (api.js): uuid is required'); }
+    expect(post.called).to.equal(false);
+  });
+  it('reads no functions manifest when deploy-action passes --functions=""', async () => {
+    const raw = { version: 1, namespace: 'orbit', rules: [{ id: 'api', type: 'function', urls: ['/api/*'], weight: 0, function_uuid: FN_UUID }] };
+    const read = sinon.stub(fs, 'readFileSync').callsFake(path => path === 'rules.json' ? JSON.stringify(raw) : '{}');
+    const post = sinon.stub(axios, 'post').resolves({ data: { namespace: 'orbit', rules: [{ id: 'api', status: 'unchanged' }] } });
+    sinon.stub(console, 'log');
+    await rules.handler({ file: 'rules.json', functions: '', c: 'org', p: 'site', 'api-token': 's', 'api-base-url': 'https://portal.test/api/v2' });
+    expect(read.args.map(args => args[0]).filter(path => path !== 'quant.json')).to.deep.equal(['rules.json']);
+    expect(post.firstCall.args[1].rules[0].function_uuid).to.equal(FN_UUID);
   });
   it('never falls back to a content token or upload endpoint', () => {
     sinon.stub(fs, 'readFileSync').returns(JSON.stringify({ token: 'saved-content', endpoint: 'https://upload.test/v1' }));

@@ -136,8 +136,9 @@ function cliMode() {
       builder: command.builder,
       handler: async (argv) => {
         try {
-          // Rules have a separate portal endpoint and credential.
-          if (_name !== 'rules') await showActiveConfig();
+          // Rules have a separate portal endpoint and credential. functions-add
+          // edits a local file only, and prints the new UUID for scripts.
+          if (!['rules', 'functions-add'].includes(_name)) await showActiveConfig();
           const result = await command.handler(argv);
           if (result) {
             console.log(result);
