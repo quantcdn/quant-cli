@@ -158,9 +158,9 @@ You can include any additional key/value pairs in your records. These custom fie
   ```
 
 ### WAF Logs
-- `quant waf:logs` - Access project WAF logs
+- `quant waflogs` - Access project WAF logs
   ```bash
-  quant waf:logs [--fields=field1,field2] [--output=file.csv] [--all] [--size=10]
+  quant waflogs [--fields=field1,field2] [--output=file.csv] [--all] [--size=10]
   ```
 
 ## Global Options
