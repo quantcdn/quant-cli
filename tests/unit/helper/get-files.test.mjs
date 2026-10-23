@@ -41,9 +41,18 @@ describe('getFiles Helper', () => {
 
   it('does not exclude a file whose name only resembles quant.json', async () => {
     const keep = touch('quantXjson');
-    const keep2 = touch('quant.json.bak');
+    const keep2 = touch('quant.jsonx');
     const files = (await getFiles(dir)).flat(Infinity).sort();
     expect(files).to.deep.equal([keep2, keep].sort());
+  });
+
+  it('excludes quant.json backup copies (.bak, .orig, any case)', async () => {
+    touch('quant.json.bak');
+    touch('sub/quant.json.orig');
+    touch('sub/Quant.JSON.old');
+    const keep = touch('ok.txt');
+    const files = (await getFiles(dir)).flat(Infinity);
+    expect(files).to.deep.equal([keep]);
   });
 
   it('excludes QUANT.JSON case-insensitively', async () => {

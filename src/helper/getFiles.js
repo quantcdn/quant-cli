@@ -41,14 +41,21 @@ async function walk(dir) {
 }
 
 /**
- * Build a path test. A file named quant.json (any case, any depth) is
- * always excluded; it can hold a live token. Extra exclusions are regex
- * sources. No global flag, so no state is shared between calls.
+ * True for quant.json and copies such as quant.json.bak or quant.json.orig
+ * (any case, any depth). These can hold a live token. quantXjson is kept.
+ */
+function isQuantJson(file) {
+  const name = basename(file).toLowerCase();
+  return name === 'quant.json' || name.startsWith('quant.json.');
+}
+
+/**
+ * Build a path test. Extra exclusions are regex sources. No global flag,
+ * so no state is shared between calls.
  */
 function buildExclusionTest(exclusions) {
   const extra = exclusions.length ? new RegExp(exclusions.join('|'), 'i') : null;
-  return (file) =>
-    basename(file).toLowerCase() === 'quant.json' || (extra !== null && extra.test(file));
+  return (file) => isQuantJson(file) || (extra !== null && extra.test(file));
 }
 
 export default getFiles;
