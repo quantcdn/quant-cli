@@ -27,47 +27,43 @@ describe('getFiles Helper', () => {
     touch('b/quant.json');
     touch('c/quant.json');
     const keep = touch('index.html');
-    const files = (await getFiles(dir)).flat(Infinity);
-    expect(files).to.deep.equal([keep]);
+    expect(await getFiles(dir)).to.deep.equal([keep]);
   });
 
   it('excludes quant.json at the top level and in subdirectories', async () => {
     touch('quant.json');
     touch('sub/deep/quant.json');
     const keep = touch('sub/page.html');
-    const files = (await getFiles(dir)).flat(Infinity);
-    expect(files).to.deep.equal([keep]);
+    expect(await getFiles(dir)).to.deep.equal([keep]);
   });
 
   it('does not exclude a file whose name only resembles quant.json', async () => {
     const keep = touch('quantXjson');
-    const keep2 = touch('quant.jsonx');
-    const files = (await getFiles(dir)).flat(Infinity).sort();
-    expect(files).to.deep.equal([keep2, keep].sort());
-  });
-
-  it('excludes quant.json backup copies (.bak, .orig, any case)', async () => {
-    touch('quant.json.bak');
-    touch('sub/quant.json.orig');
-    touch('sub/Quant.JSON.old');
-    const keep = touch('ok.txt');
-    const files = (await getFiles(dir)).flat(Infinity);
-    expect(files).to.deep.equal([keep]);
+    expect(await getFiles(dir)).to.deep.equal([keep]);
   });
 
   it('excludes QUANT.JSON case-insensitively', async () => {
     touch('QUANT.JSON');
     const keep = touch('ok.txt');
-    const files = (await getFiles(dir)).flat(Infinity);
-    expect(files).to.deep.equal([keep]);
+    expect(await getFiles(dir)).to.deep.equal([keep]);
   });
 
-  it('does not drop sibling files when a subdirectory holds a quant.json', async () => {
-    touch('sub/quant.json');
+  it('excludes backup, editor and renamed copies of quant.json', async () => {
+    [
+      'quant.json.bak', 'sub/quant.json.orig', 'sub/Quant.JSON.old', '.quant.json.swp',
+      'quant.json~', '#quant.json#', 'quant.json-old', 'quant.json_bak', 'myquant.json',
+    ].forEach(touch);
+    const keep = touch('ok.txt');
+    expect(await getFiles(dir)).to.deep.equal([keep]);
+  });
+
+  it('returns a flat array and keeps siblings of an excluded file in a subdirectory', async () => {
+    touch('sub/a.map');
     const keep = touch('sub/page.html');
     const keep2 = touch('other.html');
-    const files = (await getFiles(dir)).flat(Infinity).sort();
-    expect(files).to.deep.equal([keep2, keep].sort());
+    const files = await getFiles(dir, ['a\\.map']);
+    expect(files.every((f) => typeof f === 'string')).to.equal(true);
+    expect([...files].sort()).to.deep.equal([keep2, keep].sort());
   });
 
   it('applies exclusions to consecutive matching paths (no shared lastIndex)', async () => {
@@ -75,7 +71,6 @@ describe('getFiles Helper', () => {
     touch('one.map');
     touch('two.map');
     const keep = touch('keep.html');
-    const files = (await getFiles(dir, ['\\.map$'])).flat(Infinity);
-    expect(files).to.deep.equal([keep]);
+    expect(await getFiles(dir, ['\\.map$'])).to.deep.equal([keep]);
   });
 });

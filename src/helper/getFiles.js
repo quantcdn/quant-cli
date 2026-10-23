@@ -41,12 +41,13 @@ async function walk(dir) {
 }
 
 /**
- * True for quant.json and copies such as quant.json.bak or quant.json.orig
- * (any case, any depth). These can hold a live token. quantXjson is kept.
+ * True for any file whose name contains quant.json (any case): quant.json,
+ * quant.json.bak, .quant.json.swp, quant.json~, myquant.json and so on.
+ * These can hold a live token. quantXjson does not match.
  */
+const QUANT_JSON = /quant\.json/i;
 function isQuantJson(file) {
-  const name = basename(file).toLowerCase();
-  return name === 'quant.json' || name.startsWith('quant.json.');
+  return QUANT_JSON.test(basename(file));
 }
 
 /**

@@ -6,3 +6,4 @@ quant*.json
 yarn.lock
 .DS_store
 coverage
+quant-revision-log_*
