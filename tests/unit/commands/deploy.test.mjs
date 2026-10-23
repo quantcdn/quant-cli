@@ -13,6 +13,7 @@ describe('Deploy Command', () => {
   let mockConfig;
   let mockClientInstance;
   let tempDir;
+  let originalCwd;
 
   beforeEach(() => {
     // Reset config state
@@ -20,6 +21,9 @@ describe('Deploy Command', () => {
 
     // Create a temporary directory with test files for getFiles to find
     tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'quant-test-'));
+    // Run in the temp dir so quant-revision-log_* files never land in the repo.
+    originalCwd = process.cwd();
+    process.chdir(tempDir);
     fs.writeFileSync(path.join(tempDir, 'index.html'), '<html></html>');
     fs.writeFileSync(path.join(tempDir, 'styles.css'), 'body {}');
     fs.mkdirSync(path.join(tempDir, 'images'));
@@ -52,6 +56,7 @@ describe('Deploy Command', () => {
 
   afterEach(() => {
     sinon.restore();
+    process.chdir(originalCwd);
     // Clean up temp directory
     if (tempDir && fs.existsSync(tempDir)) {
       fs.rmSync(tempDir, { recursive: true, force: true });
