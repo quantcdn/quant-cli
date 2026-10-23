@@ -51,7 +51,7 @@ describe('getFiles Helper', () => {
   it('excludes backup, editor and renamed copies of quant.json', async () => {
     [
       'quant.json.bak', 'sub/quant.json.orig', 'sub/Quant.JSON.old', '.quant.json.swp',
-      'quant.json~', '#quant.json#', 'quant.json-old', 'quant.json_bak', 'myquant.json',
+      'quant.json~', '#quant.json#', 'quant.json-old', 'quant.json_bak', 'myquant.json'
     ].forEach(touch);
     const keep = touch('ok.txt');
     expect(await getFiles(dir)).to.deep.equal([keep]);
