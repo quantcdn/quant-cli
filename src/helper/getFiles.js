@@ -4,7 +4,7 @@
 
 import fs from 'fs';
 import { promisify } from 'util';
-import { resolve } from 'path';
+import { resolve, basename } from 'path';
 
 const readdir = promisify(fs.readdir);
 const stat = promisify(fs.stat);
@@ -21,19 +21,34 @@ const stat = promisify(fs.stat);
  *   An array of files.
  */
 export async function getFiles(dir, exclusions = []) {
-  const subdirs = await readdir(dir);
-  let files = await Promise.all(
-    subdirs.map(async (subdir) => {
-      const res = resolve(dir, subdir);
-      return (await stat(res)).isDirectory() ? getFiles(res) : res;
+  const files = await walk(dir);
+  const isExcluded = buildExclusionTest(exclusions);
+  return files.filter((f) => !isExcluded(f));
+}
+
+/**
+ * Recursively list all files under a directory as a flat array.
+ */
+async function walk(dir) {
+  const entries = await readdir(dir);
+  const nested = await Promise.all(
+    entries.map(async (entry) => {
+      const res = resolve(dir, entry);
+      return (await stat(res)).isDirectory() ? walk(res) : res;
     })
   );
+  return nested.flat();
+}
 
-  // Ensure that quant.json is always excluded.
-  exclusions.push('quant.json');
-  const matcher = new RegExp(exclusions.join('|'), 'gi');
-  files = files.filter((i) => matcher.test(i) === false);
-  return files.reduce((a, f) => a.concat(f), []);
+/**
+ * Build a path test. A file named quant.json (any case, any depth) is
+ * always excluded; it can hold a live token. Extra exclusions are regex
+ * sources. No global flag, so no state is shared between calls.
+ */
+function buildExclusionTest(exclusions) {
+  const extra = exclusions.length ? new RegExp(exclusions.join('|'), 'i') : null;
+  return (file) =>
+    basename(file).toLowerCase() === 'quant.json' || (extra !== null && extra.test(file));
 }
 
 export default getFiles;
