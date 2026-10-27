@@ -17,6 +17,15 @@ import serve, {
 import { getCommand, getCommandOptions } from '../../../src/commandLoader.js';
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
+
+// A shell command that runs the script with node. The script is in a file,
+// so the command needs no quote escaping.
+function nodeCommand(dir, source) {
+  const file = path.join(dir, `script-${Math.random().toString(36).slice(2)}.js`);
+  fs.writeFileSync(file, source);
+  return `node ${JSON.stringify(file)}`;
+}
+
 const ORBIT = path.join(HERE, '..', '..', 'fixtures', 'orbit');
 
 function parse(argv) {
@@ -202,7 +211,7 @@ describe('serve command', () => {
       if (process.platform === 'win32') this.skip();
       const pidFile = path.join(tmp, 'pid');
       const cli = path.join(HERE, '..', '..', '..', 'cli.js');
-      const run = `node -e "${pidScript(pidFile, false).replace(/"/g, '\\"')}"`;
+      const run = nodeCommand(tmp, pidScript(pidFile, false));
       const serveProcess = spawn(process.execPath, [cli, 'serve', '--port', '0', '--memory', '--run', run], { cwd: ORBIT, stdio: 'ignore' });
       const exited = new Promise((resolve) => serveProcess.on('exit', (code, signal) => resolve({ code, signal })));
       const pid = await waitForPid(pidFile);
@@ -325,7 +334,7 @@ describe('serve command', () => {
       const script = `require('fs').writeFileSync(${JSON.stringify(pidFile)}, String(process.pid)); setInterval(() => {}, 1000);`;
       let stop;
       const stopped = new Promise((resolve) => { stop = resolve; });
-      const running = runServe(options({ run: `node -e "${script.replace(/"/g, '\\"')}"` }), {
+      const running = runServe(options({ run: nodeCommand(tmp, script) }), {
         stop: stopped,
         print: () => {}
       });
