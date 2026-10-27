@@ -138,7 +138,8 @@ function cliMode() {
         try {
           // Rules have a separate portal endpoint and credential. functions-add
           // edits a local file only, and prints the new UUID for scripts.
-          if (!['rules', 'functions-add'].includes(_name)) await showActiveConfig();
+          // serve runs locally and needs no token.
+          if (!['rules', 'kv-indexes', 'functions-add', 'serve', 'kv'].includes(_name)) await showActiveConfig();
           const result = await command.handler(argv);
           if (result) {
             console.log(result);

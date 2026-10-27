@@ -1,0 +1,16 @@
+{
+  "version": 1,
+  "namespace": "orbit",
+  "rules": [
+    {
+      "id": "api",
+      "name": "Orbit API",
+      "type": "function",
+      "urls": [
+        "/api/*"
+      ],
+      "weight": 10,
+      "function_ref": "orbit-api-v1"
+    }
+  ]
+}

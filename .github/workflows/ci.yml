@@ -34,3 +34,6 @@ jobs:
 
     - name: Run tests
       run: npm test
+
+    - name: Run conformance suites
+      run: npm run test:conformance

@@ -1,0 +1,68 @@
+{
+  "title": "Orbit \u00b7 Edge SaaS",
+  "summary": "A workspace dashboard powered by edge functions and KV, with optional Quant Studio editing.",
+  "content": "Static Astro frontend, authenticated multi-workspace project management, owner and viewer roles, persistent KV data, dashboard and activity views, workspace settings, and Studio-editable public pages. Includes a local edge/KV emulator and deployment workflow. No application server or database required.",
+  "categories": [
+    "javascript",
+    "astro",
+    "studio"
+  ],
+  "tags": [
+    "dashboard",
+    "saas",
+    "edge-functions",
+    "kv",
+    "authentication"
+  ],
+  "template_type": "ssg",
+  "requires_db": false,
+  "kv_stores": [
+    {
+      "name": "orbit",
+      "indexes": [
+        {
+          "name": "projectsByStatus",
+          "collection": "workspace:*:project",
+          "fields": ["workspace", "status"],
+          "sortBy": "updatedAt",
+          "count": true
+        },
+        {
+          "name": "projectsByOwner",
+          "collection": "workspace:*:project",
+          "fields": ["workspace", "ownerKey"],
+          "sortBy": "updatedAt"
+        },
+        {
+          "name": "projectNames",
+          "collection": "workspace:*:project",
+          "fields": ["workspace", "nameKey"],
+          "unique": true
+        }
+      ],
+      "initial_values": [
+        {
+          "key": "workspace:studio:settings",
+          "value": {
+            "name": "My workspace",
+            "description": "A little space for our next big thing."
+          }
+        },
+        {
+          "key": "auth:{sha256}",
+          "generate": {
+            "bytes": 32,
+            "reveal": "once",
+            "label": "Owner access key (workspace: studio)"
+          },
+          "value": {
+            "workspace": "studio",
+            "name": "{user_name}",
+            "role": "owner",
+            "active": true
+          }
+        }
+      ]
+    }
+  ]
+}

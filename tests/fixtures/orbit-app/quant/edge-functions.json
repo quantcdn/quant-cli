@@ -1,0 +1,9 @@
+[
+  {
+    "type": "function",
+    "path": "quant/edge-functions/api.js",
+    "description": "[Orbit] Workspace sessions, projects and settings. Bind to /api/*.",
+    "id": "orbit-api-v1",
+    "uuid": "43aec1f0-095b-4a76-a9c8-934bf3d49d59"
+  }
+]

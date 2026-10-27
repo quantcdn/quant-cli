@@ -1,0 +1,491 @@
+/**
+ * The `quant serve` HTTP server.
+ * One function for each pipeline stage: context, rules, proxy, static, 404,
+ * filter and headers. The KV store comes from the caller (options.kvStore).
+ */
+
+import fs from 'node:fs';
+import http from 'node:http';
+import net from 'node:net';
+import path from 'node:path';
+import tls from 'node:tls';
+import { Readable } from 'node:stream';
+import { pipeline } from 'node:stream/promises';
+import { storeId } from '../helper/quant-meta.js';
+import { controlRoutes, isControlPath } from './control.js';
+import { loadProjectLibraries } from './edge-libraries.js';
+import { createExecutor, authContinueHeaders, readCappedBody } from './functions.js';
+import { loadProject, watchProject } from './project.js';
+import { matchRules, matchFilter } from './rules.js';
+import { buildIndex, lookup, serveStatic, notFound } from './static.js';
+
+const SERVER_HEADER = 'QuantCDN (quant serve)';
+const AUTH_UNAVAILABLE = 'Authentication for this page is not available.';
+const HOP_BY_HOP = ['connection', 'keep-alive', 'proxy-connection', 'transfer-encoding', 'te', 'trailer', 'upgrade', 'expect'];
+const PROXY_REQUEST_DROP = [...HOP_BY_HOP, 'host', 'content-length'];
+// Node fetch decodes the body, so the encoding and length headers are dropped.
+const PROXY_RESPONSE_DROP = [...HOP_BY_HOP, 'content-encoding', 'content-length'];
+const VERSION = readVersion();
+
+function readVersion() {
+  try {
+    return JSON.parse(fs.readFileSync(new URL('../../package.json', import.meta.url), 'utf8')).version;
+  } catch (_err) {
+    return 'unknown';
+  }
+}
+
+function errorMessage(err) {
+  return err && typeof err.message === 'string' ? err.message : String(err);
+}
+
+function defaultLog(line) {
+  process.stderr.write(`${line}\n`);
+}
+
+function text(status, body, extra = {}) {
+  return new Response(body, { status, headers: { 'content-type': 'text/plain; charset=utf-8', ...extra } });
+}
+
+// node:vm cannot contain a promise that a function leaves rejected, or a
+// throw from a callback that it schedules. One process-level handler logs
+// these errors so that the server keeps serving.
+const processLogs = new Set();
+
+function onProcessError(err) {
+  for (const log of processLogs) log(`Unhandled error: ${errorMessage(err)}`);
+}
+
+function installProcessHandlers(log) {
+  if (processLogs.size === 0) {
+    process.on('unhandledRejection', onProcessError);
+    process.on('uncaughtException', onProcessError);
+  }
+  processLogs.add(log);
+  return () => {
+    processLogs.delete(log);
+    if (processLogs.size > 0) return;
+    process.off('unhandledRejection', onProcessError);
+    process.off('uncaughtException', onProcessError);
+  };
+}
+
+// --- Context -----------------------------------------------------------------
+
+// The body for a function: read once, up to the request body cap. A body
+// over the cap reaches the function as an empty body (null). After the proxy
+// has streamed the body, there is no body left to read.
+function functionRequestBody(ctx) {
+  if (!ctx.bodyPending) ctx.bodyPending = ctx.bodyStreamed ? Promise.resolve(null) : readCappedBody(ctx.req);
+  return ctx.bodyPending;
+}
+
+function requestPath(rawUrl) {
+  const url = rawUrl.startsWith('/') ? new URL(`http://localhost${rawUrl}`) : new URL(rawUrl);
+  return { pathname: url.pathname, search: url.search };
+}
+
+function requestContext(state, req) {
+  const host = state.options.domain || req.headers.host || '';
+  const { pathname, search } = requestPath(req.url);
+  return {
+    req,
+    host,
+    method: req.method,
+    pathname,
+    search,
+    publicUrl: `http://${host || 'localhost'}${pathname}${search}`,
+    remoteAddress: req.socket.remoteAddress,
+    bodyPending: null,
+    bodyStreamed: false,
+    authHeaders: null
+  };
+}
+
+function matchContext(ctx) {
+  return { host: ctx.host || '', method: ctx.method, pathname: ctx.pathname, search: ctx.search };
+}
+
+function clientAddress(state, ctx) {
+  const address = state.options.clientIp ?? ctx.remoteAddress ?? '';
+  return String(address).replace(/^::ffff:(\d+\.\d+\.\d+\.\d+)$/i, '$1');
+}
+
+// The request headers a function sees: quant-client-ip is the client
+// address, never the value that the client sent.
+function functionHeaders(req, address) {
+  const headers = Object.entries(req.headers)
+    .filter(([key]) => key !== 'quant-client-ip')
+    .map(([key, value]) => [key, Array.isArray(value) ? value.join(', ') : value]);
+  headers.push(['quant-client-ip', address]);
+  return headers;
+}
+
+async function functionContext(state, ctx, mode) {
+  const address = clientAddress(state, ctx);
+  return {
+    mode,
+    url: ctx.publicUrl,
+    method: ctx.method,
+    headers: functionHeaders(ctx.req, address),
+    body: await functionRequestBody(ctx),
+    clientAddress: address
+  };
+}
+
+// --- Rules -------------------------------------------------------------------
+
+// The headers of each auth 201 in a chain: a later auth function replaces
+// a header that an earlier one set, and set-cookie values add up.
+function mergeHeaders(target, source) {
+  const headers = new Headers(target || []);
+  for (const [key, value] of source) {
+    if (key === 'set-cookie') headers.append(key, value);
+    else headers.set(key, value);
+  }
+  return headers;
+}
+
+async function authStage(state, ctx, fn) {
+  if (!fn) return text(503, AUTH_UNAVAILABLE, { 'cache-control': 'no-store' });
+  const response = await state.executor.run(fn, await functionContext(state, ctx, 'auth'));
+  if (response.status !== 201) return response;
+  ctx.authHeaders = mergeHeaders(ctx.authHeaders, authContinueHeaders(response));
+  return null;
+}
+
+async function functionStage(state, ctx, rule, fn) {
+  if (!fn) {
+    state.log(`Rule ${rule.id}: function ${rule.fnUuid} is not in the functions manifest.`);
+    return new Response(null, { status: 500 });
+  }
+  return state.executor.run(fn, await functionContext(state, ctx, 'function'));
+}
+
+// The matching rules run in order. An auth 201 continues to the next rule;
+// any other auth response, and every function rule, ends the request.
+async function ruleStage(state, ctx) {
+  for (const rule of matchRules(state.project.rules, matchContext(ctx))) {
+    const fn = state.project.functions.get(rule.fnUuid);
+    const response = rule.type === 'auth' ? await authStage(state, ctx, fn) : await functionStage(state, ctx, rule, fn);
+    if (response) return response;
+  }
+  return null;
+}
+
+// --- Proxy -------------------------------------------------------------------
+
+function withoutHeaders(source, names) {
+  const headers = new Headers(source);
+  for (const name of names) headers.delete(name);
+  return headers;
+}
+
+function proxyRequestHeaders(req) {
+  const headers = new Headers();
+  for (let i = 0; i < req.rawHeaders.length; i += 2) headers.append(req.rawHeaders[i], req.rawHeaders[i + 1]);
+  return withoutHeaders(headers, PROXY_REQUEST_DROP);
+}
+
+function proxyTarget(base, ctx) {
+  const target = new URL(base);
+  target.pathname = ctx.pathname;
+  target.search = ctx.search;
+  return target;
+}
+
+// The proxy streams the request body to the dev server, unless a function
+// (an auth rule that continued) has read it already. Then the proxy sends the
+// capped body that the function saw.
+async function proxyBody(ctx) {
+  if (['GET', 'HEAD'].includes(ctx.method)) return {};
+  if (ctx.bodyPending) {
+    const bytes = await ctx.bodyPending;
+    return bytes ? { body: bytes } : {};
+  }
+  ctx.bodyStreamed = true;
+  return { body: ctx.req, duplex: 'half' };
+}
+
+async function proxyStage(state, ctx) {
+  const base = state.options.proxy;
+  if (!base) return null;
+  try {
+    const upstream = await fetch(proxyTarget(base, ctx), {
+      method: ctx.method,
+      headers: proxyRequestHeaders(ctx.req),
+      ...(await proxyBody(ctx)),
+      redirect: 'manual'
+    });
+    const headers = withoutHeaders(upstream.headers, PROXY_RESPONSE_DROP);
+    return new Response(upstream.body, { status: upstream.status, statusText: upstream.statusText, headers });
+  } catch (_err) {
+    return text(502, `The dev server at ${base} did not answer.`);
+  }
+}
+
+// --- Static, 404 and filter ----------------------------------------------------
+
+function staticStage(state, ctx) {
+  const file = lookup(state.index, ctx.pathname, ctx.search);
+  return file ? serveStatic(file, ctx.method, ctx.req.headers.range) : null;
+}
+
+function notFoundStage(state) {
+  const { response, warning } = notFound(state.dir, state.index);
+  if (warning && !state.notFoundWarned) {
+    state.notFoundWarned = true;
+    state.log(warning);
+  }
+  return response;
+}
+
+function isHtml(response) {
+  return (response.headers.get('content-type') || '').toLowerCase().startsWith('text/html');
+}
+
+// A filter rule applies to text/html responses only. A filter rule whose
+// function is missing is skipped (start-up prints the warning).
+async function filterStage(state, ctx, response) {
+  if (!isHtml(response)) return response;
+  const rule = matchFilter(state.project.rules, matchContext(ctx));
+  const fn = rule && state.project.functions.get(rule.fnUuid);
+  if (!fn) return response;
+  return state.executor.run(fn, { ...(await functionContext(state, ctx, 'filter')), response });
+}
+
+async function respond(state, ctx) {
+  if (isControlPath(ctx.pathname)) {
+    return state.control({ method: ctx.method, pathname: ctx.pathname, remoteAddress: ctx.remoteAddress });
+  }
+  const response = await ruleStage(state, ctx)
+    || await proxyStage(state, ctx)
+    || staticStage(state, ctx)
+    || notFoundStage(state);
+  return filterStage(state, ctx, response);
+}
+
+// --- Headers and send ------------------------------------------------------------
+
+function finalHeaders(state, source, authHeaders) {
+  const headers = new Headers(source);
+  for (const [key, value] of authHeaders || []) {
+    if (key === 'set-cookie') headers.append(key, value);
+    else headers.set(key, value);
+  }
+  headers.set('quant-server', SERVER_HEADER);
+  headers.set('x-quant-org', state.org);
+  headers.set('x-quant-project', state.projectName);
+  return headers;
+}
+
+function writeHead(res, response, headers) {
+  res.statusCode = response.status;
+  if (response.statusText) res.statusMessage = response.statusText;
+  for (const [key, value] of headers) {
+    if (key !== 'set-cookie') res.setHeader(key, value);
+  }
+  const cookies = headers.getSetCookie();
+  if (cookies.length > 0) res.setHeader('set-cookie', cookies);
+}
+
+async function send(state, res, response, method, authHeaders) {
+  writeHead(res, response, finalHeaders(state, response.headers, authHeaders));
+  if (!response.body || method === 'HEAD') {
+    res.end();
+    if (response.body) await response.body.cancel().catch(() => {});
+    return;
+  }
+  try {
+    await pipeline(Readable.fromWeb(response.body), res);
+  } catch (_err) {
+    res.destroy();
+  }
+}
+
+async function handleRequest(state, req, res) {
+  let ctx = null;
+  let response;
+  try {
+    ctx = requestContext(state, req);
+    response = await respond(state, ctx);
+  } catch (err) {
+    state.log(`quant serve could not answer ${req.method} ${req.url}: ${errorMessage(err)}`);
+    response = new Response(null, { status: 500 });
+  }
+  await send(state, res, response, req.method, ctx && ctx.authHeaders);
+}
+
+// --- WebSocket upgrades ------------------------------------------------------------
+
+function upgradeHead(req) {
+  const lines = [`${req.method} ${req.url} HTTP/1.1`];
+  for (let i = 0; i < req.rawHeaders.length; i += 2) lines.push(`${req.rawHeaders[i]}: ${req.rawHeaders[i + 1]}`);
+  return `${lines.join('\r\n')}\r\n\r\n`;
+}
+
+function connectUpstream(target, onConnect) {
+  const secure = target.protocol === 'https:';
+  const host = target.hostname.replace(/^\[|\]$/g, '');
+  const port = Number(target.port) || (secure ? 443 : 80);
+  return secure ? tls.connect({ host, port, servername: host }, onConnect) : net.connect(port, host, onConnect);
+}
+
+function track(state, socket) {
+  state.sockets.add(socket);
+  socket.on('close', () => state.sockets.delete(socket));
+}
+
+function upgradeAllowed(state, req) {
+  if (!state.options.proxy) return false;
+  try {
+    return !isControlPath(requestPath(req.url).pathname);
+  } catch (_err) {
+    return false;
+  }
+}
+
+// WebSocket upgrades go to the dev server (for example, Vite HMR).
+function handleUpgrade(state, req, socket, head) {
+  socket.on('error', () => socket.destroy());
+  if (!upgradeAllowed(state, req)) {
+    socket.destroy();
+    return;
+  }
+  track(state, socket);
+  const upstream = connectUpstream(new URL(state.options.proxy), () => {
+    upstream.write(upgradeHead(req));
+    if (head && head.length > 0) upstream.write(head);
+    socket.pipe(upstream).pipe(socket);
+  });
+  track(state, upstream);
+  upstream.on('error', () => socket.destroy());
+  socket.on('close', () => upstream.destroy());
+}
+
+// --- Start-up -------------------------------------------------------------------
+
+function projectFiles(state) {
+  const { functions, rules, meta, fixtures } = state.options;
+  return { root: state.root, functions, rules, meta, fixtures };
+}
+
+function siteIndex(state) {
+  if (fs.existsSync(state.dir)) return { index: buildIndex(state.dir), warning: null };
+  return { index: new Map(), warning: `The site directory ${state.dir} was not found.` };
+}
+
+function reloadProject(state) {
+  try {
+    state.project = loadProject(projectFiles(state));
+    for (const warning of state.project.warnings) state.log(warning);
+  } catch (err) {
+    state.log(`${errorMessage(err)}\nquant serve keeps the last valid version of the project files.`);
+  }
+}
+
+function changedUnder(paths, prefix) {
+  if (prefix === '.') return paths.length > 0;
+  return paths.some((item) => item === prefix || item.startsWith(`${prefix}${path.sep}`));
+}
+
+function onWatchChange(state, paths, siteRel) {
+  if (changedUnder(paths, 'quant')) reloadProject(state);
+  if (changedUnder(paths, siteRel)) state.index = siteIndex(state).index;
+  const sourceChanged = changedUnder(paths, 'src') || changedUnder(paths, 'public');
+  if (sourceChanged && state.options.onSourceChange) state.options.onSourceChange(paths);
+}
+
+function startWatch(state) {
+  if (!state.options.watch) return () => {};
+  const siteRel = path.relative(state.root, state.dir) || '.';
+  return watchProject(state.root, (paths) => onWatchChange(state, paths, siteRel), {
+    paths: ['quant', siteRel, 'src', 'public']
+  });
+}
+
+function storeList(state) {
+  return state.project.stores.map((store) => ({ name: store.name, id: storeId(state.org, state.projectName, store.name) }));
+}
+
+function createState(options) {
+  const root = path.resolve(options.root || process.cwd());
+  const state = {
+    options,
+    root,
+    dir: path.resolve(root, options.dir || 'dist'),
+    org: options.org || 'local',
+    projectName: options.project || 'dev',
+    log: options.log || defaultLog,
+    sockets: new Set(),
+    notFoundWarned: false
+  };
+  state.project = loadProject(projectFiles(state));
+  state.executor = createExecutor({
+    kvStore: options.kvStore, org: state.org, project: state.projectName, root,
+    timeoutMs: options.timeoutMs, geo: options.geo, clientIp: options.clientIp, log: state.log
+  });
+  state.control = controlRoutes({
+    info: () => ({ version: VERSION, org: state.org, project: state.projectName, stores: storeList(state).map((s) => s.id) })
+  });
+  return state;
+}
+
+function listen(server, port, host) {
+  return new Promise((resolve, reject) => {
+    const onError = (err) => reject(err.code === 'EADDRINUSE' ? new Error(`Port ${port} is in use. Use --port.`) : err);
+    server.once('error', onError);
+    server.listen(port, host, () => {
+      server.off('error', onError);
+      resolve(server.address());
+    });
+  });
+}
+
+function serverUrl(host, port) {
+  const shown = ['0.0.0.0', '::'].includes(host) ? '127.0.0.1' : host;
+  return `http://${net.isIPv6(shown) ? `[${shown}]` : shown}:${port}`;
+}
+
+function closer(state, server, cleanups) {
+  let closing = null;
+  return () => {
+    if (!closing) {
+      for (const cleanup of cleanups) cleanup();
+      for (const socket of state.sockets) socket.destroy();
+      server.closeAllConnections();
+      closing = new Promise((resolve) => server.close(() => resolve()));
+    }
+    return closing;
+  };
+}
+
+/**
+ * Start the server.
+ * @param {Object} options The parsed flags plus root and kvStore:
+ *   root, dir, port, host, functions, rules, meta, fixtures, org, project,
+ *   domain, proxy, watch, geo, clientIp, timeoutMs, kvStore, log, onSourceChange.
+ * @returns {Promise<{ url: string, close: () => Promise<void>, summary: Object }>}
+ *   summary: { stores, rules, libraries, warnings } for the start-up output.
+ */
+export async function startServer(options) {
+  const state = createState(options);
+  const site = siteIndex(state);
+  state.index = site.index;
+  const { fromProject } = await loadProjectLibraries(state.root);
+  const server = http.createServer((req, res) => handleRequest(state, req, res));
+  server.on('upgrade', (req, socket, head) => handleUpgrade(state, req, socket, head));
+  const host = options.host || '127.0.0.1';
+  const address = await listen(server, options.port ?? 8787, host);
+  const cleanups = [installProcessHandlers(state.log), startWatch(state)];
+  return {
+    url: serverUrl(host, address.port),
+    close: closer(state, server, cleanups),
+    summary: {
+      stores: storeList(state),
+      rules: state.project.rules.map((rule) => ({ id: rule.id, type: rule.type, urls: rule.url })),
+      libraries: fromProject,
+      warnings: [site.warning, ...state.project.warnings].filter(Boolean)
+    }
+  };
+}

@@ -7,3 +7,5 @@ yarn.lock
 .DS_store
 coverage
 quant-revision-log_*
+
+!tests/fixtures/libs/node_modules/

@@ -12,6 +12,9 @@ import authCommand from './commands/function_auth.js';
 import functionsCommand from './commands/functions.js';
 import functionsAddCommand from './commands/functions-add.js';
 import rulesCommand from './commands/rules.js';
+import kvIndexesCommand from './commands/kv-indexes.js';
+import kvCommand from './commands/kv.js';
+import serveCommand from './commands/serve.js';
 import unpublishCommand from './commands/unpublish.js';
 import deleteCommand from './commands/delete.js';
 import infoCommand from './commands/info.js';
@@ -37,6 +40,11 @@ export function loadCommands() {
     'functions': functionsCommand,
     'functions-add': functionsAddCommand,
     'rules': rulesCommand,
+    'kv-indexes': kvIndexesCommand,
+
+    // Local development
+    'serve': serveCommand,
+    'kv': kvCommand,
 
     // Destructive operations
     'unpublish': unpublishCommand,
@@ -73,6 +81,9 @@ export function getCommandOptions() {
     { value: 'functions', label: 'Deploy multiple edge functions from JSON' },
     { value: 'functions-add', label: 'Add an edge function to a manifest (new UUID)' },
     { value: 'rules', label: 'Deploy managed rules from JSON' },
+    { value: 'kv-indexes', label: 'Declare KV indexes from meta.json' },
+    { value: 'serve', label: 'Run the site locally' },
+    { value: 'kv', label: 'Read and write the local KV store' },
 
     // Visual separator
     { value: 'separator2', label: '───────────────────────', disabled: true },
