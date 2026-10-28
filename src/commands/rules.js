@@ -1,39 +1,10 @@
 import fs from 'node:fs';
 import axios from 'axios';
 import { text, isCancel } from '@clack/prompts';
-import { assertManifest, RULE_UUID } from '../helper/functions-manifest.js';
+import { assertManifest } from '../helper/functions-manifest.js';
+import { resolveRules } from '../helper/edge-rules-manifest.js';
 
-/**
- * The rules manifest with each function_ref resolved to its function's uuid.
- * Every function in the manifest names its uuid (none is derived), so the
- * customer and project do not change the result. The caller validates
- * `functions` first (assertManifest): this does not check it again.
- */
-export function resolveRules(manifest, functions) {
-  if (!manifest || manifest.version !== 1 || !/^[a-z][a-z0-9-]{0,47}$/.test(manifest.namespace) || !Array.isArray(manifest.rules)) {
-    throw new Error('Rules manifest requires version: 1, namespace and a rules array');
-  }
-  if (Buffer.byteLength(JSON.stringify(manifest)) > 65536 || manifest.rules.length > 100) throw new Error('Rules manifest exceeds size limits');
-  const ids = new Map(functions.filter(fn => fn.id).map(fn => [fn.id, fn]));
-  const seen = new Set();
-  return { ...manifest, rules: manifest.rules.map(rule => {
-    if (!rule || !/^[a-z][a-z0-9-]{0,47}$/.test(rule.id) || seen.has(rule.id)) throw new Error('Rules require unique lowercase ids');
-    seen.add(rule.id);
-    if (!['function', 'auth', 'filter'].includes(rule.type)) throw new Error(`Invalid rule type: ${rule.type}`);
-    const result = { ...rule };
-    if (rule.function_ref !== undefined) {
-      if (rule.function_uuid !== undefined) throw new Error('Use function_ref or function_uuid, not both');
-      const fn = ids.get(rule.function_ref);
-      if (!fn) throw new Error(`Unknown function reference: ${rule.function_ref}`);
-      const type = fn.type === 'edge' ? 'function' : fn.type;
-      if (type !== rule.type) throw new Error(`Function type does not match rule: ${rule.id}`);
-      result.function_uuid = fn.uuid;
-      delete result.function_ref;
-    }
-    if (!RULE_UUID.test(result.function_uuid || '')) throw new Error(`Invalid function UUID for rule: ${rule.id} (the rules API needs an RFC 4122 UUID, version 1-5)`);
-    return result;
-  }) };
-}
+export { resolveRules };
 
 export function rulesOptions(args, env = process.env) {
   let saved = {};

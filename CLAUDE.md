@@ -27,7 +27,15 @@ npm run test:purge
 npm run test:unpublish
 npm run test:delete
 npm run test:functions
+npm run test:conformance   # tests/conformance only (not part of npm test)
 ```
+
+### Local development commands
+
+- `quant serve [dir]` runs a built site locally (static files, edge functions, rules, local KV). Code: `src/commands/serve.js` and `src/serve/`. `--version-info` prints the package versions.
+- `quant kv <list|get|set|delete> <store> [key] [value] --local` reads and writes the local KV state in `.quant/kv/` (`src/commands/kv.js`). Remote KV is not available yet.
+- `quant kv-indexes [meta]` declares the KV indexes of `quant/meta.json` with a project-scoped portal token (`src/commands/kv-indexes.js`).
+- The conformance suites in `tests/conformance/` run with `npm run test:conformance` (the CI step `Run conformance suites`), not in `npm test`.
 
 ## Architecture
 
