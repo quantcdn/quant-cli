@@ -29,8 +29,10 @@ function readMeta(file) {
   }
 }
 
+// Only the default quant/meta.json may be missing (no KV indexes declared).
 function declaredStores(file) {
   const json = readMeta(file);
+  if (json === null && file !== DEFAULT_META) throw new Error(`${file} does not exist.`);
   if (json === null) return [];
   return parseMeta(json, file).stores.filter(store => store.indexes.length > 0);
 }

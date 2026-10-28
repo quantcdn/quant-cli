@@ -159,9 +159,14 @@ describe('quant kv-indexes', () => {
   it('prints No KV indexes declared and makes no call when none are declared or the file is missing', async () => {
     fs.readFileSync.callsFake(() => JSON.stringify({ kv_stores: [{ name: 'main' }] }));
     expect((await run()).result).to.equal('No KV indexes declared');
-    expect((await run({ meta: 'absent.json' })).result).to.equal('No KV indexes declared');
     fs.readFileSync.callsFake(() => { throw Object.assign(new Error('missing'), { code: 'ENOENT' }); });
     expect((await run()).result).to.equal('No KV indexes declared');
+    expect(get.called).to.equal(false);
+  });
+
+  it('fails when an explicit meta path does not exist', async () => {
+    const { error } = await run({ meta: 'quant/meta.jsn' });
+    expect(error.message).to.equal('quant/meta.jsn does not exist.');
     expect(get.called).to.equal(false);
   });
 
