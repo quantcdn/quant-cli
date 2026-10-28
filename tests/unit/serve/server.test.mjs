@@ -326,6 +326,48 @@ describe('serve server', () => {
       expect(lines.filter((line) => line === warning)).to.have.length(1);
     });
 
+    it('does not serve project files, dotfiles or node_modules when the site is the project root', async () => {
+      const root = fs.mkdtempSync(path.join(tmp, 'root-'));
+      const files = {
+        'quant.json': '{"token":"secret"}',
+        'quant/edge-functions/x.js': 'secret',
+        '.env': 'SECRET=1',
+        '.quant/kv/a.keys': 'secret',
+        '.git/config': 'secret',
+        'node_modules/p/index.js': 'secret',
+        'index.html': '<p>home</p>'
+      };
+      for (const [name, body] of Object.entries(files)) {
+        fs.mkdirSync(path.dirname(path.join(root, name)), { recursive: true });
+        fs.writeFileSync(path.join(root, name), body);
+      }
+      const server = await start({ root, dir: '.' });
+      for (const name of Object.keys(files).filter((name) => name !== 'index.html')) {
+        const res = await fetch(`${server.url}/${name}`);
+        expect(res.status, name).to.equal(404);
+        expect(await res.text()).to.not.include('secret');
+      }
+      expect((await fetch(`${server.url}/index.html`)).status).to.equal(200);
+      const warning = server.summary.warnings.find((line) => line.includes('quant serve does not serve'));
+      expect(warning).to.include('quant.json');
+      expect(warning).to.include('node_modules');
+    });
+
+    it('warns when the site directory contains the project root', async () => {
+      const parent = fs.mkdtempSync(path.join(tmp, 'parent-'));
+      const root = path.join(parent, 'site');
+      fs.mkdirSync(root);
+      fs.writeFileSync(path.join(root, 'quant.json'), '{}');
+      const server = await start({ root, dir: '..' });
+      expect((await fetch(`${server.url}/site/quant.json`)).status).to.equal(404);
+      expect(server.summary.warnings.some((line) => line.includes('quant serve does not serve'))).to.equal(true);
+    });
+
+    it('does not warn for a site directory under the project root', async () => {
+      const server = await start();
+      expect(server.summary.warnings.some((line) => line.includes('quant serve does not serve'))).to.equal(false);
+    });
+
     it('uses local and dev for the headers by default', async () => {
       const server = await start({ org: undefined, project: undefined });
       expectQuantHeaders(await fetch(`${server.url}/`), 'local', 'dev');

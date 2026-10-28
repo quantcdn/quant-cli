@@ -17,7 +17,7 @@ import { loadProjectLibraries } from './edge-libraries.js';
 import { createExecutor, authContinueHeaders, readCappedBody } from './functions.js';
 import { loadProject, watchProject } from './project.js';
 import { matchRules, matchFilter } from './rules.js';
-import { buildIndex, lookup, serveStatic, notFound } from './static.js';
+import { buildIndex, containsProject, lookup, serveStatic, notFound, NOT_SERVED } from './static.js';
 
 const SERVER_HEADER = 'QuantCDN (quant serve)';
 const AUTH_UNAVAILABLE = 'Authentication for this page is not available.';
@@ -371,7 +371,12 @@ function projectFiles(state) {
 }
 
 function siteIndex(state) {
-  if (fs.existsSync(state.dir)) return { index: buildIndex(state.dir), warning: null };
+  if (fs.existsSync(state.dir)) {
+    const warning = containsProject(state.dir, state.root)
+      ? `The site directory ${state.dir} contains the project files. quant serve does not serve ${NOT_SERVED}.`
+      : null;
+    return { index: buildIndex(state.dir, state.root), warning };
+  }
   return { index: new Map(), warning: `The site directory ${state.dir} was not found.` };
 }
 

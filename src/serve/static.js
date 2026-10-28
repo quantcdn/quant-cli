@@ -17,23 +17,47 @@ const BUILT_IN_404 = '<!doctype html><html lang="en"><head><meta charset="utf-8"
   + '<body><h1>404</h1><p>This page was not found.</p></body></html>';
 const RANGE_PATTERN = /^bytes=(\d*)-(\d*)$/;
 
-function walk(root, current, index) {
+export const NOT_SERVED = 'quant.json, the quant/ folder, node_modules, and files and folders whose names start with "."';
+
+// Files that are never served: dotfiles and dot-folders (.env, .git, .quant),
+// node_modules, quant.json, and the quant/ folder of the project.
+function excluded(entry, full, projectQuant) {
+  const name = entry.name.toLowerCase();
+  if (name.startsWith('.') || name === 'node_modules') return true;
+  if (entry.isFile()) return name === 'quant.json';
+  return full === projectQuant;
+}
+
+function walk(walkState, current) {
+  const { dir, index, projectQuant } = walkState;
   for (const entry of fs.readdirSync(current, { withFileTypes: true })) {
     const full = path.join(current, entry.name);
+    if (excluded(entry, full, projectQuant)) continue;
     if (entry.isDirectory()) {
-      walk(root, full, index);
+      walk(walkState, full);
     } else if (entry.isFile()) {
-      const relative = path.relative(root, full).split(path.sep).join('/');
+      const relative = path.relative(dir, full).split(path.sep).join('/');
       index.set(quantURL.prepare(relative), { path: full, size: fs.statSync(full).size });
     }
   }
 }
 
-/** Map each file under dir to its canonical Quant path. Symlinks are skipped. */
-export function buildIndex(dir) {
+/**
+ * Map each file under dir to its canonical Quant path. Symlinks are skipped,
+ * and so are the files that NOT_SERVED names.
+ * @param {string} dir The site directory.
+ * @param {string} [root] The project directory (its quant/ folder is not served).
+ */
+export function buildIndex(dir, root = dir) {
   const index = new Map();
-  walk(dir, dir, index);
+  walk({ dir, index, projectQuant: path.join(path.resolve(root), 'quant') }, dir);
   return index;
+}
+
+/** True when dir is the project directory or contains it. */
+export function containsProject(dir, root) {
+  const relative = path.relative(path.resolve(dir), path.resolve(root));
+  return relative === '' || (!relative.startsWith('..') && !path.isAbsolute(relative));
 }
 
 function decode(value) {
