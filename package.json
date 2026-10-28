@@ -9,9 +9,9 @@
     "node": ">=20"
   },
   "scripts": {
-    "test": "mocha 'tests/**/**/*.test.mjs'",
+    "test": "mocha 'tests/{unit,integration}/**/*.test.mjs'",
     "test:conformance": "mocha 'tests/conformance/*.test.mjs'",
-    "test:watch": "mocha 'tests/**/**/*.test.mjs' --watch",
+    "test:watch": "mocha 'tests/{unit,integration}/**/*.test.mjs' --watch",
     "test:coverage": "c8 mocha 'tests/**/**/*.test.mjs'",
     "test:config": "mocha 'tests/unit/config.test.mjs'",
     "test:deploy": "mocha 'tests/unit/commands/deploy.test.mjs'",

@@ -5,13 +5,9 @@ import { expect } from 'chai';
 import { loadCases, run, SUITE_TAGS } from '@quantcdn/edge-conformance';
 import { createAdapter } from './in-process-adapter.mjs';
 
-// Documented behaviour that quant serve does not have yet. Each case must
-// fail here; when quant serve gets the behaviour, remove the id.
-// The auth middleware docs say that a 201 continues to the next rule. quant
-// serve runs only the first matching rule, then serves static content.
-// The 503 for an auth rule with a missing function has no
-// cache-control: no-store in quant serve. The status is still checked by
-// rules-auth-missing-function-503-message.
+// Documented behaviour that quant serve does not have yet, as case ids. Each
+// listed case must fail here; when quant serve gets the behaviour, remove the
+// id. The list is empty: quant serve passes every case.
 const KNOWN_GAPS = new Set([]);
 
 const cases = await loadCases();

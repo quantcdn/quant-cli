@@ -326,10 +326,12 @@ If the package is not installed, the global exists but throws when a function us
 
 ```bash
 export QUANT_API_TOKEN=...
-export QUANT_BASE_URL=https://example.invalid/api/v2
-quant kv-indexes --dry-run
-quant kv-indexes
+export QUANT_BASE_URL=https://dashboard.quantcdn.io/api/v2
+quant kv-indexes -c my-org -p my-project --dry-run
+quant kv-indexes -c my-org -p my-project
 ```
+
+`QUANT_BASE_URL` is the portal `/api/v2` URL: `https://dashboard.quantcdn.io/api/v2` for QuantCDN, `https://dash.quantgov.cloud/api/v2` for QuantGov. The organisation (`-c`) and the project (`-p`) are required; without them, the command reads them from `quant.json`.
 
 Each line shows `<store>/<index>` and one status:
 
@@ -402,7 +404,7 @@ Pipelines that use deploy-action `v6` keep CLI 6.3.0 and are not affected.
 ```bash
 npm run lint
 npm run test
-npm run test:conformance
+npm run test:conformance   # the conformance suites (not part of npm run test)
 ```
 
 ## Contributing
