@@ -187,6 +187,25 @@ describe('serve functions', () => {
     });
   });
 
+  describe('realm', () => {
+    it('gives a library from the project the values a function makes', async () => {
+      const fn = writeFn(`
+        const length = jose.keyLength(new Uint8Array(32));
+        const checks = jose.realmChecks({
+          arrayBuffer: new ArrayBuffer(8), dataView: new DataView(new ArrayBuffer(8)), float64: new Float64Array(2),
+          bigInt64: new BigInt64Array(1), typeError: new TypeError('x'), encoded: new TextEncoder().encode('x')
+        });
+        return Response.json({ length, checks, fromLibrary: jose.hostBytes() instanceof Uint8Array });`);
+      const res = await executor().run(fn, request());
+      expect(lines).to.deep.equal([]);
+      expect(await res.json()).to.deep.equal({
+        length: 32,
+        checks: { arrayBuffer: true, dataView: true, float64: true, bigInt64: true, typeError: true, encoded: true },
+        fromLibrary: true
+      });
+    });
+  });
+
   describe('errors', () => {
     it('answers a thrown error with the edge 500 and logs the message', async () => {
       const fn = writeFn('throw new Error("boom");');

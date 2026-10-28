@@ -60,6 +60,15 @@ const WEB_GLOBALS = [
   'Blob', 'File', 'FormData', 'Event', 'EventTarget', 'DOMException', 'Buffer'
 ];
 
+// The binary and error classes of the host realm. A library from the project
+// (for example jose) checks a value with `instanceof` against its own realm,
+// so a function must make its values with the same classes.
+const REALM_GLOBALS = [
+  'ArrayBuffer', 'DataView', 'Uint8Array', 'Uint8ClampedArray', 'Int8Array', 'Uint16Array', 'Int16Array',
+  'Uint32Array', 'Int32Array', 'Float32Array', 'Float64Array', 'BigInt64Array', 'BigUint64Array',
+  'Error', 'TypeError', 'RangeError', 'SyntaxError'
+];
+
 const META_TYPES = { function: 'edge_function', auth: 'edge_auth' };
 
 const PRIVATE_ADDRESSES = new net.BlockList();
@@ -240,7 +249,7 @@ function guardedTimers(report) {
 
 function hostGlobals(state, libraries, fn) {
   const globals = {};
-  for (const name of WEB_GLOBALS) {
+  for (const name of [...WEB_GLOBALS, ...REALM_GLOBALS]) {
     if (name in globalThis) globals[name] = globalThis[name];
   }
   return {
