@@ -414,6 +414,16 @@ function defaultLog(line) {
   process.stderr.write(`${line}\n`);
 }
 
+// Whether a process-level error comes from function code: a value that is
+// not an object (only function code throws such values), an object made in
+// a function context, or an error whose stack names a function file.
+function fromFunctionCode(cache, err) {
+  if (err === null || (typeof err !== 'object' && typeof err !== 'function')) return true;
+  if (!(err instanceof Object)) return true;
+  const stack = typeof err.stack === 'string' ? err.stack : '';
+  return [...cache.keys()].some((file) => stack.includes(file));
+}
+
 const NO_WATCH = Object.freeze({ enter() {}, leave() {} });
 
 /**
@@ -429,7 +439,8 @@ const NO_WATCH = Object.freeze({ enter() {}, leave() {} });
  * @param {Function} [options.log] Writes one line to the terminal.
  * @param {{ enter: Function, leave: Function }} [options.watch] Told when a run starts and ends (the watchdog):
  *   enter(uuid) returns a token, and leave(token) gets it back.
- * @returns {{ run: (fn: { uuid: string, path: string }, ctx: Object) => Promise<Response> }}
+ * @returns {{ run: (fn: { uuid: string, path: string }, ctx: Object) => Promise<Response>, fromFunction: (err: unknown) => boolean }}
+ *   fromFunction: whether an uncaught error comes from function code that this executor ran.
  *   ctx: { mode ('function' | 'auth' | 'filter'), url, method, headers, body,
  *   clientAddress, baseHeaders (function mode), response (filter mode) }.
  */
@@ -444,6 +455,7 @@ export function createExecutor({ kvStore, org, project, root = process.cwd(), ti
     }
   };
   return {
+    fromFunction: (err) => fromFunctionCode(state.cache, err),
     async run(fn, ctx = {}) {
       const mode = ctx.mode || 'function';
       if (mode === 'filter' && !(ctx.response && ctx.response.body)) return ctx.response;

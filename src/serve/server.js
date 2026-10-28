@@ -50,25 +50,49 @@ function text(status, body, extra = {}) {
 
 // node:vm cannot contain a promise that a function leaves rejected, or a
 // throw from a callback that it schedules. One process-level handler logs
-// these errors so that the server keeps serving.
-const processLogs = new Set();
+// these errors so that the server keeps serving. An error that does not come
+// from function code is a fault of quant serve: it crashes with its stack.
+const processServers = new Set();
 
-function onProcessError(err) {
-  for (const log of processLogs) log(`Unhandled error: ${errorMessage(err)}`);
+function uninstallProcessHandlers() {
+  process.off('unhandledRejection', onProcessError);
+  process.off('uncaughtException', onProcessError);
 }
 
-function installProcessHandlers(log) {
-  if (processLogs.size === 0) {
+function onProcessError(err) {
+  const owners = [...processServers].filter((server) => server.fromFunction(err));
+  if (owners.length === 0) {
+    uninstallProcessHandlers();
+    processServers.clear();
+    process.nextTick(() => { throw err; });
+    return;
+  }
+  for (const server of owners) server.log(`Unhandled error: ${errorMessage(err)}`);
+}
+
+function installProcessHandlers(server) {
+  if (processServers.size === 0) {
     process.on('unhandledRejection', onProcessError);
     process.on('uncaughtException', onProcessError);
   }
-  processLogs.add(log);
+  processServers.add(server);
   return () => {
-    processLogs.delete(log);
-    if (processLogs.size > 0) return;
-    process.off('unhandledRejection', onProcessError);
-    process.off('uncaughtException', onProcessError);
+    if (!processServers.delete(server) || processServers.size > 0) return;
+    uninstallProcessHandlers();
   };
+}
+
+// --- Identity --------------------------------------------------------------------
+
+const HEADER_TEXT = /^[\x20-\x7e]+$/;
+
+// The org and project go in the x-quant-org and x-quant-project headers.
+function checkIdentity(org, project) {
+  for (const [name, value] of [['org', org], ['project', project]]) {
+    if (!HEADER_TEXT.test(value)) {
+      throw new Error(`The ${name} ${JSON.stringify(value)} cannot go in a response header. Use printable ASCII characters only.`);
+    }
+  }
 }
 
 // --- Host check ----------------------------------------------------------------
@@ -365,6 +389,20 @@ async function send(state, res, response, method, authHeaders) {
   }
 }
 
+// A response that cannot be sent (for example a header value that Node
+// refuses) gets a bare 500, so the socket does not stay open.
+function sendFailed(state, req, res, err) {
+  state.log(`quant serve could not send the response to ${req.method} ${req.url}: ${errorMessage(err)}`);
+  if (res.headersSent) {
+    res.destroy();
+    return;
+  }
+  for (const name of res.getHeaderNames()) res.removeHeader(name);
+  res.statusCode = 500;
+  res.statusMessage = 'Internal Server Error';
+  res.end();
+}
+
 async function handleRequest(state, req, res) {
   let ctx = null;
   let response;
@@ -375,7 +413,11 @@ async function handleRequest(state, req, res) {
     state.log(`quant serve could not answer ${req.method} ${req.url}: ${errorMessage(err)}`);
     response = new Response(null, { status: 500 });
   }
-  await send(state, res, response, req.method, ctx && ctx.authHeaders);
+  try {
+    await send(state, res, response, req.method, ctx && ctx.authHeaders);
+  } catch (err) {
+    sendFailed(state, req, res, err);
+  }
 }
 
 // --- WebSocket upgrades ------------------------------------------------------------
@@ -492,6 +534,7 @@ function createState(options) {
     notFoundWarned: false,
     allowedHosts: allowedHosts(options)
   };
+  checkIdentity(state.org, state.projectName);
   state.project = loadProject(projectFiles(state));
   state.executor = createExecutor({
     kvStore: options.kvStore, org: state.org, project: state.projectName, root,
@@ -552,7 +595,8 @@ export async function startServer(options) {
   const host = options.host || '127.0.0.1';
   const address = await listen(server, options.port ?? 8787, host);
   state.watchdog = startWatchdog({ budgetMs: options.timeoutMs ?? DEFAULT_TIMEOUT_MS });
-  const cleanups = [installProcessHandlers(state.log), startWatch(state), () => state.watchdog.stop()];
+  const processServer = { log: state.log, fromFunction: (err) => state.executor.fromFunction(err) };
+  const cleanups = [installProcessHandlers(processServer), startWatch(state), () => state.watchdog.stop()];
   return {
     url: serverUrl(host, address.port),
     close: closer(state, server, cleanups),

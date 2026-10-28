@@ -3,6 +3,7 @@ import sinon from 'sinon';
 import crypto from 'node:crypto';
 import fs from 'node:fs';
 import http from 'node:http';
+import { spawnSync } from 'node:child_process';
 import net from 'node:net';
 import os from 'node:os';
 import path from 'node:path';
@@ -620,6 +621,45 @@ describe('serve server', () => {
       } finally {
         await closeServer(busy);
       }
+    });
+
+    it('stops with a clear message when the org or project is not printable ASCII', async () => {
+      for (const [over, name] of [[{ org: 'acmé' }, 'org'], [{ project: 'site\n' }, 'project']]) {
+        try {
+          await start(over);
+          expect.fail('must fail');
+        } catch (err) {
+          expect(err.message).to.match(new RegExp(`^The ${name} .* printable ASCII`));
+        }
+      }
+    });
+
+    it('answers 500 when a response header cannot be sent', async () => {
+      const root = tempProject({
+        functions: [{ id: 'bad', uuid: ORBIT_FN, body: 'return new Response(\'x\', { headers: { \'x-bad\': \'a\\x01b\' } });' }],
+        rules: [rule('bad', 'function', ['/bad'], ORBIT_FN)]
+      });
+      const server = await start({ root });
+      const res = await fetch(`${server.url}/bad`, { signal: AbortSignal.timeout(2000) });
+      expect(res.status).to.equal(500);
+      expect(lines.join('\n')).to.include('x-bad');
+    });
+
+    it('crashes with the stack for an error that does not come from function code', async function () {
+      this.timeout(10000);
+      const script = path.join(tmp, 'crash.mjs');
+      const serverUrl = new URL('../../../src/serve/server.js', import.meta.url).href;
+      fs.writeFileSync(script, `
+        import { startServer } from ${JSON.stringify(serverUrl)};
+        await startServer({ root: ${JSON.stringify(ORBIT)}, port: 0, kvStore: {}, log: (line) => console.error(line) });
+        setTimeout(() => { throw new Error('host bug'); }, 50);
+        setTimeout(() => { console.error('still running'); process.exit(0); }, 2000);
+      `);
+      const result = spawnSync(process.execPath, [script], { encoding: 'utf8', timeout: 8000 });
+      expect(result.status).to.not.equal(0);
+      expect(result.stderr).to.include('Error: host bug');
+      expect(result.stderr).to.include('crash.mjs');
+      expect(result.stderr).to.not.include('still running');
     });
 
     it('stops with the file name when a manifest is invalid', async () => {
