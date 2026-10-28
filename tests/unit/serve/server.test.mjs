@@ -101,6 +101,21 @@ function waitFor(check, timeoutMs = 3000) {
   });
 }
 
+// A GET with the path exactly as given (fetch and URL do not change it).
+function rawGet(url, rawPath, headers = {}) {
+  const { port } = new URL(url);
+  return new Promise((resolve, reject) => {
+    const req = http.request({ host: '127.0.0.1', port: Number(port), path: rawPath, method: 'GET', headers }, (res) => {
+      let body = '';
+      res.setEncoding('utf8');
+      res.on('data', (chunk) => { body += chunk; });
+      res.on('end', () => resolve({ status: res.statusCode, headers: res.headers, body }));
+    });
+    req.on('error', reject);
+    req.end();
+  });
+}
+
 function rawRequest(url, head) {
   const { port } = new URL(url);
   return new Promise((resolve, reject) => {
@@ -213,6 +228,45 @@ describe('serve server', () => {
       expect(res.headers.get('content-type')).to.equal('application/json');
       expect(res.headers.get('cache-control')).to.equal('private, max-age=0');
       expectQuantHeaders(res);
+    });
+
+    it('an auth rule covers each spelling of a path that the static lookup serves', async () => {
+      const root = tempProject({
+        functions: [{ id: 'gate', uuid: AUTH_FN, type: 'auth', body: 'return new Response(\'no\', { status: 401 });' }],
+        rules: [rule('gate', 'auth', ['/admin/*'], AUTH_FN)],
+        files: { 'admin/secret/index.html': 'secret' }
+      });
+      const server = await start({ root });
+      const spellings = ['/admin/secret', '/%61dmin/secret', '/adm%69n/secret', '/%41DMIN/secret',
+        '//admin/secret', '/admin//secret', '///admin///secret/', '/admin/secret/index.html'];
+      for (const spelling of spellings) {
+        const res = await rawGet(server.url, spelling);
+        expect(res.status, spelling).to.equal(401);
+      }
+    });
+
+    it('answers 400 for an encoded slash or backslash in the path', async () => {
+      const root = tempProject({
+        functions: [{ id: 'gate', uuid: AUTH_FN, type: 'auth', body: 'return new Response(\'no\', { status: 401 });' }],
+        rules: [rule('gate', 'auth', ['/admin/*'], AUTH_FN)],
+        files: { 'admin/secret/index.html': 'secret' }
+      });
+      const server = await start({ root });
+      for (const spelling of ['/admin%2Fsecret', '/admin%2fsecret', '%2Fadmin/secret', '/admin%5Csecret', '/admin%5csecret']) {
+        const res = await rawGet(server.url, spelling.startsWith('/') ? spelling : `/${spelling}`);
+        expect(res.status, spelling).to.equal(400);
+        expect(res.body).to.not.include('secret');
+      }
+    });
+
+    it('keeps the query string as sent for a query-pattern rule', async () => {
+      const root = tempProject({
+        functions: [{ id: 'q', uuid: ORBIT_FN, body: 'return new Response(\'query rule\');' }],
+        rules: [rule('q', 'function', ['/search?q=a%20b'], ORBIT_FN)],
+        files: { 'index.html': 'home' }
+      });
+      const server = await start({ root });
+      expect((await rawGet(server.url, '/search?q=a%20b')).body).to.equal('query rule');
     });
 
     it('returns 503 when an auth rule names a missing function', async () => {

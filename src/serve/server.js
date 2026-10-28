@@ -81,15 +81,37 @@ function functionRequestBody(ctx) {
   return ctx.bodyPending;
 }
 
+const ENCODED_SEPARATOR = /%(2f|5c)/i;
+const PERCENT_ENCODED = /%([0-9a-f]{2})/gi;
+const UNRESERVED = /^[A-Za-z0-9\-._~]$/;
+const BAD_PATH = 'The request path has an encoded "/" or "\\".';
+
+function decodeUnreserved(match, hex) {
+  const char = String.fromCharCode(parseInt(hex, 16));
+  return UNRESERVED.test(char) ? char : match;
+}
+
+/**
+ * The one request path that rule matching, the static lookup and the proxy
+ * use: percent-encoded unreserved characters are decoded and repeated "/"
+ * become one. Null for an encoded "/" or "\" (the request gets 400).
+ */
+export function canonicalPath(pathname) {
+  if (ENCODED_SEPARATOR.test(pathname)) return null;
+  return pathname.replace(PERCENT_ENCODED, decodeUnreserved).replace(/\/{2,}/g, '/');
+}
+
+// The query string stays as it was sent, for query-pattern rules.
 function requestPath(rawUrl) {
   const url = rawUrl.startsWith('/') ? new URL(`http://localhost${rawUrl}`) : new URL(rawUrl);
-  return { pathname: url.pathname, search: url.search };
+  return { pathname: canonicalPath(url.pathname), search: url.search };
 }
 
 function requestContext(state, req) {
   const host = state.options.domain || req.headers.host || '';
   const { pathname, search } = requestPath(req.url);
   return {
+    badPath: pathname === null,
     req,
     host,
     method: req.method,
@@ -256,6 +278,7 @@ async function filterStage(state, ctx, response) {
 }
 
 async function respond(state, ctx) {
+  if (ctx.badPath) return text(400, BAD_PATH, { 'cache-control': 'no-store' });
   if (isControlPath(ctx.pathname)) {
     return state.control({ method: ctx.method, pathname: ctx.pathname, remoteAddress: ctx.remoteAddress });
   }
@@ -340,7 +363,8 @@ function track(state, socket) {
 function upgradeAllowed(state, req) {
   if (!state.options.proxy) return false;
   try {
-    return !isControlPath(requestPath(req.url).pathname);
+    const { pathname } = requestPath(req.url);
+    return pathname !== null && !isControlPath(pathname);
   } catch (_err) {
     return false;
   }
