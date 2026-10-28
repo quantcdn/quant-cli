@@ -7,7 +7,7 @@
 
 import fs from 'node:fs';
 import path from 'node:path';
-import crypto from 'node:crypto';
+import { Readable } from 'node:stream';
 import mime from 'mime-types';
 import quantURL from '../helper/quant-url.js';
 
@@ -117,10 +117,10 @@ export function findOnDisk(dir, root, pathname) {
   return servedFile(walkState, relative) || servedFile(walkState, `${relative}/index.html`);
 }
 
-function baseHeaders(file, body) {
+function baseHeaders(file, stat) {
   return {
     'content-type': mime.lookup(file.path) || 'application/octet-stream',
-    etag: `"${crypto.createHash('md5').update(body).digest('hex')}"`,
+    etag: `"${stat.size.toString(16)}-${Math.floor(stat.mtimeMs).toString(16)}"`,
     'accept-ranges': 'bytes',
     'cache-control': 'no-store'
   };
@@ -144,21 +144,25 @@ function parseRange(header, size) {
   return start >= size || start > end ? 'invalid' : { start, end };
 }
 
-/** Build a response for an indexed file. */
+// The file bytes from start to end (inclusive), as a stream.
+function fileStream(file, start, end) {
+  if (end < start) return new Uint8Array(0);
+  return Readable.toWeb(fs.createReadStream(file.path, { start, end }));
+}
+
+/** Build a response for an indexed file. The file is streamed (a range with start and end). */
 export function serveStatic(file, method, rangeHeader, status = 200) {
-  const body = fs.readFileSync(file.path);
-  const headers = baseHeaders(file, body);
-  const range = status === 200 ? parseRange(rangeHeader, body.length) : null;
+  const stat = fs.statSync(file.path);
+  const headers = baseHeaders(file, stat);
+  const range = status === 200 ? parseRange(rangeHeader, stat.size) : null;
   if (range === 'invalid') {
-    return new Response(null, { status: 416, headers: { ...headers, 'content-range': `bytes */${body.length}` } });
+    return new Response(null, { status: 416, headers: { ...headers, 'content-range': `bytes */${stat.size}` } });
   }
-  const slice = range ? body.subarray(range.start, range.end + 1) : body;
-  headers['content-length'] = String(slice.length);
-  if (range) {
-    headers['content-range'] = `bytes ${range.start}-${range.end}/${body.length}`;
-  }
-  const hasBody = method !== 'HEAD';
-  return new Response(hasBody ? slice : null, { status: range ? 206 : status, headers });
+  const { start, end } = range || { start: 0, end: stat.size - 1 };
+  headers['content-length'] = String(end - start + 1);
+  if (range) headers['content-range'] = `bytes ${start}-${end}/${stat.size}`;
+  const body = method === 'HEAD' ? null : fileStream(file, start, end);
+  return new Response(body, { status: range ? 206 : status, headers });
 }
 
 /** The 404 response, plus a warning when only 404.html exists. */

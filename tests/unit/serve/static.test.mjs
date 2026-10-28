@@ -89,7 +89,8 @@ describe('serve static', () => {
       const res = await serveStatic(lookup(index, '/assets/main.js', ''), 'GET');
       expect(res.status).to.equal(200);
       expect(res.headers.get('content-type')).to.match(/javascript/);
-      expect(res.headers.get('etag')).to.match(/^"[0-9a-f]{32}"$/);
+      const stat = fs.statSync(path.join(dir, 'assets', 'main.js'));
+      expect(res.headers.get('etag')).to.equal(`"${stat.size.toString(16)}-${Math.floor(stat.mtimeMs).toString(16)}"`);
       expect(res.headers.get('accept-ranges')).to.equal('bytes');
       expect(res.headers.get('cache-control')).to.equal('no-store');
       expect(await res.text()).to.equal('0123456789abcdef');
@@ -119,6 +120,24 @@ describe('serve static', () => {
       const res = await serveStatic(lookup(index, '/assets/main.js', ''), 'GET', 'bytes=999999-');
       expect(res.status).to.equal(416);
       expect(res.headers.get('content-range')).to.equal('bytes */16');
+    });
+
+    it('streams the file and its range without a whole-file read', async () => {
+      const readFileSync = fs.readFileSync;
+      fs.readFileSync = (file, ...rest) => {
+        if (String(file).startsWith(dir)) throw new Error('whole-file read');
+        return readFileSync(file, ...rest);
+      };
+      try {
+        const full = await serveStatic(lookup(index, '/assets/main.js', ''), 'GET');
+        expect(full.body).to.be.instanceOf(ReadableStream);
+        expect(await full.text()).to.equal('0123456789abcdef');
+        const range = await serveStatic(lookup(index, '/assets/main.js', ''), 'GET', 'bytes=2-5');
+        expect(range.headers.get('content-length')).to.equal('4');
+        expect(await range.text()).to.equal('2345');
+      } finally {
+        fs.readFileSync = readFileSync;
+      }
     });
 
     it('ignores a multi-range request', async () => {
