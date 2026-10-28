@@ -71,6 +71,31 @@ function installProcessHandlers(log) {
   };
 }
 
+// --- Host check ----------------------------------------------------------------
+
+// On a loopback bind, quant serve answers the local names and the --domain
+// value only. A page that a DNS name points at 127.0.0.1 cannot read the
+// local site. A bind that is not loopback answers any Host.
+const LOOPBACK_BINDS = new Set(['127.0.0.1', '::1', 'localhost']);
+const LOCAL_HOSTS = ['localhost', '127.0.0.1', '[::1]'];
+const MISDIRECTED = 'quant serve answers the Host names localhost, 127.0.0.1 and [::1], and the --domain value, only.';
+
+/** The Host header value without the port, in lowercase. */
+export function hostName(value) {
+  const host = String(value || '').trim().toLowerCase();
+  if (host.startsWith('[')) return host.slice(0, host.indexOf(']') + 1);
+  return host.replace(/:\d*$/, '');
+}
+
+function allowedHosts(options) {
+  if (!LOOPBACK_BINDS.has(options.host || '127.0.0.1')) return null;
+  return new Set([...LOCAL_HOSTS, ...(options.domain ? [hostName(options.domain)] : [])]);
+}
+
+function hostAllowed(state, req) {
+  return !state.allowedHosts || state.allowedHosts.has(hostName(req.headers.host));
+}
+
 // --- Context -----------------------------------------------------------------
 
 // The body for a function: read once, up to the request body cap. A body
@@ -278,9 +303,10 @@ async function filterStage(state, ctx, response) {
 }
 
 async function respond(state, ctx) {
+  if (!hostAllowed(state, ctx.req)) return text(421, MISDIRECTED, { 'cache-control': 'no-store' });
   if (ctx.badPath) return text(400, BAD_PATH, { 'cache-control': 'no-store' });
   if (isControlPath(ctx.pathname)) {
-    return state.control({ method: ctx.method, pathname: ctx.pathname, remoteAddress: ctx.remoteAddress });
+    return state.control({ method: ctx.method, pathname: ctx.pathname, remoteAddress: ctx.remoteAddress, headers: ctx.req.headers });
   }
   const response = await ruleStage(state, ctx)
     || await proxyStage(state, ctx)
@@ -361,7 +387,7 @@ function track(state, socket) {
 }
 
 function upgradeAllowed(state, req) {
-  if (!state.options.proxy) return false;
+  if (!state.options.proxy || !hostAllowed(state, req)) return false;
   try {
     const { pathname } = requestPath(req.url);
     return pathname !== null && !isControlPath(pathname);
@@ -448,7 +474,8 @@ function createState(options) {
     projectName: options.project || 'dev',
     log: options.log || defaultLog,
     sockets: new Set(),
-    notFoundWarned: false
+    notFoundWarned: false,
+    allowedHosts: allowedHosts(options)
   };
   state.project = loadProject(projectFiles(state));
   state.executor = createExecutor({

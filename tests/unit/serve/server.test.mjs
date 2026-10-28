@@ -508,12 +508,56 @@ describe('serve server', () => {
       upstream = http.createServer((_req, res) => res.end('upstream'));
       const port = await listen(upstream);
       const server = await start({ proxy: `http://127.0.0.1:${port}` });
-      const res = await fetch(`${server.url}/_quant_serve/info`);
+      const res = await fetch(`${server.url}/_quant_serve/info`, { headers: { 'x-quant-serve': '1' } });
       expect(res.status).to.equal(200);
       const info = await res.json();
       expect(info.org).to.equal('acme');
       expect(info.project).to.equal('site');
       expectQuantHeaders(res);
+    });
+  });
+
+  describe('host check', () => {
+    const CONTROL = { 'x-quant-serve': '1' };
+
+    it('answers 421 for a Host that is not local, on a page and on the control route', async () => {
+      const server = await start();
+      for (const target of ['/app', '/_quant_serve/info']) {
+        const res = await rawGet(server.url, target, { host: 'rebind.attacker.example', ...CONTROL });
+        expect(res.status, target).to.equal(421);
+        expect(res.headers['cache-control']).to.equal('no-store');
+        expect(res.headers['content-type']).to.match(/^text\/plain/);
+        expect(res.body).to.not.include('Orbit');
+      }
+    });
+
+    it('accepts the local Host names with any port', async () => {
+      const server = await start();
+      const { port } = new URL(server.url);
+      for (const host of [`localhost:${port}`, 'localhost', `127.0.0.1:${port}`, `[::1]:${port}`, 'LOCALHOST']) {
+        expect((await rawGet(server.url, '/app', { host })).status, host).to.equal(200);
+      }
+    });
+
+    it('accepts the --domain value as the Host', async () => {
+      const server = await start({ domain: 'site.example' });
+      expect((await rawGet(server.url, '/app', { host: 'site.example:8787' })).status).to.equal(200);
+      expect((await rawGet(server.url, '/app', { host: 'other.example' })).status).to.equal(421);
+    });
+
+    it('does not check the Host when --host is not loopback', async () => {
+      const server = await start({ host: '0.0.0.0' });
+      expect((await rawGet(server.url, '/app', { host: 'rebind.attacker.example' })).status).to.equal(200);
+    });
+
+    it('answers the control route only with the x-quant-serve header', async () => {
+      const server = await start();
+      const { port } = new URL(server.url);
+      const without = await rawGet(server.url, '/_quant_serve/info', { host: `localhost:${port}` });
+      expect(without.status).to.equal(403);
+      const withHeader = await rawGet(server.url, '/_quant_serve/info', { host: `localhost:${port}`, ...CONTROL });
+      expect(withHeader.status).to.equal(200);
+      expect(JSON.parse(withHeader.body).org).to.equal('acme');
     });
   });
 
@@ -582,6 +626,7 @@ describe('serve server', () => {
 
 describe('serve control route', () => {
   const routes = controlRoutes({ info: () => ({ org: 'acme', project: 'site' }) });
+  const CONTROL_HEADERS = { 'x-quant-serve': '1' };
 
   it('matches only the /_quant_serve path', () => {
     expect(isControlPath('/_quant_serve/info')).to.equal(true);
@@ -592,20 +637,28 @@ describe('serve control route', () => {
 
   it('answers /_quant_serve/info for loopback addresses', async () => {
     for (const remoteAddress of ['127.0.0.1', '::1', '::ffff:127.0.0.1']) {
-      const res = await routes({ method: 'GET', pathname: '/_quant_serve/info', remoteAddress });
+      const res = await routes({ method: 'GET', pathname: '/_quant_serve/info', remoteAddress, headers: CONTROL_HEADERS });
       expect(res.status).to.equal(200);
       expect(await res.json()).to.include({ org: 'acme', project: 'site' });
     }
   });
 
   it('refuses a non-loopback address', async () => {
-    const res = await routes({ method: 'GET', pathname: '/_quant_serve/info', remoteAddress: '192.168.1.20' });
+    const res = await routes({ method: 'GET', pathname: '/_quant_serve/info', remoteAddress: '192.168.1.20', headers: CONTROL_HEADERS });
     expect(res.status).to.equal(403);
+  });
+
+  it('refuses a request without x-quant-serve: 1', async () => {
+    for (const headers of [{}, { 'x-quant-serve': '0' }]) {
+      const res = await routes({ method: 'GET', pathname: '/_quant_serve/info', remoteAddress: '127.0.0.1', headers });
+      expect(res.status).to.equal(403);
+      expect(await res.text()).to.include('x-quant-serve: 1');
+    }
   });
 
   it('gives 404 for the clock and archive routes in this release', async () => {
     for (const pathname of ['/_quant_serve/clock/advance', '/_quant_serve/ledger/archive-now']) {
-      const res = await routes({ method: 'POST', pathname, remoteAddress: '127.0.0.1' });
+      const res = await routes({ method: 'POST', pathname, remoteAddress: '127.0.0.1', headers: CONTROL_HEADERS });
       expect(res.status).to.equal(404);
     }
   });

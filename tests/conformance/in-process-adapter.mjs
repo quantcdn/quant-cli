@@ -101,7 +101,9 @@ export function createAdapter() {
     count += 1;
     const root = path.join(base, `case-${count}`);
     writeProject(root, input);
-    const server = await startServer({ root, dir: 'dist', port: 0, host: '127.0.0.1', log: (line) => logs.push(line) });
+    // The case URLs use public host names: --domain lets the loopback server answer them.
+    const domain = new URL(input.request.url).host;
+    const server = await startServer({ root, dir: 'dist', port: 0, host: '127.0.0.1', domain, log: (line) => logs.push(line) });
     try {
       return await send(server.url, input.request);
     } finally {
