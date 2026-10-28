@@ -345,6 +345,11 @@ async function startOrShowKeys(serverOpts, kv, print) {
   }
 }
 
+// The watchdog ends the --run process group when a function blocks the server.
+function watchRun(server, child) {
+  if (child && child.pid && server.setRunPid) server.setRunPid(child.pid);
+}
+
 /**
  * Build (optional), open the local KV, start the server and the --run
  * command, print the start-up output, then serve until `stop` resolves
@@ -358,6 +363,7 @@ export async function runServe(options, { stop, print = console.log, log, kvStor
   const server = await startOrShowKeys(serverOptions(options, { kvStore: kv.kvStore, log }, print), kv, print);
   for (const line of startupLines({ url: server.url, host: options.host, ...startupSummary(server.summary, kv) })) print(line);
   const child = options.run ? startRun(options.run, options.root, print) : null;
+  watchRun(server, child);
   const onExit = () => killRun(child);
   process.once('exit', onExit);
   if (onListening) onListening(server);

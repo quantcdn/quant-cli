@@ -219,6 +219,64 @@ describe('serve command', () => {
       expect(await exited).to.deep.equal({ code: 0, signal: null });
       expect(await gone(pid)).to.equal(true);
     });
+
+    // A temporary project with one function rule at /loop.
+    function loopProject(body) {
+      const root = path.join(tmp, 'loop');
+      const uuid = '0f8e2c1a-5b6d-4e7f-8a9b-1c2d3e4f5a6b';
+      fs.mkdirSync(path.join(root, 'quant', 'edge-functions'), { recursive: true });
+      fs.mkdirSync(path.join(root, 'dist'), { recursive: true });
+      fs.writeFileSync(path.join(root, 'dist', 'index.html'), 'home');
+      fs.writeFileSync(path.join(root, 'quant', 'edge-functions', 'loop.js'), body);
+      fs.writeFileSync(path.join(root, 'quant', 'edge-functions.json'), JSON.stringify([
+        { id: 'loop', uuid, type: 'function', path: 'quant/edge-functions/loop.js', description: 'loop' }
+      ]));
+      fs.writeFileSync(path.join(root, 'quant', 'edge-rules.json'), JSON.stringify({
+        version: 1, namespace: 'test',
+        rules: [{ id: 'loop', name: 'loop', type: 'function', urls: ['/loop'], weight: 0, function_uuid: uuid }]
+      }));
+      return { root, uuid };
+    }
+
+    function serveUrl(child) {
+      return new Promise((resolve, reject) => {
+        let out = '';
+        child.stdout.on('data', (chunk) => {
+          out += chunk;
+          const match = /running at (http:\/\/\S+)/.exec(out);
+          if (match) resolve(match[1]);
+        });
+        child.on('exit', () => reject(new Error(`quant serve stopped before it started: ${out}`)));
+      });
+    }
+
+    it('stops quant serve and the --run group when a function blocks the event loop', async function () {
+      if (process.platform === 'win32') this.skip();
+      const { root, uuid } = loopProject('await null; while (true) {}');
+      const pidFile = path.join(tmp, 'pid');
+      const cli = path.join(HERE, '..', '..', '..', 'cli.js');
+      const run = nodeCommand(tmp, pidScript(pidFile, true));
+      const serveProcess = spawn(process.execPath, [cli, 'serve', '--port', '0', '--memory', '--run', run], {
+        cwd: root, stdio: ['ignore', 'pipe', 'pipe'], env: { ...process.env, QUANT_SERVE_STALL_MS: '300' }
+      });
+      let stderr = '';
+      serveProcess.stderr.on('data', (chunk) => { stderr += chunk; });
+      const exited = new Promise((resolve) => serveProcess.on('exit', (code, signal) => resolve({ code, signal })));
+      const url = await serveUrl(serveProcess);
+      const pid = await waitForPid(pidFile);
+      // When the watchdog fails, the guard ends both processes so that the test fails and does not hang.
+      const guard = setTimeout(() => {
+        serveProcess.kill('SIGKILL');
+        try { process.kill(pid, 'SIGKILL'); } catch (_err) { /* already gone */ }
+      }, 8000);
+      fetch(`${url}/loop`).catch(() => {});
+      const result = await exited;
+      clearTimeout(guard);
+      expect(result.signal).to.equal('SIGKILL');
+      expect(stderr).to.include(`A function (${uuid}) blocked quant serve for more than 0.3 s. quant serve stops.`);
+      expect(stderr).to.include('Make the function return within 15 s.');
+      expect(await gone(pid)).to.equal(true);
+    });
   });
 
   describe('runServe', () => {

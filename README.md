@@ -362,6 +362,7 @@ Flags:
 
 - `quant serve` runs functions in `node:vm`. `node:vm` is not a security boundary. Run only your own code.
 - A library from your project can be a different version from the one on the edge.
+- A function that blocks the event loop (an endless loop after an await) stops `quant serve` after 20 s.
 - The `/_quant_serve/` routes answer only on loopback. They do not exist on the edge.
 - `quant serve` does not serve `quant.json`, the `quant/` folder, `node_modules`, or files and folders whose names start with `.`.
 

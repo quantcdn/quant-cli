@@ -405,6 +405,8 @@ function defaultLog(line) {
   process.stderr.write(`${line}\n`);
 }
 
+const NO_WATCH = Object.freeze({ enter() {}, leave() {} });
+
 /**
  * Create a function executor.
  * @param {Object} options
@@ -416,11 +418,12 @@ function defaultLog(line) {
  * @param {Object} [options.geo] Geolocation fields that replace the stub values.
  * @param {string} [options.clientIp] The client address that replaces the socket address.
  * @param {Function} [options.log] Writes one line to the terminal.
+ * @param {{ enter: Function, leave: Function }} [options.watch] Told when a run starts and ends (the watchdog).
  * @returns {{ run: (fn: { uuid: string, path: string }, ctx: Object) => Promise<Response> }}
  *   ctx: { mode ('function' | 'auth' | 'filter'), url, method, headers, body,
  *   clientAddress, baseHeaders (function mode), response (filter mode) }.
  */
-export function createExecutor({ kvStore, org, project, root = process.cwd(), timeoutMs = DEFAULT_TIMEOUT_MS, geo, clientIp, log = defaultLog }) {
+export function createExecutor({ kvStore, org, project, root = process.cwd(), timeoutMs = DEFAULT_TIMEOUT_MS, geo, clientIp, log = defaultLog, watch = NO_WATCH }) {
   let libraries = null;
   const state = {
     kvStore, org, project, timeoutMs, geo, clientIp, log,
@@ -434,11 +437,14 @@ export function createExecutor({ kvStore, org, project, root = process.cwd(), ti
     async run(fn, ctx = {}) {
       const mode = ctx.mode || 'function';
       if (mode === 'filter' && !(ctx.response && ctx.response.body)) return ctx.response;
+      watch.enter(fn.uuid);
       try {
         return await invoke(state, fn, ctx, mode);
       } catch (err) {
         log(failureLine(fn, err));
         return errorResponse();
+      } finally {
+        watch.leave();
       }
     }
   };

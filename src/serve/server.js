@@ -14,9 +14,10 @@ import { pipeline } from 'node:stream/promises';
 import { storeId } from '../helper/quant-meta.js';
 import { controlRoutes, isControlPath } from './control.js';
 import { loadProjectLibraries } from './edge-libraries.js';
-import { createExecutor, authContinueHeaders, readCappedBody } from './functions.js';
+import { createExecutor, authContinueHeaders, readCappedBody, DEFAULT_TIMEOUT_MS } from './functions.js';
 import { loadProject, watchProject } from './project.js';
 import { matchRules, matchFilter } from './rules.js';
+import { startWatchdog } from './watchdog.js';
 import { buildIndex, containsProject, lookup, serveStatic, notFound, NOT_SERVED } from './static.js';
 
 const SERVER_HEADER = 'QuantCDN (quant serve)';
@@ -428,7 +429,8 @@ function createState(options) {
   state.project = loadProject(projectFiles(state));
   state.executor = createExecutor({
     kvStore: options.kvStore, org: state.org, project: state.projectName, root,
-    timeoutMs: options.timeoutMs, geo: options.geo, clientIp: options.clientIp, log: state.log
+    timeoutMs: options.timeoutMs, geo: options.geo, clientIp: options.clientIp, log: state.log,
+    watch: { enter: (uuid) => state.watchdog && state.watchdog.enter(uuid), leave: () => state.watchdog && state.watchdog.leave() }
   });
   state.control = controlRoutes({
     info: () => ({ version: VERSION, org: state.org, project: state.projectName, stores: storeList(state).map((s) => s.id) })
@@ -470,7 +472,8 @@ function closer(state, server, cleanups) {
  * @param {Object} options The parsed flags plus root and kvStore:
  *   root, dir, port, host, functions, rules, meta, fixtures, org, project,
  *   domain, proxy, watch, geo, clientIp, timeoutMs, kvStore, log, onSourceChange.
- * @returns {Promise<{ url: string, close: () => Promise<void>, summary: Object }>}
+ * @returns {Promise<{ url: string, close: () => Promise<void>, setRunPid: (pid: number) => void, summary: Object }>}
+ *   setRunPid: the --run process group that the watchdog ends when a function blocks the server.
  *   summary: { stores, rules, libraries, warnings } for the start-up output.
  */
 export async function startServer(options) {
@@ -482,10 +485,12 @@ export async function startServer(options) {
   server.on('upgrade', (req, socket, head) => handleUpgrade(state, req, socket, head));
   const host = options.host || '127.0.0.1';
   const address = await listen(server, options.port ?? 8787, host);
-  const cleanups = [installProcessHandlers(state.log), startWatch(state)];
+  state.watchdog = startWatchdog({ budgetMs: options.timeoutMs ?? DEFAULT_TIMEOUT_MS });
+  const cleanups = [installProcessHandlers(state.log), startWatch(state), () => state.watchdog.stop()];
   return {
     url: serverUrl(host, address.port),
     close: closer(state, server, cleanups),
+    setRunPid: (pid) => state.watchdog.setRunPid(pid),
     summary: {
       stores: storeList(state),
       rules: state.project.rules.map((rule) => ({ id: rule.id, type: rule.type, urls: rule.url })),
