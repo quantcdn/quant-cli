@@ -417,6 +417,34 @@ describe('serve server', () => {
       expect(warning).to.include('node_modules');
     });
 
+    it('serves the top-level .well-known folder and no other dotfile', async () => {
+      const root = tempProject({ files: {
+        '.well-known/security.txt': 'Contact: mailto:security@example.com',
+        '.well-known/.secret': 'secret',
+        '.env': 'secret',
+        'sub/.git/config': 'secret'
+      } });
+      const server = await start({ root });
+      const ok = await fetch(`${server.url}/.well-known/security.txt`);
+      expect(ok.status).to.equal(200);
+      expect(await ok.text()).to.include('Contact:');
+      for (const name of ['.well-known/.secret', '.env', 'sub/.git/config']) {
+        const res = await fetch(`${server.url}/${name}`);
+        expect(res.status, name).to.equal(404);
+        expect(await res.text()).to.not.include('secret');
+      }
+    });
+
+    it('serves .well-known when the site is the project root', async () => {
+      const root = fs.mkdtempSync(path.join(tmp, 'root-'));
+      fs.mkdirSync(path.join(root, '.well-known'));
+      fs.writeFileSync(path.join(root, '.well-known', 'x'), 'well known');
+      fs.writeFileSync(path.join(root, '.env'), 'secret');
+      const server = await start({ root, dir: '.' });
+      expect((await fetch(`${server.url}/.well-known/x`)).status).to.equal(200);
+      expect((await fetch(`${server.url}/.env`)).status).to.equal(404);
+    });
+
     it('warns when the site directory contains the project root', async () => {
       const parent = fs.mkdtempSync(path.join(tmp, 'parent-'));
       const root = path.join(parent, 'site');

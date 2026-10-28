@@ -365,7 +365,7 @@ Flags:
 - A function that blocks the event loop (an endless loop after an await) stops `quant serve` after 20 s.
 - When `--host` is a loopback address (the default), `quant serve` answers only the Host names `localhost`, `127.0.0.1` and `[::1]` (any port) and the `--domain` value. Other Host names get 421.
 - The `/_quant_serve/` routes answer only on loopback, and only a request with the header `x-quant-serve: 1`. They do not exist on the edge.
-- `quant serve` does not serve `quant.json`, the `quant/` folder, `node_modules`, or files and folders whose names start with `.`.
+- `quant serve` does not serve `quant.json`, the `quant/` folder, `node_modules`, or files and folders whose names start with `.`. It serves the `.well-known/` folder at the top of the site (for example `security.txt`), but not a dotfile inside it.
 
 ## Upgrading from 6.x to 7.0.0
 

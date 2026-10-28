@@ -17,22 +17,26 @@ const BUILT_IN_404 = '<!doctype html><html lang="en"><head><meta charset="utf-8"
   + '<body><h1>404</h1><p>This page was not found.</p></body></html>';
 const RANGE_PATTERN = /^bytes=(\d*)-(\d*)$/;
 
-export const NOT_SERVED = 'quant.json, the quant/ folder, node_modules, and files and folders whose names start with "."';
+export const NOT_SERVED = 'quant.json, the quant/ folder, node_modules, and files and folders whose names start with "." '
+  + '(except the .well-known folder at the top of the site)';
+const WELL_KNOWN = '.well-known';
 
 // Files that are never served: dotfiles and dot-folders (.env, .git, .quant),
-// node_modules, quant.json, and the quant/ folder of the project.
-function excluded(entry, full, projectQuant) {
+// node_modules, quant.json, and the quant/ folder of the project. The
+// .well-known folder at the top of the site is served (security.txt, ACME).
+function excluded(entry, full, walkState) {
   const name = entry.name.toLowerCase();
+  if (entry.isDirectory() && name === WELL_KNOWN && path.dirname(full) === walkState.dir) return false;
   if (name.startsWith('.') || name === 'node_modules') return true;
   if (entry.isFile()) return name === 'quant.json';
-  return full === projectQuant;
+  return full === walkState.projectQuant;
 }
 
 function walk(walkState, current) {
-  const { dir, index, projectQuant } = walkState;
+  const { dir, index } = walkState;
   for (const entry of fs.readdirSync(current, { withFileTypes: true })) {
     const full = path.join(current, entry.name);
-    if (excluded(entry, full, projectQuant)) continue;
+    if (excluded(entry, full, walkState)) continue;
     if (entry.isDirectory()) {
       walk(walkState, full);
     } else if (entry.isFile()) {
@@ -50,7 +54,7 @@ function walk(walkState, current) {
  */
 export function buildIndex(dir, root = dir) {
   const index = new Map();
-  walk({ dir, index, projectQuant: path.join(path.resolve(root), 'quant') }, dir);
+  walk({ dir: path.resolve(dir), index, projectQuant: path.join(path.resolve(root), 'quant') }, path.resolve(dir));
   return index;
 }
 
