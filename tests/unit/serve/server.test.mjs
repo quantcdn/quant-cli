@@ -259,6 +259,16 @@ describe('serve server', () => {
       }
     });
 
+    it('gives a function the request URL as the client sent it', async () => {
+      const root = tempProject({
+        functions: [{ id: 'echo', uuid: ORBIT_FN, body: 'return Response.json({ request: new URL(event.request.url).pathname + new URL(event.request.url).search, query: event.url.search });' }],
+        rules: [rule('echo', 'function', ['/admin/*'], ORBIT_FN)]
+      });
+      const server = await start({ root });
+      const res = await rawGet(server.url, '/%61dmin//x?q=a%20b');
+      expect(JSON.parse(res.body)).to.deep.equal({ request: '/%61dmin//x?q=a%20b', query: '?q=a%20b' });
+    });
+
     it('keeps the query string as sent for a query-pattern rule', async () => {
       const root = tempProject({
         functions: [{ id: 'q', uuid: ORBIT_FN, body: 'return new Response(\'query rule\');' }],
@@ -474,6 +484,14 @@ describe('serve server', () => {
         length: body.length,
         sha256: crypto.createHash('sha256').update(body).digest('hex')
       });
+    });
+
+    it('sends the request path to the dev server as the client sent it', async () => {
+      upstream = http.createServer((req, res) => res.end(req.url));
+      const port = await listen(upstream);
+      const server = await start({ proxy: `http://127.0.0.1:${port}` });
+      const res = await rawGet(server.url, '/src//m%61in.ts?v=1');
+      expect(res.body).to.equal('/src//m%61in.ts?v=1');
     });
 
     it('returns 502 with the message when the dev server does not answer', async () => {

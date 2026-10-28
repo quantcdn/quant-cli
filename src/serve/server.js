@@ -117,9 +117,10 @@ function decodeUnreserved(match, hex) {
 }
 
 /**
- * The one request path that rule matching, the static lookup and the proxy
- * use: percent-encoded unreserved characters are decoded and repeated "/"
- * become one. Null for an encoded "/" or "\" (the request gets 400).
+ * The one request path that rule matching, filter matching and the static
+ * lookup use: percent-encoded unreserved characters are decoded and repeated
+ * "/" become one. Null for an encoded "/" or "\" (the request gets 400).
+ * Functions and the proxy get the path as the client sent it.
  */
 export function canonicalPath(pathname) {
   if (ENCODED_SEPARATOR.test(pathname)) return null;
@@ -129,20 +130,21 @@ export function canonicalPath(pathname) {
 // The query string stays as it was sent, for query-pattern rules.
 function requestPath(rawUrl) {
   const url = rawUrl.startsWith('/') ? new URL(`http://localhost${rawUrl}`) : new URL(rawUrl);
-  return { pathname: canonicalPath(url.pathname), search: url.search };
+  return { pathname: canonicalPath(url.pathname), sentPath: url.pathname, search: url.search };
 }
 
 function requestContext(state, req) {
   const host = state.options.domain || req.headers.host || '';
-  const { pathname, search } = requestPath(req.url);
+  const { pathname, sentPath, search } = requestPath(req.url);
   return {
     badPath: pathname === null,
     req,
     host,
     method: req.method,
     pathname,
+    sentPath,
     search,
-    publicUrl: `http://${host || 'localhost'}${pathname}${search}`,
+    publicUrl: `http://${host || 'localhost'}${sentPath}${search}`,
     remoteAddress: req.socket.remoteAddress,
     bodyPending: null,
     bodyStreamed: false,
@@ -237,7 +239,7 @@ function proxyRequestHeaders(req) {
 
 function proxyTarget(base, ctx) {
   const target = new URL(base);
-  target.pathname = ctx.pathname;
+  target.pathname = ctx.sentPath;
   target.search = ctx.search;
   return target;
 }
