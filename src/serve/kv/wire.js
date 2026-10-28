@@ -10,7 +10,7 @@ import { storeId } from '../../helper/quant-meta.js';
 import { seedStore } from '../seed.js';
 import path from 'node:path';
 import {
-  statePaths, ensureQuantDir, fileStorage, isSeeded, markSeeded, readBackendKeys, writeBackendKeys, resetState
+  statePaths, ensureQuantDir, fileStorage, readBackendKeys, replaceState, writeBackendKeys, resetState
 } from './state.js';
 
 // An index definition in one shape, for a compare with the backend state.
@@ -57,15 +57,38 @@ async function declareStore(ctx, definition) {
   return id;
 }
 
-// The seed marker of a store: in the state document, or in memory.
-function markerOf(ctx, id) {
-  if (!ctx.paths) {
-    return { get seeded() { return ctx.seededInMemory.has(id); }, mark: async () => { ctx.seededInMemory.add(id); } };
-  }
-  return { get seeded() { return isSeeded(ctx.paths, id); }, mark: () => markSeeded(ctx.paths, id) };
+// The seed marker of a store, in a map of store id to seed time.
+function markerOf(seeded, id) {
+  return { get seeded() { return Boolean(seeded[id]); }, mark: async () => { seeded[id] = new Date().toISOString(); } };
 }
 
-async function seedAll(ctx, { fixtures, userName, seedKey, now }) {
+// On file storage, each write of the backend copies its whole state, so a
+// large seed runs in a backend in memory. It starts from the state file
+// under the lock, and its state (with the seed markers) is written once,
+// also when the seed fails part way (its keys are revealed already).
+async function seedOnFile(ctx, seedOptions) {
+  let failure = null;
+  let result;
+  await replaceState(ctx.paths, async (fresh) => {
+    const memory = createLocalKv({ ...backendOptions(null, undefined, ctx.options), isAllowed: (id) => ctx.allowed.has(id), warn: ctx.warn });
+    memory.backend.restore(fresh ?? ctx.backend.snapshot());
+    const seeded = { ...fresh?.seeded };
+    try {
+      result = await seedStores({ ...ctx, kvStore: memory.kvStore, seeded }, seedOptions);
+    } catch (err) {
+      failure = err;
+    }
+    return { ...memory.backend.snapshot(), seeded };
+  });
+  if (failure) throw failure;
+  return result;
+}
+
+function seedAll(ctx, seedOptions) {
+  return ctx.paths ? seedOnFile(ctx, seedOptions) : seedStores({ ...ctx, seeded: ctx.seededInMemory }, seedOptions);
+}
+
+async function seedStores(ctx, { fixtures, userName, seedKey, now }) {
   const revealed = [];
   let count = 0;
   const withStore = (id, keys) => keys.map((key) => ({ ...key, storeId: id }));
@@ -78,7 +101,7 @@ async function seedAll(ctx, { fixtures, userName, seedKey, now }) {
         seedKey,
         keysPath: ctx.paths ? ctx.paths.revealKeys(id) : null,
         now,
-        marker: markerOf(ctx, id)
+        marker: markerOf(ctx.seeded, id)
       });
       revealed.push(...withStore(id, result.revealed));
       count += result.fixtures;
@@ -98,10 +121,10 @@ async function prepareFiles(root, reset) {
   return paths;
 }
 
-function backendOptions(paths, options) {
+function backendOptions(paths, storage, options) {
   const { lagMs = 0, indexState: state, org, clock, budgetRows } = options;
   return {
-    storage: paths ? fileStorage(paths) : undefined,
+    storage,
     keys: paths ? readBackendKeys(paths) : undefined,
     indexes: { initialState: indexState(state), listLagMs: lagMs },
     org,
@@ -129,9 +152,13 @@ export async function openLocalKv(options) {
   const { root, org, project, stores = [], memory = false, reset = false, warn } = options;
   const paths = memory ? null : await prepareFiles(root, reset);
   const allowed = new Map();
-  const { kvStore, backend } = createLocalKv({ ...backendOptions(paths, options), isAllowed: (id) => allowed.has(id), warn });
+  const storage = paths ? fileStorage(paths) : undefined;
+  const { kvStore, backend } = createLocalKv({ ...backendOptions(paths, storage, options), isAllowed: (id) => allowed.has(id), warn });
   if (paths && readBackendKeys(paths) === undefined) writeBackendKeys(paths, backend.snapshot().keys);
-  const ctx = { org, project, backend, kvStore, paths, allowed, indexState: options.indexState === undefined ? null : indexState(options.indexState), warnings: [], seededInMemory: new Set() };
+  const ctx = {
+    org, project, backend, kvStore, paths, allowed, options, warn,
+    indexState: options.indexState === undefined ? null : indexState(options.indexState), warnings: [], seededInMemory: {}
+  };
   for (const definition of stores) await declareStore(ctx, definition);
   return {
     kvStore,

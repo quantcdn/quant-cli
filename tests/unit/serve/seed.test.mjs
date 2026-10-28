@@ -221,4 +221,31 @@ describe('quant serve seeding', () => {
     const third = await (await openLocalKv({ ...opts, reset: true })).seed(seedOpts);
     expect(third.revealed).to.have.length(1);
   });
+  it('seeds 5,000 fixture entries on file storage in under 5 s, with one state write', async function () {
+    this.timeout(20000);
+    const fixtures = path.join(tmp, 'kv-fixtures');
+    fs.mkdirSync(fixtures, { recursive: true });
+    const entries = Array.from({ length: 5000 }, (_v, n) => ({ key: `item:${n}`, value: { n } }));
+    fs.writeFileSync(path.join(fixtures, 'orbit.json'), JSON.stringify(entries));
+    const kv = await openLocalKv({ root: tmp, org: 'acme', project: 'site', stores: [definition()] });
+    const stateFile = path.join(tmp, '.quant', 'kv', 'state.json');
+    const renames = [];
+    const rename = fs.renameSync;
+    fs.renameSync = (from, to) => { renames.push(to); return rename(from, to); };
+    const started = Date.now();
+    let result;
+    try {
+      result = await kv.seed({ fixtures, userName: 'Ada' });
+    } finally {
+      fs.renameSync = rename;
+    }
+    const elapsed = Date.now() - started;
+    expect(result.fixtures).to.equal(5000);
+    expect(elapsed).to.be.below(5000);
+    expect(renames.filter((file) => file === stateFile)).to.have.length(1);
+    expect(await kv.kvStore.get(ID, 'item:0')).to.deep.equal({ n: 0 });
+    const reopened = await openLocalKv({ root: tmp, org: 'acme', project: 'site', stores: [definition()] });
+    expect(await reopened.kvStore.get(ID, 'item:4999')).to.deep.equal({ n: 4999 });
+    expect((await reopened.seed({ fixtures, userName: 'Ada' })).fixtures).to.equal(0);
+  });
 });

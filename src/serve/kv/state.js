@@ -176,18 +176,15 @@ export function fileStorage(paths) {
   };
 }
 
-/** Whether the state document records a seed of the store. */
-export function isSeeded(paths, storeId) {
-  const doc = readState(paths.file);
-  return Boolean(doc?.seeded?.[storeId]);
-}
-
-/** Record the seed of the store in the state document. */
-export function markSeeded(paths, storeId, at = new Date()) {
+/**
+ * Run fn(fresh) while this process holds the lock, and write the document
+ * that fn returns as the state file: one lock and one write for many changes.
+ * @param {ReturnType<typeof statePaths>} paths
+ * @param {(fresh: Object|null) => Promise<Object>} fn
+ */
+export function replaceState(paths, fn) {
   return withLock(paths.lock, async () => {
-    const doc = readState(paths.file) ?? { v: 1, stores: [] };
-    doc.seeded = { ...doc.seeded, [storeId]: at.toISOString() };
-    writeAtomic(paths.file, JSON.stringify(doc));
+    writeAtomic(paths.file, JSON.stringify(await fn(readState(paths.file))));
   });
 }
 
