@@ -3,7 +3,8 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { spawn } from 'node:child_process';
-import { statePaths, ensureQuantDir, withLock, fileStorage, resetState, removeLockIf } from '../../../src/serve/kv/state.js';
+import { spawnSync } from 'node:child_process';
+import { statePaths, ensureQuantDir, withLock, fileStorage, resetState, removeLockIf, writeAtomic, renameWithRetry } from '../../../src/serve/kv/state.js';
 import { openLocalKv } from '../../../src/serve/kv/wire.js';
 
 const STORES = [{
@@ -136,11 +137,37 @@ describe('quant serve KV state', () => {
       expect(await withLock(lock, async () => 'ran')).to.equal('ran');
     });
 
+    it('takes over at once a lock whose process has ended on this host', async () => {
+      ensureQuantDir(tmp);
+      const lock = statePaths(tmp).lock;
+      const ended = spawnSync(process.execPath, ['-e', 'process.stdout.write(String(process.pid))'], { encoding: 'utf8' });
+      fs.writeFileSync(lock, `${ended.stdout}@${os.hostname()}:0123456789abcdef`);
+      expect(await withLock(lock, async () => 'ran', { timeoutMs: 200 })).to.equal('ran');
+    });
+
+    it('waits for a lock of an ended process on another host', async () => {
+      ensureQuantDir(tmp);
+      const lock = statePaths(tmp).lock;
+      const ended = spawnSync(process.execPath, ['-e', 'process.stdout.write(String(process.pid))'], { encoding: 'utf8' });
+      fs.writeFileSync(lock, `${ended.stdout}@other-host.example:0123456789abcdef`);
+      const err = await codeOf(withLock(lock, async () => {}, { timeoutMs: 100 }));
+      expect(err.message).to.include(lock);
+    });
+
+    it('waits for a lock of a running process on this host', async () => {
+      ensureQuantDir(tmp);
+      const lock = statePaths(tmp).lock;
+      fs.writeFileSync(lock, `${process.pid}@${os.hostname()}:0123456789abcdef`);
+      const err = await codeOf(withLock(lock, async () => {}, { timeoutMs: 100 }));
+      expect(err.message).to.include(lock);
+    });
+
     it('writes an owner token of pid and random bytes into the lock', async () => {
       ensureQuantDir(tmp);
       const lock = statePaths(tmp).lock;
       const token = await withLock(lock, async () => fs.readFileSync(lock, 'utf8'));
-      expect(token).to.match(new RegExp(`^${process.pid}:[0-9a-f]{16}$`));
+      expect(token).to.equal(`${process.pid}@${os.hostname()}:${token.split(':').pop()}`);
+      expect(token.split(':').pop()).to.match(/^[0-9a-f]{16}$/);
     });
 
     it('does not remove a lock that a later holder took over', async () => {
@@ -171,7 +198,77 @@ describe('quant serve KV state', () => {
     });
   });
 
+  describe('atomic write', () => {
+    it('flushes the temporary file to disk before the rename', () => {
+      ensureQuantDir(tmp);
+      const calls = [];
+      const { fsyncSync, renameSync } = fs;
+      fs.fsyncSync = (fd) => { calls.push('fsync'); return fsyncSync(fd); };
+      fs.renameSync = (from, to) => { calls.push('rename'); return renameSync(from, to); };
+      try {
+        writeAtomic(statePaths(tmp).file, '{}');
+      } finally {
+        Object.assign(fs, { fsyncSync, renameSync });
+      }
+      expect(calls).to.deep.equal(['fsync', 'rename']);
+      expect(fs.readFileSync(statePaths(tmp).file, 'utf8')).to.equal('{}');
+    });
+
+    it('retries a rename that Windows refuses for a short time', () => {
+      const { renameSync } = fs;
+      let tries = 0;
+      fs.renameSync = () => {
+        tries += 1;
+        if (tries < 3) throw Object.assign(new Error('busy'), { code: tries === 1 ? 'EPERM' : 'EBUSY' });
+      };
+      try {
+        renameWithRetry('a', 'b', 'win32');
+      } finally {
+        fs.renameSync = renameSync;
+      }
+      expect(tries).to.equal(3);
+    });
+
+    it('does not retry a rename on other systems', () => {
+      const { renameSync } = fs;
+      let tries = 0;
+      fs.renameSync = () => {
+        tries += 1;
+        throw Object.assign(new Error('denied'), { code: 'EPERM' });
+      };
+      try {
+        expect(() => renameWithRetry('a', 'b', 'linux')).to.throw('denied');
+      } finally {
+        fs.renameSync = renameSync;
+      }
+      expect(tries).to.equal(1);
+    });
+  });
+
   describe('storage hook', () => {
+    it('sees a write that lands while load reads the file', async () => {
+      const paths = statePaths(tmp);
+      ensureQuantDir(tmp);
+      await fileStorage(paths).transaction(async () => ({ v: 1, stores: [], offsetMs: 1 }));
+      const reader = fileStorage(paths);
+      const { readFileSync } = fs;
+      fs.readFileSync = (file, ...rest) => {
+        const text = readFileSync(file, ...rest);
+        if (file === paths.file) {
+          fs.readFileSync = readFileSync;
+          writeAtomic(paths.file, JSON.stringify({ v: 1, stores: [], offsetMs: 2 }));
+        }
+        return text;
+      };
+      try {
+        expect(reader.load().offsetMs).to.equal(1);
+      } finally {
+        fs.readFileSync = readFileSync;
+      }
+      expect(reader.changed()).to.equal(true);
+    });
+
+
     it('loads null when there is no state file', () => {
       ensureQuantDir(tmp);
       expect(fileStorage(statePaths(tmp)).load()).to.equal(null);

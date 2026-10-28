@@ -11,12 +11,16 @@
 
 import crypto from 'node:crypto';
 import fs from 'node:fs';
+import os from 'node:os';
 import path from 'node:path';
 
 export const LOCK_RETRY_MS = 25;
 export const LOCK_TIMEOUT_MS = 5000;
 export const LOCK_STALE_MS = 30000;
 const FILE_MODE = 0o600;
+const RENAME_RETRY_CODES = new Set(['EPERM', 'EBUSY', 'EACCES']);
+const RENAME_TRIES = 5;
+const RENAME_RETRY_MS = 20;
 
 /**
  * The state files of a project.
@@ -68,9 +72,30 @@ export function removeLockIf(lockPath, token) {
   return true;
 }
 
+// The owner token: <pid>@<host>:<random hex>.
+function ownerToken() {
+  return `${process.pid}@${os.hostname()}:${crypto.randomBytes(8).toString('hex')}`;
+}
+
+// True when the token names a process on this host that has ended.
+function ownerEnded(token) {
+  const match = /^(\d+)@(.*):[0-9a-f]+$/.exec(token);
+  if (!match || match[2] !== os.hostname()) return false;
+  try {
+    process.kill(Number(match[1]), 0);
+    return false;
+  } catch (err) {
+    return err.code === 'ESRCH';
+  }
+}
+
+function isStale(held, staleMs) {
+  return Boolean(held) && (held.age > staleMs || ownerEnded(held.token));
+}
+
 // The lock file descriptor, or null when another holder has the lock.
-// A lock older than staleMs belongs to a process that stopped: remove it,
-// if it still holds the token that was judged stale.
+// A lock older than staleMs, or of a process on this host that has ended,
+// is removed, if it still holds the token that was judged stale.
 function tryLock(lockPath, staleMs, token) {
   try {
     const fd = fs.openSync(lockPath, 'wx', FILE_MODE);
@@ -79,7 +104,7 @@ function tryLock(lockPath, staleMs, token) {
   } catch (err) {
     if (err.code !== 'EEXIST') throw err;
     const held = readLock(lockPath);
-    if (held && held.age > staleMs) removeLockIf(lockPath, held.token);
+    if (isStale(held, staleMs)) removeLockIf(lockPath, held.token);
     return null;
   }
 }
@@ -98,12 +123,13 @@ async function acquire(lockPath, { retryMs, timeoutMs, staleMs }, token) {
 
 /**
  * Run fn while this process holds the lock file. The lock is created with
- * `wx` and holds an owner token (pid and random bytes). A held lock is
- * retried every 25 ms for 5 s, and a lock older than 30 s is taken over.
+ * `wx` and holds an owner token (pid, host and random bytes). A held lock is
+ * retried every 25 ms for 5 s. A lock older than 30 s, or of a process on
+ * this host that has ended, is taken over.
  * The release removes the lock only when it still holds this token.
  */
 export async function withLock(lockPath, fn, { retryMs = LOCK_RETRY_MS, timeoutMs = LOCK_TIMEOUT_MS, staleMs = LOCK_STALE_MS } = {}) {
-  const token = `${process.pid}:${crypto.randomBytes(8).toString('hex')}`;
+  const token = ownerToken();
   const fd = await acquire(lockPath, { retryMs, timeoutMs, staleMs }, token);
   try {
     return await fn();
@@ -113,11 +139,37 @@ export async function withLock(lockPath, fn, { retryMs = LOCK_RETRY_MS, timeoutM
   }
 }
 
-/** Write a file with mode 0600 through a temporary file and a rename. */
+function pause(ms) {
+  Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, ms);
+}
+
+/**
+ * Rename a file. On Windows a rename can fail for a short time while another
+ * process (for example a virus scanner) has the file open: retry it.
+ */
+export function renameWithRetry(from, to, platform = process.platform) {
+  for (let attempt = 1; ; attempt++) {
+    try {
+      fs.renameSync(from, to);
+      return;
+    } catch (err) {
+      if (platform !== 'win32' || !RENAME_RETRY_CODES.has(err.code) || attempt >= RENAME_TRIES) throw err;
+      pause(RENAME_RETRY_MS * attempt);
+    }
+  }
+}
+
+/** Write a file with mode 0600 through a temporary file (flushed to disk) and a rename. */
 export function writeAtomic(file, text) {
   const temp = `${file}.${process.pid}.tmp`;
-  fs.writeFileSync(temp, text, { mode: FILE_MODE });
-  fs.renameSync(temp, file);
+  const fd = fs.openSync(temp, 'w', FILE_MODE);
+  try {
+    fs.writeFileSync(fd, text);
+    fs.fsyncSync(fd);
+  } finally {
+    fs.closeSync(fd);
+  }
+  renameWithRetry(temp, file);
 }
 
 // mtime, inode and size. Every write is a rename, so the inode changes
@@ -159,9 +211,12 @@ export function readState(file) {
  */
 export function fileStorage(paths) {
   let seen = stamp(paths.file);
+  // The stamp is taken before the read: a write that lands during the read
+  // makes changed() true, so the next read loads it.
   const load = () => {
+    const before = stamp(paths.file);
     const doc = readState(paths.file);
-    seen = stamp(paths.file);
+    seen = before;
     return doc;
   };
   return {
