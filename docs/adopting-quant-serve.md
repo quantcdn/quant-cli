@@ -22,7 +22,7 @@ bundles function sources into the committed function bodies.
 1. Install the CLI as a dev dependency, with an exact version:
 
    ```sh
-   npm install --save-dev --save-exact @quantcdn/quant-cli@7.1.0
+   npm install --save-dev --save-exact @quantcdn/quant-cli@7.1.1
    ```
 
 2. Add the scripts. If your function bodies are built from sources (for example
