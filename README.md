@@ -269,7 +269,7 @@ Flags:
 - `--build` - Command to run once before the server starts.
 - `--watch` - Reload when files change. With `--build`, run the build again when files under `src/` or `public/` change.
 - `--run` - Long-running command, for example a dev server, to start beside the server. Quant serve stops it when it stops.
-- `--proxy` - Dev server URL. Requests that no rule ends go to this URL.
+- `--proxy` - Dev server URL. Requests that no rule ends go to this URL. WebSocket upgrades (for example, HMR) also go to this URL, after the auth rules of the path. Function rules do not run for an upgrade.
 - `--geo` - Geolocation fields for functions, as a JSON object.
 - `--client-ip` - Client address for functions.
 - `--reset` - Delete the local KV state and seed the stores again.

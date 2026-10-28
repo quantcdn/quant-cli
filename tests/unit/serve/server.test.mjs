@@ -552,6 +552,33 @@ describe('serve server', () => {
       expect(reply).to.include('echo:hello');
     });
 
+    it('runs the auth rules for a WebSocket upgrade', async () => {
+      upstream = http.createServer();
+      upstream.on('upgrade', (req, socket, head) => {
+        upgraded.push(socket);
+        socket.write('HTTP/1.1 101 Switching Protocols\r\nUpgrade: websocket\r\nConnection: Upgrade\r\n\r\n');
+        if (head.length > 0) socket.write(`echo:${head}`);
+        socket.on('data', (chunk) => socket.write(`echo:${chunk}`));
+      });
+      const port = await listen(upstream);
+      const root = tempProject({
+        functions: [{ id: 'gate', uuid: AUTH_FN, type: 'auth', body: `
+          const allowed = event.request.headers.get('x-pass') === 'yes';
+          return new Response(allowed ? null : 'denied', { status: allowed ? 201 : 401, headers: { 'x-why': 'gate' } });` }],
+        rules: [rule('gate', 'auth', ['/hmr'], AUTH_FN)]
+      });
+      const server = await start({ root, proxy: `http://127.0.0.1:${port}` });
+      const upgrade = (extra) => `GET /hmr HTTP/1.1\r\nHost: localhost\r\nUpgrade: websocket\r\nConnection: Upgrade\r\n${extra}\r\nhello`;
+      const denied = await rawRequest(server.url, upgrade(''));
+      expect(denied).to.match(/^HTTP\/1\.1 401 /);
+      expect(denied).to.include('x-why: gate');
+      expect(denied).to.include('denied');
+      expect(denied).to.not.include('101 Switching Protocols');
+      const allowed = await rawRequest(server.url, upgrade('x-pass: yes\r\n'));
+      expect(allowed).to.include('101 Switching Protocols');
+      expect(allowed).to.include('echo:hello');
+    });
+
     it('answers the control route locally and never proxies it', async () => {
       upstream = http.createServer((_req, res) => res.end('upstream'));
       const port = await listen(upstream);

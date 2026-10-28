@@ -450,14 +450,53 @@ function upgradeAllowed(state, req) {
   }
 }
 
-// WebSocket upgrades go to the dev server (for example, Vite HMR).
-function handleUpgrade(state, req, socket, head) {
+// The auth rules of the upgrade path run in order, as for a request. The
+// response of an auth that does not answer 201 ends the upgrade. Function
+// rules do not run for an upgrade. An upgrade has no body.
+async function upgradeAuth(state, req) {
+  const ctx = { ...requestContext(state, req), bodyStreamed: true };
+  for (const rule of matchRules(state.project.rules, matchContext(ctx))) {
+    if (rule.type !== 'auth') continue;
+    const response = await authStage(state, ctx, state.project.functions.get(rule.fnUuid));
+    if (response) return response;
+  }
+  return null;
+}
+
+async function refuseUpgrade(state, socket, response) {
+  const body = Buffer.from(await response.arrayBuffer());
+  const headers = finalHeaders(state, response.headers);
+  headers.set('connection', 'close');
+  headers.set('content-length', String(body.length));
+  const lines = [`HTTP/1.1 ${response.status} ${response.statusText || http.STATUS_CODES[response.status] || ''}`];
+  for (const [key, value] of headers) lines.push(`${key}: ${value}`);
+  socket.end(Buffer.concat([Buffer.from(`${lines.join('\r\n')}\r\n\r\n`), body]));
+}
+
+async function upgradeRefusal(state, req) {
+  try {
+    return await upgradeAuth(state, req);
+  } catch (err) {
+    state.log(`quant serve could not run the auth rules for the upgrade ${req.url}: ${errorMessage(err)}`);
+    return new Response(null, { status: 500 });
+  }
+}
+
+// WebSocket upgrades go to the dev server (for example, Vite HMR), after
+// the auth rules of the path.
+async function handleUpgrade(state, req, socket, head) {
   socket.on('error', () => socket.destroy());
   if (!upgradeAllowed(state, req)) {
     socket.destroy();
     return;
   }
   track(state, socket);
+  const refusal = await upgradeRefusal(state, req);
+  if (refusal) {
+    await refuseUpgrade(state, socket, refusal).catch(() => socket.destroy());
+    return;
+  }
+  if (socket.destroyed) return;
   const upstream = connectUpstream(new URL(state.options.proxy), () => {
     upstream.write(upgradeHead(req));
     if (head && head.length > 0) upstream.write(head);
