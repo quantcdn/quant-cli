@@ -21,12 +21,44 @@ function stallLimit(budgetMs) {
   return Number.isFinite(fromEnv) && fromEnv > 0 ? fromEnv : budgetMs + STALL_MARGIN_MS;
 }
 
+// The runs in flight, oldest first (a Map keeps insertion order). The shared
+// name is the oldest run that is still in flight, so the message names it
+// also when a newer run ends first.
+function runTracker(slots, name) {
+  const runs = new Map();
+  let next = 0;
+  const publish = () => {
+    const oldest = runs.values().next().value;
+    const bytes = oldest ? Buffer.from(oldest.uuid).subarray(0, NAME_BYTES) : Buffer.alloc(0);
+    name.set(bytes);
+    Atomics.store(slots, NAME_LENGTH, bytes.length);
+  };
+  return {
+    enter(uuid) {
+      next += 1;
+      runs.set(next, { uuid: String(uuid), startedAt: Date.now() });
+      publish();
+      return next;
+    },
+    leave(token) {
+      runs.delete(token);
+      publish();
+    },
+    running() {
+      const length = Atomics.load(slots, NAME_LENGTH);
+      return length > 0 ? Buffer.from(name.slice(0, length)).toString('utf8') : null;
+    }
+  };
+}
+
 /**
  * Start the watchdog.
  * @param {Object} options
  * @param {number} options.budgetMs The time budget of one function run.
  * @param {number} [options.stallMs] The stall limit (default: budget + 5 s).
- * @returns {{ enter: (uuid: string) => void, leave: () => void, setRunPid: (pid: number) => void, stop: () => void }}
+ * @returns {{ enter: (uuid: string) => number, leave: (token: number) => void, running: () => string|null,
+ *   setRunPid: (pid: number) => void, stop: () => void }}
+ *   enter returns the token that leave takes; running gives the uuid that the message names.
  */
 export function startWatchdog({ budgetMs, stallMs = stallLimit(budgetMs) }) {
   const shared = new SharedArrayBuffer(SHARED_BYTES);
@@ -38,18 +70,8 @@ export function startWatchdog({ budgetMs, stallMs = stallLimit(budgetMs) }) {
   worker.unref();
   const beat = setInterval(() => Atomics.add(slots, BEAT, 1), Math.min(POLL_MS, Math.max(10, Math.floor(stallMs / 4))));
   beat.unref();
-  let running = 0;
   return {
-    enter(uuid) {
-      running += 1;
-      const bytes = Buffer.from(String(uuid)).subarray(0, NAME_BYTES);
-      name.set(bytes);
-      Atomics.store(slots, NAME_LENGTH, bytes.length);
-    },
-    leave() {
-      running = Math.max(running - 1, 0);
-      if (running === 0) Atomics.store(slots, NAME_LENGTH, 0);
-    },
+    ...runTracker(slots, name),
     setRunPid(pid) {
       Atomics.store(slots, RUN_PID, pid || 0);
     },

@@ -483,7 +483,7 @@ function createState(options) {
   state.executor = createExecutor({
     kvStore: options.kvStore, org: state.org, project: state.projectName, root,
     timeoutMs: options.timeoutMs, geo: options.geo, clientIp: options.clientIp, log: state.log,
-    watch: { enter: (uuid) => state.watchdog && state.watchdog.enter(uuid), leave: () => state.watchdog && state.watchdog.leave() }
+    watch: { enter: (uuid) => state.watchdog && state.watchdog.enter(uuid), leave: (token) => state.watchdog && state.watchdog.leave(token) }
   });
   state.control = controlRoutes({
     info: () => ({ version: VERSION, org: state.org, project: state.projectName, stores: storeList(state).map((s) => s.id) })
