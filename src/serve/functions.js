@@ -239,15 +239,35 @@ function guardCallback(callback, report) {
   };
 }
 
-function guardedTimers(report) {
+// The timers of one run. They are cleared when the run ends (its response
+// is ready, or its time budget ends), so no callback runs after it.
+function runTimers(report) {
+  const handles = new Set();
+  const start = (create) => (callback, ...rest) => {
+    const handle = create(guardCallback(callback, report), ...rest);
+    handles.add(handle);
+    return handle;
+  };
+  const stop = (clear) => (handle) => {
+    handles.delete(handle);
+    clear(handle);
+  };
   return {
-    setTimeout: (callback, ...rest) => setTimeout(guardCallback(callback, report), ...rest),
-    setInterval: (callback, ...rest) => setInterval(guardCallback(callback, report), ...rest),
-    queueMicrotask: (callback) => queueMicrotask(guardCallback(callback, report))
+    globals: {
+      setTimeout: start(setTimeout),
+      setInterval: start(setInterval),
+      clearTimeout: stop(clearTimeout),
+      clearInterval: stop(clearInterval),
+      queueMicrotask: (callback) => queueMicrotask(guardCallback(callback, report))
+    },
+    clearAll() {
+      for (const handle of handles) clearTimeout(handle);
+      handles.clear();
+    }
   };
 }
 
-function hostGlobals(state, libraries, fn) {
+function hostGlobals(state, libraries, timers) {
   const globals = {};
   for (const name of [...WEB_GLOBALS, ...REALM_GLOBALS]) {
     if (name in globalThis) globals[name] = globalThis[name];
@@ -255,7 +275,7 @@ function hostGlobals(state, libraries, fn) {
   return {
     ...globals,
     ...libraries,
-    ...guardedTimers((err) => state.log(failureLine(fn, err))),
+    ...timers.globals,
     fetch: edgeFetch(state.log),
     kvStore: state.kvStore,
     KVStore: state.kvStore,
@@ -267,8 +287,8 @@ function hostGlobals(state, libraries, fn) {
   };
 }
 
-function createFunctionContext(state, libraries, event, fn) {
-  const context = vm.createContext({ ...hostGlobals(state, libraries, fn), event });
+function createFunctionContext(state, libraries, event, timers) {
+  const context = vm.createContext({ ...hostGlobals(state, libraries, timers), event });
   vm.runInContext('delete globalThis.SharedArrayBuffer; delete globalThis.Atomics; globalThis.window = globalThis;', context);
   return context;
 }
@@ -405,9 +425,14 @@ async function invoke(state, fn, ctx, mode) {
   const script = compile(state.cache, fn, mode);
   const { globals } = await state.libraries();
   const event = hydrateEvent(buildEventPayload(fn, ctx, mode, state));
-  const context = createFunctionContext(state, globals, event, fn);
-  const pending = runScript(script, context, state.timeoutMs);
-  return withTimeBudget(handler(pending, event, ctx), state.timeoutMs);
+  const timers = runTimers((err) => state.log(failureLine(fn, err)));
+  try {
+    const context = createFunctionContext(state, globals, event, timers);
+    const pending = runScript(script, context, state.timeoutMs);
+    return await withTimeBudget(handler(pending, event, ctx), state.timeoutMs);
+  } finally {
+    timers.clearAll();
+  }
 }
 
 function defaultLog(line) {

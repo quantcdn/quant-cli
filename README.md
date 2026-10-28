@@ -363,6 +363,7 @@ Flags:
 - `quant serve` runs functions in `node:vm`. `node:vm` is not a security boundary. Run only your own code.
 - A library from your project can be a different version from the one on the edge.
 - A function that blocks the event loop (an endless loop after an await) stops `quant serve` after 20 s.
+- The timers that a function starts (`setTimeout`, `setInterval`) are cleared when its response is ready or its time budget ends.
 - When `--host` is a loopback address (the default), `quant serve` answers only the Host names `localhost`, `127.0.0.1` and `[::1]` (any port) and the `--domain` value. Other Host names get 421.
 - The `/_quant_serve/` routes answer only on loopback, and only a request with the header `x-quant-serve: 1`. They do not exist on the edge.
 - `quant serve` does not serve `quant.json`, the `quant/` folder, `node_modules`, or files and folders whose names start with `.`. It serves the `.well-known/` folder at the top of the site (for example `security.txt`), but not a dotfile inside it.

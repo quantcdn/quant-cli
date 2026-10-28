@@ -187,6 +187,33 @@ describe('serve functions', () => {
     });
   });
 
+  describe('timers', () => {
+    const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+
+    it('clears the timers of a function when its response is ready', async () => {
+      const fn = writeFn("setInterval(() => quantLog('tick'), 10); setTimeout(() => quantLog('late'), 30); return new Response('ok');");
+      const res = await executor().run(fn, request());
+      expect(await res.text()).to.equal('ok');
+      await sleep(80);
+      expect(lines.filter((line) => line.includes('tick') || line.includes('late'))).to.deep.equal([]);
+    });
+
+    it('clears the timers of a function when its time budget ends', async () => {
+      const fn = writeFn("setInterval(() => quantLog('tick'), 10); await new Promise(() => {});");
+      const res = await executor({ timeoutMs: 50 }).run(fn, request());
+      expect(res.status).to.equal(500);
+      const ticks = lines.filter((line) => line.includes('tick')).length;
+      await sleep(60);
+      expect(lines.filter((line) => line.includes('tick')).length).to.equal(ticks);
+    });
+
+    it('keeps clearTimeout working inside a function', async () => {
+      const fn = writeFn("const t = setTimeout(() => quantLog('never'), 5); clearTimeout(t); await new Promise((r) => setTimeout(r, 20)); return new Response('ok');");
+      expect(await (await executor().run(fn, request())).text()).to.equal('ok');
+      expect(lines).to.deep.equal([]);
+    });
+  });
+
   describe('realm', () => {
     it('gives a library from the project the values a function makes', async () => {
       const fn = writeFn(`
@@ -234,12 +261,12 @@ describe('serve functions', () => {
         setInterval(function tick() { clearInterval(this); throw new Error('tick'); }, 5);
         setTimeout(async () => { throw new Error('async late'); }, 5);
         queueMicrotask(() => { throw new Error('micro'); });
+        await new Promise((resolve) => setTimeout(resolve, 30));
         return new Response('ok');
       `, 'timer-fn');
       const res = await exec.run(fn, request());
       expect(res.status).to.equal(200);
       expect(await res.text()).to.equal('ok');
-      await new Promise((resolve) => setTimeout(resolve, 30));
       for (const message of ['late', 'tick', 'async late', 'micro']) {
         expect(lines).to.include(`Edge function timer-fn failed: ${message}`);
       }
