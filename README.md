@@ -239,6 +239,8 @@ quant scan --diff-only
 `quant serve` runs a built site on your machine. It serves the static files,
 runs your edge functions and applies your edge rules. It needs no token.
 
+To replace a local copy of the edge in your project with `quant serve`, see [Adopting quant serve](docs/adopting-quant-serve.md).
+
 ```bash
 quant serve                                  # serve ./dist at http://127.0.0.1:8787
 quant serve public --port 9000
