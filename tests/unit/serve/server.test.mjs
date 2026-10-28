@@ -526,7 +526,10 @@ describe('serve server', () => {
     });
 
     it('sends the request path to the dev server as the client sent it', async () => {
-      upstream = http.createServer((req, res) => res.end(req.url));
+      upstream = http.createServer((req, res) => {
+        res.writeHead(200, { 'content-type': 'text/plain; charset=utf-8' });
+        res.end(req.url);
+      });
       const port = await listen(upstream);
       const server = await start({ proxy: `http://127.0.0.1:${port}` });
       const res = await rawGet(server.url, '/src//m%61in.ts?v=1');
