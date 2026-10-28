@@ -177,6 +177,17 @@ describe('serve functions', () => {
       expect(() => globals.awsSes.send).to.throw('awsSes is available on the Quant edge but not in quant serve');
     });
 
+    it('reports a project package that cannot be imported, and stubs it', async () => {
+      const root = fs.mkdtempSync(path.join(dir, 'broken-'));
+      fs.mkdirSync(path.join(root, 'node_modules', 'jose'), { recursive: true });
+      fs.writeFileSync(path.join(root, 'node_modules', 'jose', 'package.json'), JSON.stringify({ name: 'jose', type: 'module', exports: './index.js' }));
+      fs.writeFileSync(path.join(root, 'node_modules', 'jose', 'index.js'), "throw new Error('needs a newer node');");
+      const { globals, fromProject, errors } = await loadProjectLibraries(root);
+      expect(fromProject).to.deep.equal([]);
+      expect(errors).to.deep.equal(['The project package jose could not be imported (needs a newer node). Functions get the jose stub.']);
+      expect(() => globals.jose.SignJWT).to.throw('jose is available on the Quant edge but not in quant serve');
+    });
+
     it('gives the function the project export and the stub', async () => {
       const ok = writeFn('return new Response(String(jose.marker));');
       expect(await (await executor().run(ok, request())).text()).to.equal('true');

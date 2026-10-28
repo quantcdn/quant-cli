@@ -628,7 +628,7 @@ export async function startServer(options) {
   const state = createState(options);
   const site = siteIndex(state);
   state.index = site.index;
-  const { fromProject } = await loadProjectLibraries(state.root);
+  const { fromProject, errors: libraryErrors } = await loadProjectLibraries(state.root);
   const server = http.createServer((req, res) => handleRequest(state, req, res));
   server.on('upgrade', (req, socket, head) => handleUpgrade(state, req, socket, head));
   const host = options.host || '127.0.0.1';
@@ -644,7 +644,7 @@ export async function startServer(options) {
       stores: storeList(state),
       rules: state.project.rules.map((rule) => ({ id: rule.id, type: rule.type, urls: rule.url })),
       libraries: fromProject,
-      warnings: [site.warning, ...state.project.warnings].filter(Boolean)
+      warnings: [site.warning, ...libraryErrors, ...state.project.warnings].filter(Boolean)
     }
   };
 }

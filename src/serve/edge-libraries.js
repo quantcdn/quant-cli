@@ -99,13 +99,15 @@ function resolveEntry(root, pkg) {
   }
 }
 
+// { namespace } for an imported package, { error } when the import throws,
+// or {} when the package is not installed.
 async function importPackage(root, pkg) {
   const entry = resolveEntry(root, pkg);
-  if (!entry) return null;
+  if (!entry) return {};
   try {
-    return await import(pathToFileURL(entry).href);
-  } catch (_err) {
-    return null;
+    return { namespace: await import(pathToFileURL(entry).href) };
+  } catch (err) {
+    return { error: err && typeof err.message === 'string' ? err.message : String(err) };
   }
 }
 
@@ -118,14 +120,27 @@ function pickExport(namespace, pick) {
 async function libraryValue(root, lib, loaded) {
   if (!lib.package) return undefined;
   if (!loaded.has(lib.package)) loaded.set(lib.package, importPackage(root, lib.package));
-  const namespace = await loaded.get(lib.package);
+  const { namespace } = await loaded.get(lib.package);
   return namespace ? pickExport(namespace, lib.pick) : undefined;
+}
+
+// One message for each installed package whose import throws.
+async function importErrors(loaded) {
+  const errors = [];
+  for (const [pkg, pending] of loaded) {
+    const { error } = await pending;
+    if (error === undefined) continue;
+    const names = EDGE_LIBRARIES.filter((lib) => lib.package === pkg).map((lib) => lib.global).join(', ');
+    errors.push(`The project package ${pkg} could not be imported (${error}). Functions get the ${names} stub.`);
+  }
+  return errors;
 }
 
 /**
  * Load the edge library globals for a project.
  * @param {string} root The project directory. Packages resolve from its node_modules.
- * @returns {Promise<{ globals: Object, fromProject: string[] }>}
+ * @returns {Promise<{ globals: Object, fromProject: string[], errors: string[] }>}
+ *   errors: one message for each installed package whose import throws (its globals are stubs).
  */
 export async function loadProjectLibraries(root) {
   const globals = {};
@@ -140,5 +155,5 @@ export async function loadProjectLibraries(root) {
       fromProject.push(lib.global);
     }
   }
-  return { globals, fromProject };
+  return { globals, fromProject, errors: await importErrors(loaded) };
 }

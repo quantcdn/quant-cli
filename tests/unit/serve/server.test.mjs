@@ -210,6 +210,15 @@ describe('serve server', () => {
       expect(await small.json()).to.deep.equal({ length: 5 });
     });
 
+    it('warns at start-up about a project package that cannot be imported', async () => {
+      const root = tempProject({});
+      fs.mkdirSync(path.join(root, 'node_modules', 'jose'), { recursive: true });
+      fs.writeFileSync(path.join(root, 'node_modules', 'jose', 'package.json'), JSON.stringify({ name: 'jose', type: 'module', exports: './index.js' }));
+      fs.writeFileSync(path.join(root, 'node_modules', 'jose', 'index.js'), "throw new Error('broken');");
+      const server = await start({ root });
+      expect(server.summary.warnings).to.include('The project package jose could not be imported (broken). Functions get the jose stub.');
+    });
+
     it('lists the edge libraries that come from the project', async () => {
       const server = await start({ root: LIB_ROOT, dir: '.' });
       expect(server.summary.libraries).to.deep.equal(['jose']);
