@@ -126,23 +126,38 @@ async function reconcileStore(options, store, dryRun) {
   return results;
 }
 
+async function storeResults(options, store, dryRun) {
+  try {
+    return { results: await reconcileStore(options, store, dryRun), scopeError: null };
+  } catch (error) {
+    if (!(error instanceof ScopeError)) throw error;
+    return { results: [], scopeError: error };
+  }
+}
+
+// A missing scope stops the run (the same token is used for each store), but
+// the results of the stores before it still count.
 async function reconcileAll(options, stores, dryRun) {
   const results = [];
   for (const store of stores) {
-    for (const result of await reconcileStore(options, store, dryRun)) {
+    const outcome = await storeResults(options, store, dryRun);
+    for (const result of outcome.results) {
       console.log(result.line);
       results.push(result);
     }
+    if (outcome.scopeError) return { results, scopeError: outcome.scopeError };
   }
-  return results;
+  return { results, scopeError: null };
 }
 
 async function run(args) {
   const stores = declaredStores(args.meta || DEFAULT_META);
   if (stores.length === 0) return NONE_DECLARED;
-  const results = await reconcileAll(rulesOptions(args), stores, Boolean(args['dry-run']));
+  const { results, scopeError } = await reconcileAll(rulesOptions(args), stores, Boolean(args['dry-run']));
+  if (scopeError) console.warn(scopeError.message);
   const bad = results.filter(result => result.bad).length;
   if (bad > 0) throw new Error(`${bad} KV ${bad === 1 ? 'index is' : 'indexes are'} failed or in conflict with meta.json.`);
+  if (scopeError) return undefined;
   return args['dry-run'] ? 'KV indexes checked; nothing was declared' : 'KV indexes are in sync';
 }
 
@@ -158,12 +173,6 @@ export default {
     return isCancel(meta) ? null : { meta: meta || DEFAULT_META };
   },
   async handler(args) {
-    try {
-      return await run(args);
-    } catch (error) {
-      if (!(error instanceof ScopeError)) throw error;
-      console.warn(error.message);
-      return undefined;
-    }
+    return run(args);
   }
 };

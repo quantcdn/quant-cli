@@ -131,6 +131,18 @@ describe('quant kv-indexes', () => {
     expect(out).to.deep.equal(['The deploy token cannot declare KV indexes (it needs the kv:read and kv:write scopes). Indexes in quant/meta.json were not declared.']);
   });
 
+  it('reports a conflict from an earlier store and fails when a later store gives the scope 403', async () => {
+    const twoStores = { kv_stores: [META.kv_stores[0], { name: 'other', indexes: [{ name: 'all', collection: 'x', fields: [] }] }] };
+    fs.readFileSync.callsFake(() => JSON.stringify(twoStores));
+    get.withArgs(URL).resolves({ data: { indexes: [live('byCustomer', { sortBy: 'other' }), live('orders')] } });
+    get.withArgs(`${BASE}/organizations/org/projects/site/kv/org-site-other/indexes`)
+      .rejects(httpError(403, { error: true, message: 'scope', code: 'SCOPE_REQUIRED', retryable: false }));
+    const { error } = await run();
+    expect(error.message).to.include('1 KV index is failed or in conflict');
+    expect(out).to.include('main/byCustomer: conflict the live definition differs from the one in meta.json');
+    expect(out).to.include('The deploy token cannot declare KV indexes (it needs the kv:read and kv:write scopes). Indexes in quant/meta.json were not declared.');
+  });
+
   it('treats any other 403 as an error', async () => {
     get.rejects(httpError(403, { error: true, message: 'role', code: 'PERMISSION_DENIED', retryable: false }));
     const { error } = await run();
