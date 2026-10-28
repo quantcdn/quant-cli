@@ -152,14 +152,21 @@ async function reconcileAll(options, stores, dryRun) {
   return { results, scopeError: null };
 }
 
+// Failed or conflict results fail the run first. A missing scope prints the
+// warning; with --strict it fails the run.
+function outcome({ results, scopeError }, strict) {
+  const bad = results.filter(result => result.bad).length;
+  if (scopeError && !(strict && bad === 0)) console.warn(scopeError.message);
+  if (bad > 0) throw new Error(`${bad} KV ${bad === 1 ? 'index is' : 'indexes are'} failed or in conflict with meta.json.`);
+  if (scopeError && strict) throw new Error(scopeError.message);
+  return !scopeError;
+}
+
 async function run(args) {
   const stores = declaredStores(args.meta || DEFAULT_META);
   if (stores.length === 0) return NONE_DECLARED;
-  const { results, scopeError } = await reconcileAll(rulesOptions(args), stores, Boolean(args['dry-run']));
-  if (scopeError) console.warn(scopeError.message);
-  const bad = results.filter(result => result.bad).length;
-  if (bad > 0) throw new Error(`${bad} KV ${bad === 1 ? 'index is' : 'indexes are'} failed or in conflict with meta.json.`);
-  if (scopeError) return undefined;
+  const synced = outcome(await reconcileAll(rulesOptions(args), stores, Boolean(args['dry-run'])), Boolean(args.strict));
+  if (!synced) return undefined;
   return args['dry-run'] ? 'KV indexes checked; nothing was declared' : 'KV indexes are in sync';
 }
 
@@ -169,7 +176,8 @@ export default {
   builder: yargs => yargs.positional('meta', { type: 'string', default: DEFAULT_META, describe: 'Template metadata with KV stores' })
     .option('api-token', { type: 'string', describe: 'Scoped portal token (prefer QUANT_API_TOKEN)' })
     .option('api-base-url', { type: 'string', describe: 'Portal /api/v2 URL (or QUANT_BASE_URL)' })
-    .option('dry-run', { type: 'boolean', default: false, describe: 'Report what would be declared without declaring it' }),
+    .option('dry-run', { type: 'boolean', default: false, describe: 'Report what would be declared without declaring it' })
+    .option('strict', { type: 'boolean', default: false, describe: 'Exit 1 when the token lacks the KV scopes' }),
   promptArgs: async () => {
     const meta = await text({ message: 'Path to meta.json', placeholder: DEFAULT_META });
     return isCancel(meta) ? null : { meta: meta || DEFAULT_META };

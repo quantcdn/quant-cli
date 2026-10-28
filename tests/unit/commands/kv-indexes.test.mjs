@@ -131,6 +131,12 @@ describe('quant kv-indexes', () => {
     expect(out).to.deep.equal(['The deploy token cannot declare KV indexes (it needs the kv:read and kv:write scopes). Indexes in quant/meta.json were not declared.']);
   });
 
+  it('with --strict fails for a missing-scope 403', async () => {
+    get.rejects(httpError(403, { error: true, message: 'scope', code: 'SCOPE_REQUIRED', retryable: false }));
+    const { error } = await run({ strict: true });
+    expect(error.message).to.equal('The deploy token cannot declare KV indexes (it needs the kv:read and kv:write scopes). Indexes in quant/meta.json were not declared.');
+  });
+
   it('reports a conflict from an earlier store and fails when a later store gives the scope 403', async () => {
     const twoStores = { kv_stores: [META.kv_stores[0], { name: 'other', indexes: [{ name: 'all', collection: 'x', fields: [] }] }] };
     fs.readFileSync.callsFake(() => JSON.stringify(twoStores));

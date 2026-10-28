@@ -341,7 +341,7 @@ Each line shows `<store>/<index>` and one status:
 
 If a status is `failed` or `conflict`, the command exits with an error. If no store declares an index, it prints `No KV indexes declared`.
 
-Use a project-scoped portal API token. The token needs `kv:read` and `kv:write`. If the token lacks the scope, the command prints a warning that the indexes were not declared, and it exits with code 0.
+Use a project-scoped portal API token. The token needs `kv:read` and `kv:write`. If the token lacks the scope, the command prints a warning that the indexes were not declared, and it exits with code 0. With `--strict`, it exits with code 1.
 
 Flags:
 
