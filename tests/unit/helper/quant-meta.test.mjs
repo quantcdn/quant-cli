@@ -83,7 +83,13 @@ describe('quant/meta.json parsing', () => {
   });
 
   it('refuses a star inside a collection segment', () => {
-    refuses([store({ indexes: [index({ collection: 'work*:x' })] })], "Index byStatus: collection must be 1–1024 characters of non-empty ':' segments; '*' is allowed only as a whole segment.");
+    refuses([store({ indexes: [index({ collection: 'work*:x' })] })], "Index byStatus: collection must be 1–512 UTF-8 bytes of non-empty ':' segments; '*' is allowed only as a whole segment.");
+  });
+
+  it('limits a collection to 512 UTF-8 bytes', () => {
+    expect(() => parseMeta(JSON.stringify({ kv_stores: [store({ indexes: [index({ collection: 'a'.repeat(512) })] })] }))).to.not.throw();
+    refuses([store({ indexes: [index({ collection: 'a'.repeat(513) })] })], "Index byStatus: collection must be 1–512 UTF-8 bytes of non-empty ':' segments; '*' is allowed only as a whole segment.");
+    refuses([store({ indexes: [index({ collection: 'é'.repeat(257) })] })], "Index byStatus: collection must be 1–512 UTF-8 bytes of non-empty ':' segments; '*' is allowed only as a whole segment.");
   });
 
   it('refuses 4 index fields', () => {

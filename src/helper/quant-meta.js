@@ -14,9 +14,9 @@ const fail = message => { throw new Error(message); };
 const onlyKeys = (value, allowed) => Object.keys(value).every(key => allowed.includes(key));
 
 function assertCollection(collection, name) {
-  const segments = typeof collection === 'string' && collection.length <= 1024 ? collection.split(':') : null;
+  const segments = typeof collection === 'string' && Buffer.byteLength(collection) <= 512 ? collection.split(':') : null;
   const valid = segments && segments.every(s => s !== '' && (s === '*' || !s.includes('*')));
-  if (!valid) fail(`Index ${name}: collection must be 1–1024 characters of non-empty ':' segments; '*' is allowed only as a whole segment.`);
+  if (!valid) fail(`Index ${name}: collection must be 1–512 UTF-8 bytes of non-empty ':' segments; '*' is allowed only as a whole segment.`);
 }
 
 function assertFieldName(field, name, where) {
