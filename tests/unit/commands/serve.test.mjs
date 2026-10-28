@@ -74,8 +74,8 @@ describe('serve command', () => {
     fs.rmSync(tmp, { recursive: true, force: true });
   });
 
-  it('is registered with the menu label', () => {
-    expect(getCommand('serve')).to.equal(serve);
+  it('is registered with the menu label', async () => {
+    expect(await getCommand('serve')).to.equal(serve);
     expect(getCommandOptions()).to.deep.include({ value: 'serve', label: 'Run the site locally' });
     expect(serve.command).to.equal('serve [dir]');
   });

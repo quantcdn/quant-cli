@@ -44,8 +44,8 @@ describe('kv command', () => {
 
   const lastJson = () => JSON.parse(out[out.length - 1]);
 
-  it('is registered with the menu label', () => {
-    expect(getCommand('kv')).to.equal(kv);
+  it('is registered with the menu label', async () => {
+    expect(await getCommand('kv')).to.equal(kv);
     expect(getCommandOptions()).to.deep.include({ value: 'kv', label: 'Read and write the local KV store' });
   });
 

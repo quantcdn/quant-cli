@@ -51,7 +51,7 @@ async function interactiveMode() {
       }
 
       // Get the init command and run it
-      const initCommand = getCommand('init');
+      const initCommand = await getCommand('init');
       const initArgs = await initCommand.promptArgs();
       if (!initArgs) {
         outro(color.yellow('Operation cancelled'));
@@ -73,7 +73,7 @@ async function interactiveMode() {
       process.exit(0);
     }
 
-    const cmd = getCommand(command);
+    const cmd = await getCommand(command);
     if (!cmd) {
       outro('Invalid command selected');
       process.exit(1);
@@ -101,7 +101,7 @@ async function interactiveMode() {
   }
 }
 
-function cliMode() {
+async function cliMode() {
   let yargsInstance = yargs(hideBin(process.argv))
     .strict()
     .help()
@@ -128,7 +128,7 @@ function cliMode() {
     });
 
   // Add all commands to yargs
-  const commands = loadCommands();
+  const commands = await loadCommands(hideBin(process.argv));
   Object.entries(commands).forEach(([_name, command]) => {
     yargsInstance = yargsInstance.command({
       command: command.command,
@@ -157,7 +157,10 @@ function cliMode() {
 }
 
 if (process.argv.length > 2) {
-  cliMode();
+  cliMode().catch((err) => {
+    console.error(color.red('Error: ' + err.message));
+    process.exit(1);
+  });
 } else {
   interactiveMode();
 }
