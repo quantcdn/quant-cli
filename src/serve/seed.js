@@ -65,9 +65,9 @@ function planEntry(entry, ctx) {
   const options = entry.encrypted ? { ifAbsent: true, secret: true } : { ifAbsent: true };
   if (!generate) return { key: entry.key, value, options };
   if (generate.reveal !== 'once') return { key: entry.key, value: randomHex(generate.bytes), options };
-  const useSeedKey = ctx.seedKey !== undefined && !ctx.seedKeyUsed;
+  const useSeedKey = ctx.seedKey !== undefined && !ctx.seedKeyState.used;
   const secret = useSeedKey ? checkSeedKey(ctx.seedKey, generate.bytes) : randomHex(generate.bytes);
-  if (useSeedKey) ctx.seedKeyUsed = true;
+  if (useSeedKey) ctx.seedKeyState.used = true;
   return {
     key: entry.key.replace(SHA256, digest(secret)),
     value,
@@ -137,14 +137,16 @@ async function writeFixture(store, entry, ctx, where) {
  * @param {string|null} options.fixturesFile quant/kv-fixtures/<store-name>.json.
  * @param {string} options.userName The {user_name} value.
  * @param {string} [options.seedKey] The value of the first reveal-once entry (--seed-key).
+ * @param {{ used: boolean }} [options.seedKeyState] Shared by the stores of one seed, so that
+ *   --seed-key is the value of the first reveal-once entry overall.
  * @param {string|null} options.keysPath The keys file for revealed keys (null: no file).
  * @param {() => number} [options.now]
  * @param {{ seeded: boolean, mark: () => Promise<void> }} options.marker The seed marker.
  * @returns {Promise<{ revealed: { label: string, value: string }[], fixtures: number }>}
  */
-export async function seedStore(store, { definition, fixturesFile, userName, seedKey, keysPath, now = Date.now, marker }) {
+export async function seedStore(store, { definition, fixturesFile, userName, seedKey, seedKeyState = { used: false }, keysPath, now = Date.now, marker }) {
   if (marker.seeded) return { revealed: [], fixtures: 0 };
-  const ctx = { userName, seedKey, seedKeyUsed: false, keysPath, now, revealed: [] };
+  const ctx = { userName, seedKey, seedKeyState, keysPath, now, revealed: [] };
   try {
     for (const entry of definition.initialValues) await writeEntry(store, entry, ctx);
     const fixtures = readFixtures(fixturesFile);

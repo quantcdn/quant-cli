@@ -358,7 +358,7 @@ describe('serve command', () => {
       }
     });
 
-    it('prints the revealed key and its keys file when the seed fails', async () => {
+    it('reveals no key when a fixture is bad', async () => {
       const root = path.join(tmp, 'project');
       fs.cpSync(ORBIT, root, { recursive: true, filter: (src) => !src.includes(`${path.sep}.quant`) });
       fs.mkdirSync(path.join(root, 'quant', 'kv-fixtures'));
@@ -374,8 +374,8 @@ describe('serve command', () => {
       expect(error && error.message).to.include('each entry needs a key');
       const text = output.join('\n');
       const keysFile = path.join(root, '.quant', 'kv', 'local-dev-orbit.keys');
-      expect(text).to.include(seedKey);
-      expect(text).to.include(`The keys are also in ${keysFile}.`);
+      expect(text).to.not.include(seedKey);
+      expect(fs.existsSync(keysFile)).to.equal(false);
     });
 
     it('stops when --build fails', async () => {

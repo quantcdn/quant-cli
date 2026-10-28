@@ -62,6 +62,26 @@ function markerOf(seeded, id) {
   return { get seeded() { return Boolean(seeded[id]); }, mark: async () => { seeded[id] = new Date().toISOString(); } };
 }
 
+// A backend in memory with the state of the snapshot (and its keys).
+function memoryKv(ctx, snapshot) {
+  const memory = createLocalKv({ ...backendOptions(null, undefined, ctx.options), isAllowed: (id) => ctx.allowed.has(id), warn: ctx.warn });
+  memory.backend.restore(snapshot);
+  return memory;
+}
+
+// A trial seed in a backend in memory, with no keys file: it checks every
+// fixture file (JSON, shape, $date, limits and unique indexes) before the
+// first real write, so a bad fixture never reveals a key.
+async function trialSeed(ctx, snapshot, seeded, seedOptions) {
+  const trial = memoryKv(ctx, snapshot);
+  try {
+    await seedStores({ ...ctx, kvStore: trial.kvStore, paths: null, seeded: { ...seeded } }, seedOptions);
+  } catch (err) {
+    err.revealed = [];
+    throw err;
+  }
+}
+
 // On file storage, each write of the backend copies its whole state, so a
 // large seed runs in a backend in memory. It starts from the state file
 // under the lock, and its state (with the seed markers) is written once,
@@ -70,9 +90,10 @@ async function seedOnFile(ctx, seedOptions) {
   let failure = null;
   let result;
   await replaceState(ctx.paths, async (fresh) => {
-    const memory = createLocalKv({ ...backendOptions(null, undefined, ctx.options), isAllowed: (id) => ctx.allowed.has(id), warn: ctx.warn });
-    memory.backend.restore(fresh ?? ctx.backend.snapshot());
+    const snapshot = fresh ?? ctx.backend.snapshot();
     const seeded = { ...fresh?.seeded };
+    await trialSeed(ctx, snapshot, seeded, seedOptions);
+    const memory = memoryKv(ctx, snapshot);
     try {
       result = await seedStores({ ...ctx, kvStore: memory.kvStore, seeded }, seedOptions);
     } catch (err) {
@@ -84,12 +105,18 @@ async function seedOnFile(ctx, seedOptions) {
   return result;
 }
 
+async function seedInMemory(ctx, seedOptions) {
+  await trialSeed(ctx, ctx.backend.snapshot(), ctx.seededInMemory, seedOptions);
+  return seedStores({ ...ctx, seeded: ctx.seededInMemory }, seedOptions);
+}
+
 function seedAll(ctx, seedOptions) {
-  return ctx.paths ? seedOnFile(ctx, seedOptions) : seedStores({ ...ctx, seeded: ctx.seededInMemory }, seedOptions);
+  return ctx.paths ? seedOnFile(ctx, seedOptions) : seedInMemory(ctx, seedOptions);
 }
 
 async function seedStores(ctx, { fixtures, userName, seedKey, now }) {
   const revealed = [];
+  const seedKeyState = { used: false };
   let count = 0;
   const withStore = (id, keys) => keys.map((key) => ({ ...key, storeId: id }));
   for (const [id, definition] of ctx.allowed) {
@@ -99,6 +126,7 @@ async function seedStores(ctx, { fixtures, userName, seedKey, now }) {
         fixturesFile: fixtures ? path.join(fixtures, `${definition.name}.json`) : null,
         userName,
         seedKey,
+        seedKeyState,
         keysPath: ctx.paths ? ctx.paths.revealKeys(id) : null,
         now,
         marker: markerOf(ctx.seeded, id)

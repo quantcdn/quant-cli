@@ -248,4 +248,43 @@ describe('quant serve seeding', () => {
     expect(await reopened.kvStore.get(ID, 'item:4999')).to.deep.equal({ n: 4999 });
     expect((await reopened.seed({ fixtures, userName: 'Ada' })).fixtures).to.equal(0);
   });
+  it('uses --seed-key for the first reveal-once entry overall, not once per store', async () => {
+    const second = { name: 'billing', indexes: [], initialValues: [REVEAL] };
+    const kv = await openLocalKv({ root: tmp, org: 'acme', project: 'site', stores: [definition([REVEAL]), second] });
+    const seedKey = 'cd'.repeat(32);
+    const { revealed } = await kv.seed({ userName: 'Ada', seedKey });
+    expect(revealed.map((key) => key.storeId)).to.deep.equal([ID, 'acme-site-billing']);
+    expect(revealed[0].value).to.equal(seedKey);
+    expect(revealed[1].value).to.not.equal(seedKey);
+  });
+
+  it('checks every fixture file before the first write, so a bad fixture reveals no key', async () => {
+    const fixtures = path.join(tmp, 'kv-fixtures');
+    fs.mkdirSync(fixtures, { recursive: true });
+    const second = { name: 'billing', indexes: [], initialValues: [] };
+    fs.writeFileSync(path.join(fixtures, 'billing.json'), JSON.stringify([{ key: 'a', value: { at: { $date: 'soon' } } }]));
+    const stores = [definition([REVEAL]), second];
+    const opts = { root: tmp, org: 'acme', project: 'site', stores };
+    const err = await failure((await openLocalKv(opts)).seed({ fixtures, userName: 'Ada' }));
+    expect(err.message).to.include('billing.json entry 1 (a): $date must be');
+    expect(err.revealed).to.deep.equal([]);
+    expect(fs.existsSync(path.join(tmp, '.quant', 'kv', `${ID}.keys`))).to.equal(false);
+    const state = JSON.parse(fs.readFileSync(path.join(tmp, '.quant', 'kv', 'state.json'), 'utf8'));
+    expect(JSON.stringify(state)).to.not.include('auth:');
+    expect(state.seeded ?? {}).to.deep.equal({});
+    fs.writeFileSync(path.join(fixtures, 'billing.json'), JSON.stringify([{ key: 'a', value: { at: { $date: 'now' } } }]));
+    const ok = await (await openLocalKv(opts)).seed({ fixtures, userName: 'Ada' });
+    expect(ok.revealed).to.have.length(1);
+    expect(fs.readFileSync(path.join(tmp, '.quant', 'kv', `${ID}.keys`), 'utf8').trim().split('\n')).to.have.length(1);
+  });
+
+  it('checks the size limits of the fixtures before the first write', async () => {
+    const fixtures = path.join(tmp, 'kv-fixtures');
+    fs.mkdirSync(fixtures, { recursive: true });
+    fs.writeFileSync(path.join(fixtures, 'orbit.json'), JSON.stringify([{ key: 'k'.repeat(2100), value: 1 }]));
+    const err = await failure((await openLocalKv({ root: tmp, org: 'acme', project: 'site', stores: [definition([REVEAL])] })).seed({ fixtures, userName: 'Ada' }));
+    expect(err.message).to.include('orbit.json entry 1');
+    expect(err.revealed).to.deep.equal([]);
+    expect(fs.existsSync(path.join(tmp, '.quant', 'kv', `${ID}.keys`))).to.equal(false);
+  });
 });

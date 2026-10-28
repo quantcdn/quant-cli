@@ -274,7 +274,7 @@ Flags:
 - `--client-ip` - Client address for functions.
 - `--reset` - Delete the local KV state and seed the stores again.
 - `--memory` - Keep the KV state in memory. Nothing is written to disk.
-- `--seed-key` - Value of the first reveal-once entry in `initial_values`, in hex: two characters for each byte of its `generate.bytes`.
+- `--seed-key` - Value of the first reveal-once entry (in the first store that has one), in hex: two characters for each byte of its `generate.bytes`. The other reveal-once entries get random values.
 - `--kv-lag` - Delay in milliseconds before index lists show a change (default: `0`).
 - `--indexes` - Index state for the session: `active` or `building` (default: `active`). With `building`, the indexes of the stores stay in the building state.
 - `--version-info` - Print the versions of the CLI and its KV and test packages, then exit.

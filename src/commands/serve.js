@@ -435,7 +435,7 @@ export default {
     .option('user-name', { type: 'string', describe: '{user_name} value (default: git config user.name, then Owner)' })
     .option('reset', { type: 'boolean', describe: 'Delete the local KV state and seed again' })
     .option('memory', { type: 'boolean', describe: 'Keep the KV state in memory only' })
-    .option('seed-key', { type: 'string', describe: 'Value of the first reveal-once entry in initial_values' })
+    .option('seed-key', { type: 'string', describe: 'Value of the first reveal-once entry (in the first store that has one)' })
     .option('kv-lag', { type: 'number', default: 0, describe: 'Index list visibility delay in ms' })
     .option('indexes', { type: 'string', choices: ['active', 'building'], default: 'active', describe: 'Index state for the session' })
     .option('clock', { type: 'string', choices: ['real', 'manual'], describe: 'Clock mode (a later release)' })
