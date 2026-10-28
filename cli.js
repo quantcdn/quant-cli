@@ -6,6 +6,10 @@ import { getCommandOptions, getCommand, loadCommands } from './src/commandLoader
 import config from './src/config.js';
 import yargs from 'yargs';
 import { hideBin } from 'yargs/helpers';
+import { readFileSync } from 'node:fs';
+
+// The CLI's own version. Without it, yargs looks for a package.json near the working directory.
+const { version } = JSON.parse(readFileSync(new URL('./package.json', import.meta.url), 'utf8'));
 
 async function showActiveConfig() {
   // Try to load config first
@@ -105,6 +109,7 @@ async function cliMode() {
   let yargsInstance = yargs(hideBin(process.argv))
     .strict()
     .help()
+    .version(version)
     // Global options
     .option('clientid', {
       alias: 'c',
