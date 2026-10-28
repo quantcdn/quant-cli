@@ -1,4 +1,5 @@
 import { expect } from 'chai';
+import sinon from 'sinon';
 import crypto from 'node:crypto';
 import fs from 'node:fs';
 import http from 'node:http';
@@ -657,6 +658,57 @@ describe('serve server', () => {
       writeJson(rulesFile, { version: 1, namespace: 'test', rules: [rule('hello', 'function', ['/hi'], ORBIT_FN)] });
       await waitFor(async () => (await (await fetch(`${server.url}/hi`)).text()) === 'hello', 8000);
       expect((await fetch(`${server.url}/hello`)).status).to.equal(404);
+    });
+
+    // On some systems the watch handle of a folder stops when the folder is
+    // deleted. The stub gives the site folder a watcher that never reports.
+    function siteWatchDies() {
+      const watch = fs.watch;
+      sinon.stub(fs, 'watch').callsFake((target, options, listener) => (
+        target.endsWith(`${path.sep}dist`) ? watch(target, options, () => {}) : watch(target, options, listener)));
+    }
+
+    afterEach(() => sinon.restore());
+
+    it('serves new files after a build deletes and makes the site directory again', async () => {
+      siteWatchDies();
+      const root = tempProject({ files: { 'index.html': 'home', 'old.html': 'old' } });
+      const server = await start({ root, watch: true });
+      await settle();
+      const dist = path.join(root, 'dist');
+      fs.rmSync(dist, { recursive: true, force: true });
+      const files = {
+        'new.html': 'new', 'docs/index.html': 'docs', '.well-known/security.txt': 'contact',
+        '.env': 'secret', 'node_modules/p/index.js': 'secret', 'quant.json': 'secret', '.well-known/.hidden': 'secret'
+      };
+      for (const [name, body] of Object.entries(files)) {
+        fs.mkdirSync(path.dirname(path.join(dist, name)), { recursive: true });
+        fs.writeFileSync(path.join(dist, name), body);
+      }
+      await waitFor(async () => (await fetch(`${server.url}/new.html`)).status === 200, 8000);
+      expect(await (await fetch(`${server.url}/docs`)).text()).to.equal('docs');
+      expect((await fetch(`${server.url}/.well-known/security.txt`)).status).to.equal(200);
+      expect((await fetch(`${server.url}/old.html`)).status).to.equal(404);
+      for (const name of ['.env', 'node_modules/p/index.js', 'quant.json', '.well-known/.hidden', '%2e%2e/quant/edge-rules.json']) {
+        const res = await rawGet(server.url, `/${name}`);
+        expect(res.status, name).to.equal(404);
+        expect(res.body).to.not.include('secret');
+      }
+    });
+
+    it('rebuilds the static index after a --build run', async () => {
+      siteWatchDies();
+      const root = tempProject({ files: { 'index.html': 'home' } });
+      fs.mkdirSync(path.join(root, 'src'));
+      const onSourceChange = () => {
+        fs.rmSync(path.join(root, 'dist'), { recursive: true, force: true });
+        fs.mkdirSync(path.join(root, 'dist'));
+        fs.writeFileSync(path.join(root, 'dist', 'Built.html'), 'built');
+      };
+      const server = await start({ root, watch: true, onSourceChange });
+      await settle();
+      fs.writeFileSync(path.join(root, 'src', 'page.txt'), 'changed');
+      await waitFor(async () => (await fetch(`${server.url}/built.html`)).status === 200, 8000);
     });
 
     it('rebuilds the static index when the site changes', async () => {

@@ -18,7 +18,7 @@ import { createExecutor, authContinueHeaders, readCappedBody, DEFAULT_TIMEOUT_MS
 import { loadProject, watchProject } from './project.js';
 import { matchRules, matchFilter } from './rules.js';
 import { startWatchdog } from './watchdog.js';
-import { buildIndex, containsProject, lookup, serveStatic, notFound, NOT_SERVED } from './static.js';
+import { buildIndex, containsProject, findOnDisk, lookup, serveStatic, notFound, NOT_SERVED } from './static.js';
 
 const SERVER_HEADER = 'QuantCDN (quant serve)';
 const AUTH_UNAVAILABLE = 'Authentication for this page is not available.';
@@ -276,8 +276,18 @@ async function proxyStage(state, ctx) {
 
 // --- Static, 404 and filter ----------------------------------------------------
 
-function staticStage(state, ctx) {
+// With --watch, a build can delete and make the site directory again, and
+// the watch of the folder can stop. A file in the index must still exist,
+// and a miss is looked up on disk with the same exclusions as the index.
+function staticFile(state, ctx) {
   const file = lookup(state.index, ctx.pathname, ctx.search);
+  if (!state.options.watch) return file;
+  if (file && fs.existsSync(file.path)) return file;
+  return findOnDisk(state.dir, state.root, ctx.pathname);
+}
+
+function staticStage(state, ctx) {
+  const file = staticFile(state, ctx);
   return file ? serveStatic(file, ctx.method, ctx.req.headers.range) : null;
 }
 
@@ -447,11 +457,14 @@ function changedUnder(paths, prefix) {
   return paths.some((item) => item === prefix || item.startsWith(`${prefix}${path.sep}`));
 }
 
+// A --build run (onSourceChange) can make the site directory again, so the
+// static index is built again after it.
 function onWatchChange(state, paths, siteRel) {
   if (changedUnder(paths, 'quant')) reloadProject(state);
-  if (changedUnder(paths, siteRel)) state.index = siteIndex(state).index;
   const sourceChanged = changedUnder(paths, 'src') || changedUnder(paths, 'public');
-  if (sourceChanged && state.options.onSourceChange) state.options.onSourceChange(paths);
+  const build = sourceChanged && state.options.onSourceChange;
+  if (build) state.options.onSourceChange(paths);
+  if (build || changedUnder(paths, siteRel)) state.index = siteIndex(state).index;
 }
 
 function startWatch(state) {

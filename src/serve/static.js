@@ -79,6 +79,44 @@ export function lookup(index, pathname, search = '') {
   return index.get(withQuery) || index.get(quantURL.prepare(decoded)) || null;
 }
 
+// One path segment on disk: a real file or folder (not a symlink) that the
+// index would include.
+function segmentServed(full, walkState) {
+  let stat;
+  try {
+    stat = fs.lstatSync(full);
+  } catch (_err) {
+    return null;
+  }
+  const entry = { name: path.basename(full), isFile: () => stat.isFile(), isDirectory: () => stat.isDirectory() };
+  return excluded(entry, full, walkState) ? null : stat;
+}
+
+function servedFile(walkState, relative) {
+  let current = walkState.dir;
+  let stat = null;
+  for (const segment of relative.split('/').filter(Boolean)) {
+    if (stat && !stat.isDirectory()) return null;
+    current = path.join(current, segment);
+    stat = segmentServed(current, walkState);
+    if (!stat) return null;
+  }
+  return stat && stat.isFile() ? { path: current, size: stat.size } : null;
+}
+
+/**
+ * Find the file for a request path on disk, with the same exclusions as
+ * buildIndex: the path itself, then its index.html. For a site directory
+ * that a build has made again after the index was built.
+ * @returns {{ path: string, size: number }|null}
+ */
+export function findOnDisk(dir, root, pathname) {
+  const walkState = { dir: path.resolve(dir), projectQuant: path.join(path.resolve(root), 'quant') };
+  const relative = decode(pathname);
+  if (relative.split('/').some((segment) => segment === '..')) return null;
+  return servedFile(walkState, relative) || servedFile(walkState, `${relative}/index.html`);
+}
+
 function baseHeaders(file, body) {
   return {
     'content-type': mime.lookup(file.path) || 'application/octet-stream',
