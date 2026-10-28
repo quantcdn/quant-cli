@@ -94,13 +94,37 @@ describe('quant kv-indexes', () => {
     expect(out).to.deep.equal(['main/byCustomer: ready', 'main/orders: declared']);
   });
 
-  it('counts a VALIDATION already-exists answer after a race as declared', async () => {
-    get.resolves({ data: { indexes: [live('byCustomer')] } });
+  it('counts a VALIDATION already-exists answer after a race as declared when the definition is the same', async () => {
+    get.onCall(0).resolves({ data: { indexes: [live('byCustomer')] } });
+    get.onCall(1).resolves({ data: { indexes: [live('byCustomer'), live('orders', { state: 'BUILDING' })] } });
     post.rejects(httpError(400, { error: true, code: 'VALIDATION', message: 'Index orders already exists', retryable: false }));
     const { error } = await run();
     expect(error).to.equal(undefined);
     expect(out[1]).to.equal('main/orders: declared');
+    expect(get.callCount).to.equal(2);
   });
+
+  it('reports conflict after an already-exists race when the other definition differs', async () => {
+    get.onCall(0).resolves({ data: { indexes: [live('byCustomer')] } });
+    get.onCall(1).resolves({ data: { indexes: [live('byCustomer'), live('orders', { fields: ['status'] })] } });
+    post.rejects(httpError(400, { error: true, code: 'VALIDATION', message: 'Index orders already exists', retryable: false }));
+    const { error } = await run();
+    expect(error.message).to.include('1 KV index is failed or in conflict');
+    expect(out[1]).to.equal('main/orders: conflict the live definition differs from the one in meta.json');
+  });
+
+  for (const [status, code] of [[409, 'CONTENTION'], [503, 'STORE_MIGRATING']]) {
+    it(`retries a ${code} answer like a 429`, async () => {
+      get.onCall(0).rejects(httpError(status, { code }, { 'retry-after': '0' }));
+      get.onCall(1).resolves({ data: { indexes: [live('byCustomer')] } });
+      post.onCall(0).rejects(httpError(status, { code }, { 'retry-after': '0' }));
+      post.onCall(1).resolves({ status: 202, data: {} });
+      const { error } = await run();
+      expect(error).to.equal(undefined);
+      expect(get.callCount).to.equal(2);
+      expect(post.callCount).to.equal(2);
+    });
+  }
 
   it('waits Retry-After on a 429 and retries, three tries at most', async () => {
     get.resolves({ data: { indexes: [live('byCustomer')] } });

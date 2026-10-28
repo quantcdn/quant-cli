@@ -42,12 +42,16 @@ function retryAfter(error) {
   return Number.isFinite(seconds) && seconds >= 0 ? Math.min(seconds, MAX_WAIT_SECONDS) : 1;
 }
 
+// A 429, a write contention and a store migration are retried with the same backoff.
+const RETRY_CODES = ['CONTENTION', 'STORE_MIGRATING'];
+const retryable = error => error.response?.status === 429 || RETRY_CODES.includes(error.response?.data?.code);
+
 async function send(call) {
   for (let attempt = 1; ; attempt++) {
     try {
       return await call();
     } catch (error) {
-      if (error.response?.status !== 429 || attempt >= MAX_TRIES) throw error;
+      if (!retryable(error) || attempt >= MAX_TRIES) throw error;
       await sleep(retryAfter(error));
     }
   }
@@ -88,12 +92,16 @@ async function listLive(options, id) {
   }
 }
 
+// true when the POST declared the index; false when the portal answers that
+// it already exists (another run declared it at the same time).
 async function declare(options, id, index) {
   const { url, config } = request(options, id);
   try {
     await send(() => axios.post(url, index, config));
+    return true;
   } catch (error) {
     if (!isAlreadyExists(error)) throw failure(error);
+    return false;
   }
 }
 
@@ -110,11 +118,19 @@ function judgeLive(declared, live) {
   return { status: 'failed', message: `the index build failed (${code})` };
 }
 
+// After an already-exists race, the index that the other run declared must
+// have the same definition.
+async function afterRace(options, id, index) {
+  const raced = (await listLive(options, id)).find(live => live?.name === index.name);
+  if (raced && !same(normaliseLive(raced), index)) return judgeLive(index, raced);
+  return { status: 'declared' };
+}
+
 async function reconcile(options, id, index, live, dryRun) {
   if (live) return judgeLive(index, live);
   if (dryRun) return { status: 'declared', message: '(dry run)' };
-  await declare(options, id, index);
-  return { status: 'declared' };
+  if (await declare(options, id, index)) return { status: 'declared' };
+  return afterRace(options, id, index);
 }
 
 async function reconcileStore(options, store, dryRun) {
