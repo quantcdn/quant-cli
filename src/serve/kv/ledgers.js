@@ -103,6 +103,22 @@ function pendingWarnings(backend, id, defs, warnings) {
 }
 
 /**
+ * Warnings for the ledgers in the state that have a subjectField and no
+ * subjectMode: @quantcdn/edge-kv 0.1.x declared them, and edge-kv 0.2.0
+ * refuses their appends and reads with LEDGER_FORMAT_RETIRED.
+ * @param {Object} backend The local backend.
+ * @param {string[]} ids The store ids.
+ * @returns {string[]}
+ */
+export function retiredLedgerWarnings(backend, ids) {
+  return ids.flatMap((id) => backend.ledgers(id)
+    .filter((ledger) => ledger.definition.subjectField !== undefined && ledger.definition.subjectMode === undefined)
+    .map((ledger) => `KV store ${id}: ledger ${ledger.name} has a subjectField and no subjectMode `
+      + '(a format from an earlier quant serve). Appends and reads give LEDGER_FORMAT_RETIRED. '
+      + 'Run quant serve --reset, or declare a new ledger.'));
+}
+
+/**
  * Declare the ledgers in the local backend. A ledger that the state already
  * has is kept; a changed definition gives a warning. `wait: true` (the
  * default) makes a new ledger ACTIVE at once, with no activation delay;

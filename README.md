@@ -392,6 +392,8 @@ curl -X POST http://127.0.0.1:8787/_quant_serve/ledger/subject-entries \
 - A backend error answers its status and `{ "code", "message" }`, for example 404 `LEDGER_NOT_FOUND` or 400 `VALIDATION`.
 - A repeat shred answers `alreadyShredded: true` with the same receipt. The receipt is signed with the local key, the `publicKey` from `/_quant_serve/info`.
 
+A ledger with a `subjectField` that an earlier quant serve (edge-kv 0.1.x) declared has no `subjectMode`. Its appends and reads now give `LEDGER_FORMAT_RETIRED`, as on the platform. Quant serve prints a warning that names the ledger at start. Run `quant serve --reset`, or declare a new ledger.
+
 > **Caution:** The subject keys are local keys in `.quant/kv/state.json`, not KMS keys. Anyone who can read the state file can read every personal field, also a shredded field in an older copy of the file. Never put real personal data in the local KV.
 
 ## Edge libraries in quant serve

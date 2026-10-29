@@ -1,0 +1,45 @@
+{
+  "v": 1,
+  "offsetMs": 0,
+  "versionSeq": 0,
+  "rngState": 1,
+  "stores": [
+    {
+      "id": "acme-site-audit",
+      "format": 2,
+      "items": [],
+      "idempotency": [],
+      "indexes": [],
+      "ledgers": [
+        [
+          "people",
+          {
+            "definition": {
+              "v": 1,
+              "name": "people",
+              "collection": "people",
+              "chains": 1,
+              "retentionDays": 30,
+              "lockMode": "governance",
+              "personalFields": [
+                "email"
+              ],
+              "subjectField": "userId",
+              "anchor": {
+                "type": "none"
+              },
+              "createdAt": "2026-10-01T00:00:00.000Z"
+            },
+            "definitionHash": "75d399242e54b53d3d16ed25396a93867d451215529bff650696dcae0db786d2",
+            "state": "ACTIVE",
+            "activeAfterMs": 1790812875000
+          }
+        ]
+      ],
+      "chains": [],
+      "subjectKeys": [],
+      "archives": [],
+      "digests": []
+    }
+  ]
+}

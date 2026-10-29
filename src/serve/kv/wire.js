@@ -8,7 +8,7 @@
 import { createLocalKv } from '@quantcdn/edge-kv';
 import { storeId } from '../../helper/quant-meta.js';
 import { seedStore } from '../seed.js';
-import { declareLedgers } from './ledgers.js';
+import { declareLedgers, retiredLedgerWarnings } from './ledgers.js';
 import path from 'node:path';
 import {
   statePaths, ensureQuantDir, fileStorage, readBackendKeys, replaceState, writeBackendKeys, resetState
@@ -148,6 +148,7 @@ async function declareAll(ctx, { stores = [], ledgers = [], ledgerWait = true })
   await declareLedgers(ctx.backend, {
     org: ctx.org, project: ctx.project, ledgers, wait: ledgerWait, warnings: ctx.warnings
   });
+  ctx.warnings.push(...retiredLedgerWarnings(ctx.backend, [...ctx.allowed.keys()]));
 }
 
 // An offset of the KV time from the real time below this is not cleared.

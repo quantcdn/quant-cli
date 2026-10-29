@@ -5,6 +5,9 @@ import path from 'node:path';
 import { readLedgerFile, LEDGERS_FILE } from '../../../src/serve/kv/ledgers.js';
 import { openLocalKv } from '../../../src/serve/kv/wire.js';
 import { createVirtualClock, LIMITS } from '@quantcdn/edge-kv';
+import { fileURLToPath } from 'node:url';
+
+const RETIRED_STATE = path.join(path.dirname(fileURLToPath(import.meta.url)), '..', '..', 'fixtures', 'edge-kv-0.1-subject-state.json');
 
 const STORES = [{ name: 'audit', indexes: [], initialValues: [] }, { name: 'other', indexes: [], initialValues: [] }];
 const ID = 'acme-site-audit';
@@ -174,6 +177,30 @@ describe('quant serve local ledgers', () => {
       it('gives no definition warning on a restart', async () => {
         await withPeople();
         expect((await withPeople()).warnings).to.deep.equal([]);
+      });
+    });
+
+    describe('a subject ledger of edge-kv 0.1.x', () => {
+      // The fixture is a snapshot that @quantcdn/edge-kv 0.1.1 wrote, with a
+      // ledger that has a subjectField and no subjectMode (and no keys).
+      beforeEach(() => {
+        fs.mkdirSync(path.join(tmp, '.quant', 'kv'), { recursive: true });
+        fs.copyFileSync(RETIRED_STATE, path.join(tmp, '.quant', 'kv', 'state.json'));
+      });
+
+      it('warns at start that the ledger uses the retired format', async () => {
+        const { warnings, kvStore } = await open({ ledgers: [] });
+        expect(warnings).to.deep.equal([
+          `KV store ${ID}: ledger people has a subjectField and no subjectMode (a format from an earlier quant serve). `
+            + 'Appends and reads give LEDGER_FORMAT_RETIRED. Run quant serve --reset, or declare a new ledger.'
+        ]);
+        const err = await asyncFailure(kvStore.append(ID, 'people', { userId: 'u-17', email: 'a@example.com' }));
+        expect(err.code).to.equal('LEDGER_FORMAT_RETIRED');
+      });
+
+      it('gives no warning after a reset', async () => {
+        const { warnings } = await open({ reset: true, ledgers: [] });
+        expect(warnings).to.deep.equal([]);
       });
     });
 
