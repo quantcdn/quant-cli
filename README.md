@@ -361,7 +361,7 @@ curl http://127.0.0.1:8787/_quant_serve/info -H 'x-quant-serve: 1'
 - A local proof is signed with a local key. Verify it with the `publicKey` from `/_quant_serve/info`. A local key never verifies a production proof. The offline verifier is in the conformance suite, which installs from GitHub (it is not on the npm registry):
 
   ```bash
-  npm install --save-dev github:quantcdn/kv-ledger-conformance#edge-kv-v0.1.1
+  npm install --save-dev github:quantcdn/kv-ledger-conformance#edge-kv-v0.2.0
   npx kv-ledger-verify verify-proof proof.json --public-key key.pem
   ```
 
