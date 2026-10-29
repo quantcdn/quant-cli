@@ -5,6 +5,8 @@
  * It is never proxied, and it never exists on the Quant edge.
  */
 
+import { ERROR_CODES } from '@quantcdn/edge-kv';
+
 const PREFIX = '/_quant_serve';
 const LOOPBACK = new Set(['127.0.0.1', '::1', '::ffff:127.0.0.1']);
 const REFUSED = 'The quant serve control route answers loopback addresses only.';
@@ -25,8 +27,8 @@ function text(status, body) {
   return new Response(body, { status, headers: { 'content-type': 'text/plain; charset=utf-8', 'cache-control': 'no-store' } });
 }
 
-function json(body) {
-  return new Response(JSON.stringify(body), { status: 200, headers: { 'content-type': 'application/json', 'cache-control': 'no-store' } });
+function json(body, status = 200) {
+  return new Response(JSON.stringify(body), { status, headers: { 'content-type': 'application/json', 'cache-control': 'no-store' } });
 }
 
 // The JSON object of the request body, or null.
@@ -51,6 +53,24 @@ function clockTarget(request, now) {
   return keys[0] === 'setMs' ? request.setMs : null;
 }
 
+const BAD_SUBJECT_BODY = 'The body must be a JSON object with "store" and "ledger" names.';
+const SHRED_FIELDS = ['subjectId', 'reason', 'authority', 'requestedBy'];
+const SUBJECT_ENTRIES_FIELDS = ['subjectId', 'collection', 'since', 'until', 'limit', 'nextToken', 'personal'];
+
+// The fields of the request that the backend call takes (absent fields are left out).
+function pick(request, fields) {
+  return Object.fromEntries(fields.filter((field) => request[field] !== undefined).map((field) => [field, request[field]]));
+}
+
+const isKVError = (err) => err !== null && typeof err === 'object' && err.name === 'KVError' && typeof err.code === 'string';
+
+// A KVError of the backend as its status and code; any other error goes up.
+function kvErrorResponse(err) {
+  if (!isKVError(err)) throw err;
+  const status = Number.isInteger(err.status) ? err.status : (ERROR_CODES[err.code]?.status ?? 500);
+  return json({ code: err.code, message: err.message }, status);
+}
+
 function backendInfo(backend) {
   return backend ? { now: backend.now(), publicKey: backend.publicKey() } : {};
 }
@@ -62,6 +82,9 @@ function backendInfo(backend) {
  * - POST /_quant_serve/clock { advanceMs } or { setMs }: --clock manual only.
  * - POST /_quant_serve/ledger/archive-now { store }: archive the ledger
  *   entries of a meta.json store now.
+ * - POST /_quant_serve/ledger/shred { store, ledger, subjectId, reason, authority, requestedBy }
+ *   and POST /_quant_serve/ledger/subject-entries { store, ledger, subjectId, ... }: the
+ *   backend shred and subjectEntries calls. A backend KVError keeps its status and code.
  * @param {Object} options
  * @param {string} [options.clock] The clock mode: 'real' or 'manual'.
  * @param {Object} [options.backend] The local KV backend.
@@ -85,15 +108,35 @@ export function controlRoutes({ clock = 'real', backend = null, stores = () => n
   async function archiveNow(body) {
     const request = await bodyObject(body);
     const id = request && typeof request.store === 'string' ? stores().get(request.store) : undefined;
-    if (!id || !backend) return text(404, `No KV store with that name in ${meta}. Send { "store": "<store name>" }.`);
+    if (!id || !backend) return noStore();
     await backend.archiveNow(id);
     return json({ archived: true });
+  }
+
+  const noStore = () => text(404, `No KV store with that name in ${meta}. Send { "store": "<store name>" }.`);
+
+  // A subject call: { store, ledger, ...fields } -> call(storeId, ledger, fields).
+  function subjectRoute(fields, call) {
+    return async (body) => {
+      const request = await bodyObject(body);
+      if (!request || typeof request.ledger !== 'string') return text(400, BAD_SUBJECT_BODY);
+      const id = typeof request.store === 'string' ? stores().get(request.store) : undefined;
+      if (!id || !backend) return noStore();
+      try {
+        return json(await call(id, request.ledger, pick(request, fields)));
+      } catch (err) {
+        return kvErrorResponse(err);
+      }
+    };
   }
 
   const routes = {
     'GET /_quant_serve/info': () => json({ server: 'quant serve', clock, ...backendInfo(backend), ...info() }),
     'POST /_quant_serve/clock': moveClock,
-    'POST /_quant_serve/ledger/archive-now': archiveNow
+    'POST /_quant_serve/ledger/archive-now': archiveNow,
+    'POST /_quant_serve/ledger/shred': subjectRoute(SHRED_FIELDS, (id, ledger, fields) => backend.shred(id, ledger, fields)),
+    'POST /_quant_serve/ledger/subject-entries': subjectRoute(SUBJECT_ENTRIES_FIELDS,
+      (id, ledger, fields) => backend.subjectEntries(id, ledger, fields))
   };
   return async function control({ method, pathname, remoteAddress, headers = {}, body = async () => null }) {
     if (!LOOPBACK.has(remoteAddress)) return text(403, REFUSED);

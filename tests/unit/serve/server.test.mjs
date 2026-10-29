@@ -11,6 +11,7 @@ import { fileURLToPath } from 'node:url';
 import { startServer } from '../../../src/serve/server.js';
 import { controlRoutes, isControlPath } from '../../../src/serve/control.js';
 import { createVirtualClock } from '@quantcdn/edge-kv';
+import { verifySigned } from '@quantcdn/kv-ledger-conformance/verifier';
 import { loadProject } from '../../../src/serve/project.js';
 import { MAX_REQUEST_BODY_BYTES } from '../../../src/serve/functions.js';
 import { openLocalKv } from '../../../src/serve/kv/wire.js';
@@ -975,6 +976,79 @@ describe('serve control route', () => {
       expect(res.status).to.equal(404);
       expect(await res.text()).to.include('No KV store with that name in site/meta.json.');
     });
+  });
+});
+
+describe('serve control route: ledger subjects', () => {
+  const CONTROL_HEADERS = { 'x-quant-serve': '1' };
+  const ID = 'acme-site-audit';
+  const PEOPLE = {
+    name: 'people', collection: 'people', chains: 1, retentionDays: 30, subjectField: 'userId', personalFields: ['email']
+  };
+  const SHRED = { reason: 'Erasure request 1', authority: 'Policy 4', requestedBy: 'Privacy officer' };
+  let kv;
+  let control;
+
+  beforeEach(async () => {
+    kv = await openLocalKv({
+      root: ORBIT, org: 'acme', project: 'site', memory: true,
+      stores: [{ name: 'audit', indexes: [], initialValues: [] }],
+      ledgers: [{ store: 'audit', defs: [PEOPLE] }]
+    });
+    control = controlRoutes({ backend: kv.backend, stores: () => new Map([['audit', ID]]), meta: 'quant/meta.json' });
+  });
+
+  async function post(pathname, body) {
+    const bytes = body === undefined ? null : new TextEncoder().encode(typeof body === 'string' ? body : JSON.stringify(body));
+    const res = await control({ method: 'POST', pathname, remoteAddress: '127.0.0.1', headers: CONTROL_HEADERS, body: async () => bytes });
+    const text = await res.text();
+    return { status: res.status, text, json: text.startsWith('{') ? JSON.parse(text) : null };
+  }
+
+  it('shreds a subject and answers the backend result with a signed receipt', async () => {
+    const receipt = await kv.kvStore.append(ID, 'people', { userId: 'u-17', email: 'a@example.com' });
+    const res = await post('/_quant_serve/ledger/shred', { store: 'audit', ledger: 'people', subjectId: 'u-17', ...SHRED });
+    expect(res.status).to.equal(200);
+    expect(res.json).to.include({ ledger: 'people' });
+    expect(res.json.subjectRef).to.match(/^[0-9a-f]{32}$/);
+    expect(verifySigned(res.json.receipt, kv.backend.publicKey()).ok).to.equal(true);
+    expect(await kv.kvStore.get(ID, receipt.key)).to.deep.equal({ userId: { $shredded: true }, email: { $shredded: true } });
+    const again = await post('/_quant_serve/ledger/shred', { store: 'audit', ledger: 'people', subjectId: 'u-17', ...SHRED });
+    expect(again.json).to.include({ alreadyShredded: true, shredId: res.json.shredId });
+  });
+
+  it('gives the entries of a subject', async () => {
+    await kv.kvStore.append(ID, 'people', { userId: 'u-17', email: 'a@example.com' });
+    await kv.kvStore.append(ID, 'people', { userId: 'u-18', email: 'b@example.com' });
+    const res = await post('/_quant_serve/ledger/subject-entries', { store: 'audit', ledger: 'people', subjectId: 'u-17', limit: 10 });
+    expect(res.status).to.equal(200);
+    expect(res.json).to.include({ ledger: 'people', subjectState: 'live', complete: true });
+    expect(res.json.entries.map((entry) => entry.value.email)).to.deep.equal(['a@example.com']);
+  });
+
+  it('gives 404 for an unknown store, with the meta file', async () => {
+    for (const pathname of ['/_quant_serve/ledger/shred', '/_quant_serve/ledger/subject-entries']) {
+      const res = await post(pathname, { store: 'other', ledger: 'people', subjectId: 'u-17', ...SHRED });
+      expect(res.status, pathname).to.equal(404);
+      expect(res.text).to.include('quant/meta.json');
+    }
+  });
+
+  it('gives 400 for a body that is not a JSON object with a ledger name', async () => {
+    for (const body of ['{', '[]', undefined, { store: 'audit', subjectId: 'u-17' }]) {
+      const res = await post('/_quant_serve/ledger/subject-entries', body);
+      expect(res.status, JSON.stringify(body)).to.equal(400);
+    }
+  });
+
+  it('maps a backend KVError to its status and code', async () => {
+    const missing = await post('/_quant_serve/ledger/shred', { store: 'audit', ledger: 'nope', subjectId: 'u-17', ...SHRED });
+    expect(missing.status).to.equal(404);
+    expect(missing.json.code).to.equal('LEDGER_NOT_FOUND');
+    const invalid = await post('/_quant_serve/ledger/shred', { store: 'audit', ledger: 'people', subjectId: 'u-17' });
+    expect(invalid.status).to.equal(400);
+    expect(invalid.json.code).to.equal('VALIDATION');
+    expect(invalid.json.message).to.be.a('string');
   });
 });
 

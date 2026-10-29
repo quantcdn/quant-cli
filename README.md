@@ -374,6 +374,24 @@ A ledger with a `subjectField` names a data subject in each entry. Quant serve e
 - `pseudonym` mode stores a token in the subject field. `clear` mode keeps the field as given. In both modes, the personal fields are sealed with a key for each subject.
 - Reads of an entry show the value as appended. After a shred, each sealed field reads `{ "$shredded": true }`.
 
+The local control route has the two subject calls. They take the body of the platform admin routes, and they answer the platform answer body. In production, these are admin API calls (`POST …/ledgers/{name}/shred` and `POST …/ledgers/{name}/subject-entries`). The edge `kvStore` does not have them.
+
+```bash
+# Shred a data subject: shred entries, then the subject key is destroyed. The answer holds a signed receipt.
+curl -X POST http://127.0.0.1:8787/_quant_serve/ledger/shred \
+  -H 'x-quant-serve: 1' -H 'content-type: application/json' \
+  -d '{"store":"audit","ledger":"people","subjectId":"u-17","reason":"Erasure request 1","authority":"Policy 4","requestedBy":"Privacy officer"}'
+
+# The entries of one data subject (optional: collection, since, until, limit, nextToken, personal)
+curl -X POST http://127.0.0.1:8787/_quant_serve/ledger/subject-entries \
+  -H 'x-quant-serve: 1' -H 'content-type: application/json' \
+  -d '{"store":"audit","ledger":"people","subjectId":"u-17"}'
+```
+
+- A store that `quant/meta.json` does not declare gets 404. A body that is not a JSON object with `store` and `ledger` gets 400.
+- A backend error answers its status and `{ "code", "message" }`, for example 404 `LEDGER_NOT_FOUND` or 400 `VALIDATION`.
+- A repeat shred answers `alreadyShredded: true` with the same receipt. The receipt is signed with the local key, the `publicKey` from `/_quant_serve/info`.
+
 > **Caution:** The subject keys are local keys in `.quant/kv/state.json`, not KMS keys. Anyone who can read the state file can read every personal field, also a shredded field in an older copy of the file. Never put real personal data in the local KV.
 
 ## Edge libraries in quant serve
@@ -433,7 +451,7 @@ Flags:
 - A function that blocks the event loop (an endless loop after an await) stops `quant serve` after 20 s.
 - The timers that a function starts (`setTimeout`, `setInterval`) are cleared when its response is ready or its time budget ends.
 - When `--host` is a loopback address (the default), `quant serve` answers only the Host names `localhost`, `127.0.0.1` and `[::1]` (any port) and the `--domain` value. Other Host names get 421.
-- The `/_quant_serve/` routes (`info`, `clock`, `ledger/archive-now`) answer only on loopback, and only a request with the header `x-quant-serve: 1`. They do not exist on the edge.
+- The `/_quant_serve/` routes (`info`, `clock`, `ledger/archive-now`, `ledger/shred`, `ledger/subject-entries`) answer only on loopback, and only a request with the header `x-quant-serve: 1`. They do not exist on the edge.
 - `quant serve` does not serve `quant.json`, the `quant/` folder, `node_modules`, or files and folders whose names start with `.`. It serves the `.well-known/` folder at the top of the site (for example `security.txt`), but not a dotfile inside it.
 
 ## Upgrading from 6.x to 7.0.0
