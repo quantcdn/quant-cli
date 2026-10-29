@@ -249,11 +249,12 @@ quant serve --build "npm run build" --watch  # build again when src/ or public/ 
 quant serve --run "npm run dev" --proxy http://localhost:4321
 quant serve --memory --seed-key $(openssl rand -hex 32)
 quant serve --indexes building --kv-lag 500
+quant serve --clock manual                   # time moves only with the control route
 quant serve --reset
 quant serve --version-info
 ```
 
-Quant serve reads these files from the project directory: `quant/edge-functions.json`, `quant/edge-rules.json`, `quant/meta.json` and the KV fixtures. It reads `quant.json` only for the organisation and the project.
+Quant serve reads these files from the project directory: `quant/edge-functions.json`, `quant/edge-rules.json`, `quant/meta.json`, `quant/kv-ledgers.json` and the KV fixtures. It reads `quant.json` only for the organisation and the project.
 
 Flags:
 
@@ -279,8 +280,9 @@ Flags:
 - `--seed-key` - Value of the first reveal-once entry (in the first store that has one), in hex: two characters for each byte of its `generate.bytes`. The other reveal-once entries get random values.
 - `--kv-lag` - Delay in milliseconds before index lists show a change (default: `0`).
 - `--indexes` - Index state for the session: `active` or `building` (default: `active`). With `building`, the indexes of the stores stay in the building state.
+- `--clock` - `real` or `manual` (default: `real`). With `manual`, the time of the local KV stops at the start time and moves only with `POST /_quant_serve/clock`. See [Local ledgers](#local-ledgers).
 - `--version-info` - Print the versions of the CLI and its KV and test packages, then exit.
-- `--clock`, `--pull-rules`, `--kv-remote` - Not available yet. The command stops with a message.
+- `--pull-rules`, `--kv-remote` - Not available yet. The command stops with a message.
 
 A key that `initial_values` reveals once is shown in a box when the store is first seeded. Save the key then. Quant serve also writes it to a file under `.quant/kv/`.
 
@@ -311,6 +313,50 @@ Flags:
 - `--org` - Organisation (default: the `quant.json` clientid, then `local`).
 - `--project` - Project (default: the `quant.json` project, then `dev`).
 - `--meta` - Template metadata with the KV stores (default: `quant/meta.json`).
+
+## Local ledgers
+
+`quant serve` can run KV ledgers locally. Functions use the ledger methods of `kvStore` as on the edge: `append`, `ledgerStatus`, `ledgerProof`, and `list` with `collection`, `since` and `until`.
+
+Declare the local ledgers in `quant/kv-ledgers.json`. Each key is a store name from `quant/meta.json`. Each value is a list of ledger definitions:
+
+```json
+{
+  "audit": [
+    { "name": "events", "collection": "events", "chains": 1, "retentionDays": 30 }
+  ]
+}
+```
+
+Each definition has `name`, `collection`, `chains` and `retentionDays`. The optional fields are `lockMode` (`governance` or `compliance`), `personalFields`, `subjectField` and `anchor` (`{ "type": "none" }`, `customer-bucket` or `rfc3161`). If a definition is not valid, `quant serve` stops with `quant/kv-ledgers.json <store> entry <n>: <message>`.
+
+Only `quant serve` reads `quant/kv-ledgers.json`. A deploy never reads it. In production, declare ledgers with the API or the portal.
+
+A ledger in this file is active when `quant serve` starts: quant serve skips the activation delay of the platform. The ledger and its entries stay in the local KV state. If you change a definition, quant serve keeps the old one and prints a warning. Run `quant serve --reset` to declare the ledgers again.
+
+A proof is `pending` until its entry is in an archive. The local archives run on the KV time. To get an archived proof at once, use the control route. The routes answer only on loopback, and only a request with the header `x-quant-serve: 1`:
+
+```bash
+# Archive every ledger entry of the store now
+curl -X POST http://127.0.0.1:8787/_quant_serve/ledger/archive-now \
+  -H 'x-quant-serve: 1' -H 'content-type: application/json' -d '{"store":"audit"}'
+
+# With --clock manual: move the time forward 10 minutes, or set it (epoch ms)
+curl -X POST http://127.0.0.1:8787/_quant_serve/clock \
+  -H 'x-quant-serve: 1' -H 'content-type: application/json' -d '{"advanceMs":600000}'
+curl -X POST http://127.0.0.1:8787/_quant_serve/clock \
+  -H 'x-quant-serve: 1' -H 'content-type: application/json' -d '{"setMs":1798761600000}'
+
+# The clock mode, the KV time and the public key that signs local proofs
+curl http://127.0.0.1:8787/_quant_serve/info -H 'x-quant-serve: 1'
+```
+
+- `archive-now` answers `{ "archived": true }`, and 404 for a store that `quant/meta.json` does not declare.
+- `clock` answers `{ "now": <epoch ms> }`. With `--clock real`, it answers 409.
+- The time that `clock` sets stays in the local KV state, also after a restart. Run `quant serve --reset` to clear it.
+- A local proof is signed with a local key. Verify it with the `publicKey` from `/_quant_serve/info`, for example with `kv-ledger-verify verify-proof` from `@quantcdn/kv-ledger-conformance`. A local key never verifies a production proof.
+
+`quant kv --local` does not have ledger commands yet. Subject (pseudonym) fields are not emulated yet: `subjectMode` is refused.
 
 ## Edge libraries in quant serve
 
@@ -360,7 +406,7 @@ Flags:
 - Production security protections do not apply.
 - Time, memory and capacity limits of production are not the same.
 - Geolocation and the client address are simulated values. Set them with `--geo` and `--client-ip`.
-- Ledgers come in a later release.
+- Subject pseudonyms and shredding are not emulated yet.
 
 ### Safety
 
@@ -369,7 +415,7 @@ Flags:
 - A function that blocks the event loop (an endless loop after an await) stops `quant serve` after 20 s.
 - The timers that a function starts (`setTimeout`, `setInterval`) are cleared when its response is ready or its time budget ends.
 - When `--host` is a loopback address (the default), `quant serve` answers only the Host names `localhost`, `127.0.0.1` and `[::1]` (any port) and the `--domain` value. Other Host names get 421.
-- The `/_quant_serve/` routes answer only on loopback, and only a request with the header `x-quant-serve: 1`. They do not exist on the edge.
+- The `/_quant_serve/` routes (`info`, `clock`, `ledger/archive-now`) answer only on loopback, and only a request with the header `x-quant-serve: 1`. They do not exist on the edge.
 - `quant serve` does not serve `quant.json`, the `quant/` folder, `node_modules`, or files and folders whose names start with `.`. It serves the `.well-known/` folder at the top of the site (for example `security.txt`), but not a dotfile inside it.
 
 ## Upgrading from 6.x to 7.0.0
