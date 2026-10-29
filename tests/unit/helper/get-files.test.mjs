@@ -44,6 +44,13 @@ describe('getFiles Helper', () => {
     expect((await getFiles(dir)).sort()).to.deep.equal(keep.sort());
   });
 
+  it('excludes quant/kv-ledgers.json, the local ledgers of quant serve', async () => {
+    touch('quant/kv-ledgers.json');
+    touch('site/Quant/KV-Ledgers.json');
+    const keep = [touch('quant/kv-fixtures.json'), touch('kv-ledgers.json')];
+    expect((await getFiles(dir)).sort()).to.deep.equal(keep.sort());
+  });
+
   it('does not exclude a file whose name only resembles quant.json', async () => {
     const keep = touch('quantXjson');
     expect(await getFiles(dir)).to.deep.equal([keep]);

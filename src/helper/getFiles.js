@@ -50,12 +50,16 @@ function isQuantJson(file) {
   return QUANT_JSON.test(basename(file));
 }
 
+// The local-only files of `quant serve` in a quant/ folder (any case).
+const LOCAL_ONLY = new Set(['serve.json', 'kv-ledgers.json']);
+
 /**
- * True for quant/serve.json (any case): the local settings of `quant serve`.
- * It can hold a basic authentication password, and it is never deployed.
+ * True for quant/serve.json and quant/kv-ledgers.json (any case): the local
+ * settings and the local ledgers of `quant serve`. serve.json can hold a basic
+ * authentication password. Neither file is ever deployed.
  */
 function isServeConfig(file) {
-  return basename(file).toLowerCase() === 'serve.json' && basename(dirname(file)).toLowerCase() === 'quant';
+  return LOCAL_ONLY.has(basename(file).toLowerCase()) && basename(dirname(file)).toLowerCase() === 'quant';
 }
 
 /**
