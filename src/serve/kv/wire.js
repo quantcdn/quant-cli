@@ -22,6 +22,8 @@ function indexState(value) {
 }
 
 // The index entries of a store in the backend: Map name -> { def, state }.
+// It reads the snapshot layout of @quantcdn/edge-kv 0.1.1 (stores[].indexes),
+// which the package does not document. Check this at each edge-kv upgrade.
 function indexesOf(backend, id) {
   const store = backend.snapshot().stores.find((item) => item.id === id);
   return new Map(store ? store.indexes : []);

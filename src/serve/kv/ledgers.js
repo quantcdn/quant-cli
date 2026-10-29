@@ -66,6 +66,10 @@ function stable(value) {
 }
 
 // The ledger definitions of a store in the backend: Map name -> definition.
+// It reads the snapshot layout of @quantcdn/edge-kv 0.1.1 (stores[].ledgers as
+// [name, { definition }] pairs), which the package does not document. Edge-kv
+// has no documented call that lists the ledgers of a store. Check this at each
+// edge-kv upgrade.
 function ledgersOf(backend, id) {
   const store = backend.snapshot().stores.find((item) => item.id === id);
   return new Map((store ? store.ledgers : []).map(([name, entry]) => [name, entry.definition]));
