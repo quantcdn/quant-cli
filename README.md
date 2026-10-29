@@ -444,7 +444,7 @@ On a real project, the dashboard sets the custom headers, basic authentication a
 Each field is optional.
 
 - `globalHeaders` - Headers for every response from the site: pages, files, function responses, the 404 page and the basic authentication 401. A header that a function sets replaces the global header of the same name. `quant-server` and `age` cannot be set.
-- `basicAuth` - With a username and a password, every path needs these credentials. A request without them gets 401 with `WWW-Authenticate: Basic`. The check applies before the rules, so functions and redirects need the credentials too. WebSocket upgrades also need them.
+- `basicAuth` - With a username and a password, every path needs these credentials. A request without them gets 401 with `WWW-Authenticate: Basic`. The check applies before the rules, so functions and redirects need the credentials too. WebSocket upgrades also need them. The `/_quant_serve/` control routes do not need them: they are local only and need the `x-quant-serve: 1` header (see [Safety](#safety)).
 - `trailingSlash` - `"redirect"`: a path that ends with `/` (except `/`) gets a 301 to the path without the trailing slashes, with the query string. A path that a rule answers is not redirected. `"none"` (the default): no redirect.
 
 The order is the order of the edge: global headers, basic authentication, rules, the trailing-slash redirect, then static content.
