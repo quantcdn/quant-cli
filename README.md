@@ -253,7 +253,7 @@ quant serve --reset
 quant serve --version-info
 ```
 
-Quant serve reads these files from the project directory: `quant/edge-functions.json`, `quant/edge-rules.json`, `quant/meta.json` and the KV fixtures. It reads `quant.json` only for the organisation and the project.
+Quant serve reads these files from the project directory: `quant/edge-functions.json`, `quant/edge-rules.json`, `quant/meta.json`, `quant/serve.json` and the KV fixtures. It reads `quant.json` only for the organisation and the project.
 
 Flags:
 
@@ -311,6 +311,60 @@ Flags:
 - `--org` - Organisation (default: the `quant.json` clientid, then `local`).
 - `--project` - Project (default: the `quant.json` project, then `dev`).
 - `--meta` - Template metadata with the KV stores (default: `quant/meta.json`).
+
+## Inline functions
+
+`quant serve` replaces `{{QUANT_FN:uuid}}` tokens in pages, as the edge does, when `quant/meta.json` turns inline functions on:
+
+```json
+{
+  "project_settings": {
+    "enable_inline_fn": true
+  }
+}
+```
+
+`project_settings` accepts only `enable_inline_fn`, with `true` or `false`. A file with another key or value stops `quant serve` with the message that the portal shows.
+
+- Tokens are replaced in static HTML pages with status 200, and in HTML pages with status 200 from the `--proxy` dev server. Tokens in other files, function responses and the 404 page stay as they are.
+- The token must hold a full function UUID. Any other text between the braces stays in the page. The token is not case sensitive.
+- Each function runs once, in the order of its first token, one at a time. Every copy of its token is replaced by the function body as text. The status of the function does not change the page status.
+- A token for a UUID with no function in `quant/edge-functions.json` is replaced by `Unable to find edge function with uuid: <uuid>`.
+- The output of a function is not scanned for tokens.
+- A content filter runs before the tokens are replaced.
+- The function gets the page request: `event.request` and `event.url` are the page request and URL.
+- A page with a token gets `content-type: text/html; charset=utf-8`, and loses `etag` and `last-modified`. The headers of the last function that ran are added. Without a `cache-control` from the function (or from `globalHeaders`), the page gets `cache-control: private, max-age=0`.
+
+What is different from the edge:
+
+- On the edge, a page with inline functions on also gets a client script for `<quant-island>` elements. `quant serve` does not add this script.
+- The "Allow Inline Functions" option of a proxy rule is not in the rules manifest, so `quant serve` does not process proxy rule responses.
+- If a function fails, the terminal shows the error, and the token is replaced by an empty string.
+
+## Local project settings (quant/serve.json)
+
+On a real project, the dashboard sets the custom headers, basic authentication and the trailing-slash behaviour. `quant serve` reads these settings from `quant/serve.json`:
+
+```json
+{
+  "globalHeaders": {
+    "x-frame-options": "DENY",
+    "cache-control": "public, max-age=60"
+  },
+  "basicAuth": { "username": "demo", "password": "local-only" },
+  "trailingSlash": "redirect"
+}
+```
+
+Each field is optional.
+
+- `globalHeaders` - Headers for every response from the site: pages, files, function responses, the 404 page and the basic authentication 401. A header that a function sets replaces the global header of the same name. `quant-server` and `age` cannot be set.
+- `basicAuth` - With a username and a password, every path needs these credentials. A request without them gets 401 with `WWW-Authenticate: Basic`. The check applies before the rules, so functions and redirects need the credentials too. WebSocket upgrades also need them.
+- `trailingSlash` - `"redirect"`: a path that ends with `/` (except `/`) gets a 301 to the path without the trailing slashes, with the query string. A path that a rule answers is not redirected. `"none"` (the default): no redirect.
+
+The order is the order of the edge: global headers, basic authentication, rules, the trailing-slash redirect, then static content.
+
+`quant/serve.json` is local only. No deploy command reads it, and `quant deploy` never uploads it. `quant serve` never prints the password. Do not put a production password in the file. A file with the wrong shape stops `quant serve` at start-up, with a message that names the field. With `--watch`, `quant serve` reads the file again when it changes. If the new file has the wrong shape, `quant serve` prints the message and keeps the last valid settings.
 
 ## Edge libraries in quant serve
 
