@@ -9,6 +9,15 @@ const A = 'c3d4e5f6-0001-4000-8000-000000000001';
 const B = 'c3d4e5f6-0002-4000-8000-000000000002';
 const ON = { project_settings: { enable_inline_fn: true } };
 
+function bytesPage(bytes, headers = {}) {
+  return new Response(bytes, {
+    status: 200,
+    headers: { 'content-type': 'text/html; charset=UTF-8', etag: '"1"', 'content-length': String(bytes.length), ...headers }
+  });
+}
+
+const BOM = [0xef, 0xbb, 0xbf];
+
 function page(body, headers = {}) {
   return new Response(body, {
     status: 200,
@@ -115,13 +124,38 @@ describe('serve inline functions', () => {
       expect(response.headers.get('content-type')).to.equal('text/html; charset=utf-8');
       expect(response.headers.get('etag')).to.equal(null);
       expect(response.headers.get('last-modified')).to.equal(null);
-      expect(response.headers.get('content-length')).to.equal(null);
+      expect(response.headers.get('content-length')).to.equal(String(Buffer.byteLength('<p>Hello</p>')));
     });
 
     it('makes a page private when no function ran', async () => {
       const response = await applyInline(page('<p>{{QUANT_FN:x}}</p>', { 'cache-control': 'public, max-age=60' }), output('unused'));
       expect(await response.text()).to.equal('<p>{{QUANT_FN:x}}</p>');
       expect(response.headers.get('cache-control')).to.equal('private, max-age=0');
+    });
+
+    it('sends a page with a BOM and no token byte for byte, with its headers', async () => {
+      const bytes = new Uint8Array([...BOM, ...Buffer.from('<p>plain utf8 bom</p>')]);
+      const response = await applyInline(bytesPage(bytes), output('unused'));
+      expect(Buffer.from(await response.arrayBuffer()).equals(Buffer.from(bytes))).to.equal(true);
+      expect(response.headers.get('content-length')).to.equal(String(bytes.length));
+      expect(response.headers.get('etag')).to.equal('"1"');
+    });
+
+    it('sends a page with bytes that are not UTF-8 and no token byte for byte', async () => {
+      const bytes = new Uint8Array([...Buffer.from('<p>caf'), 0xe9, 0xff, ...Buffer.from('</p>')]);
+      const response = await applyInline(bytesPage(bytes), output('unused'));
+      expect(Buffer.from(await response.arrayBuffer()).equals(Buffer.from(bytes))).to.equal(true);
+      expect(response.headers.get('content-length')).to.equal(String(bytes.length));
+    });
+
+    it('keeps the BOM of a page with a token and gives the new content-length', async () => {
+      const bytes = new Uint8Array([...BOM, ...Buffer.from(`<p>{{QUANT_FN:${A}}} é</p>`)]);
+      const response = await applyInline(bytesPage(bytes), output('Hello ü'));
+      const body = Buffer.from(await response.arrayBuffer());
+      const expected = Buffer.from([...BOM, ...Buffer.from('<p>Hello ü é</p>')]);
+      expect(body.equals(expected)).to.equal(true);
+      expect(response.headers.get('content-length')).to.equal(String(expected.length));
+      expect(response.headers.get('etag')).to.equal(null);
     });
 
     it('leaves a page without a token as it is', async () => {
@@ -183,6 +217,17 @@ describe('serve inline functions', () => {
       const res = await fetch(`${server.url}/about/?q=1`, { headers: { 'x-test': 'yes' } });
       expect(await res.text()).to.equal('<div>/about/?q=1 GET yes</div>');
       expect(res.headers.get('quant-server')).to.equal('QuantCDN (quant serve)');
+    });
+
+    it('sends a page with a BOM and no token whole, with its length', async () => {
+      project({ functions: [echo] });
+      fs.mkdirSync(path.join(tmp, 'dist', 'bom'), { recursive: true });
+      const bytes = Buffer.from([...BOM, ...Buffer.from('<p>plain utf8 bom</p>')]);
+      fs.writeFileSync(path.join(tmp, 'dist', 'bom', 'index.html'), bytes);
+      const server = await start();
+      const res = await fetch(`${server.url}/bom`);
+      expect(res.headers.get('content-length')).to.equal(String(bytes.length));
+      expect(Buffer.from(await res.arrayBuffer()).equals(bytes)).to.equal(true);
     });
 
     it('answers a HEAD for a page with a token with the page headers and no body', async () => {

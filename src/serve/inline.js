@@ -14,6 +14,8 @@ const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const SETTINGS_KEYS = ['enable_inline_fn'];
 const PRIVATE = 'private, max-age=0';
 const HTML = 'text/html; charset=utf-8';
+// The scan keeps a BOM in the text, so a page with tokens keeps it too.
+const DECODER = new TextDecoder('utf-8', { ignoreBOM: true });
 // Response headers that a function cannot set.
 const PROTECTED = ['quant-server', 'age'];
 
@@ -114,11 +116,12 @@ function mergeFunctionHeaders(target, source) {
 
 // The page headers: the headers of the last function that ran win. When no
 // function ran, the page is private.
-function pageHeaders(source, lastHeaders) {
+function pageHeaders(source, lastHeaders, length) {
   const headers = new Headers(source);
   if (lastHeaders) mergeFunctionHeaders(headers, lastHeaders);
   else headers.set('cache-control', PRIVATE);
-  for (const name of ['etag', 'last-modified', 'content-length']) headers.delete(name);
+  for (const name of ['etag', 'last-modified']) headers.delete(name);
+  headers.set('content-length', String(length));
   headers.set('content-type', HTML);
   return headers;
 }
@@ -126,17 +129,19 @@ function pageHeaders(source, lastHeaders) {
 /**
  * Replace the tokens of an HTML page response. Each distinct UUID runs once,
  * one at a time, in document order. Every copy of its token is replaced by
- * the output text, which is not scanned for tokens again.
+ * the output text, which is not scanned for tokens again. A page without a
+ * token is sent with its original bytes and headers.
  * @param {Response} response The page.
  * @param {(uuid: string) => Promise<{ text: string, headers?: Headers }>} run
  *   The output of one token; `headers` only when a function ran.
  * @returns {Promise<Response>}
  */
 export async function applyInline(response, run) {
-  const body = await response.text();
+  const bytes = new Uint8Array(await response.arrayBuffer());
+  const body = DECODER.decode(bytes);
   const init = { status: response.status, statusText: response.statusText };
   const { uuids, hit } = tokenUuids(body);
-  if (!hit) return new Response(body, { ...init, headers: response.headers });
+  if (!hit) return new Response(bytes, { ...init, headers: response.headers });
   const outputs = new Map();
   let lastHeaders = null;
   for (const uuid of uuids) {
@@ -148,5 +153,6 @@ export async function applyInline(response, run) {
     const text = outputs.get(inner.toLowerCase());
     return text === undefined ? token : text;
   });
-  return new Response(replaced, { ...init, headers: pageHeaders(response.headers, lastHeaders) });
+  const output = new TextEncoder().encode(replaced);
+  return new Response(output, { ...init, headers: pageHeaders(response.headers, lastHeaders, output.byteLength) });
 }
