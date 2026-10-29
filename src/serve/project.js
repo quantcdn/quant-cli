@@ -11,13 +11,15 @@ import { assertManifest } from '../helper/functions-manifest.js';
 import { resolveRules, ruleErrors, toRuntimeRule } from '../helper/edge-rules-manifest.js';
 import { parseMeta } from '../helper/quant-meta.js';
 import { readInlineSetting } from './inline.js';
+import { readServeConfig, SERVE_CONFIG } from './project-config.js';
 import { orderRules } from './rules.js';
 
 export const DEFAULT_FILES = Object.freeze({
   functions: 'quant/edge-functions.json',
   rules: 'quant/edge-rules.json',
   meta: 'quant/meta.json',
-  fixtures: 'quant/kv-fixtures'
+  fixtures: 'quant/kv-fixtures',
+  serve: SERVE_CONFIG
 });
 
 export const WATCH_DEBOUNCE_MS = 300;
@@ -89,11 +91,13 @@ function ruleWarning(rule, fn, source) {
  * @returns {{ functions: Map<string, Object>, rules: Object[], stores: Object[], fixtures: string, inlineFunctions: boolean, warnings: string[] }}
  *   functions is keyed by lowercase uuid; rules are runtime rules in run order.
  *   inlineFunctions: project_settings.enable_inline_fn in meta.json.
+ *   settings: the local project settings from serve.json (see project-config.js).
  */
-export function loadProject({ root, functions = DEFAULT_FILES.functions, rules = DEFAULT_FILES.rules, meta = DEFAULT_FILES.meta, fixtures = DEFAULT_FILES.fixtures }) {
+export function loadProject({ root, functions = DEFAULT_FILES.functions, rules = DEFAULT_FILES.rules, meta = DEFAULT_FILES.meta, fixtures = DEFAULT_FILES.fixtures, serve = DEFAULT_FILES.serve }) {
   const manifest = readFunctions(root, functions);
   const runtimeRules = readRules(root, rules, manifest);
   const map = functionMap(root, manifest);
+  const settings = readServeConfig(root, serve);
   const warnings = runtimeRules.map((rule) => ruleWarning(rule, map.get(rule.fnUuid), functions)).filter(Boolean);
   return {
     functions: map,
@@ -101,7 +105,8 @@ export function loadProject({ root, functions = DEFAULT_FILES.functions, rules =
     stores: readStores(root, meta),
     fixtures: path.resolve(root, fixtures),
     inlineFunctions: readInlineSetting(root, meta),
-    warnings
+    settings,
+    warnings: [...warnings, ...settings.warnings]
   };
 }
 

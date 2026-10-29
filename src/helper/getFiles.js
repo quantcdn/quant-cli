@@ -4,7 +4,7 @@
 
 import fs from 'fs';
 import { promisify } from 'util';
-import { resolve, basename } from 'path';
+import { resolve, basename, dirname } from 'path';
 
 const readdir = promisify(fs.readdir);
 const stat = promisify(fs.stat);
@@ -51,12 +51,20 @@ function isQuantJson(file) {
 }
 
 /**
+ * True for quant/serve.json (any case): the local settings of `quant serve`.
+ * It can hold a basic authentication password, and it is never deployed.
+ */
+function isServeConfig(file) {
+  return basename(file).toLowerCase() === 'serve.json' && basename(dirname(file)).toLowerCase() === 'quant';
+}
+
+/**
  * Build a path test. Extra exclusions are regex sources. No global flag,
  * so no state is shared between calls.
  */
 function buildExclusionTest(exclusions) {
   const extra = exclusions.length ? new RegExp(exclusions.join('|'), 'i') : null;
-  return (file) => isQuantJson(file) || (extra !== null && extra.test(file));
+  return (file) => isQuantJson(file) || isServeConfig(file) || (extra !== null && extra.test(file));
 }
 
 export default getFiles;

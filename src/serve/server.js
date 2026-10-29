@@ -17,6 +17,7 @@ import { loadProjectLibraries } from './edge-libraries.js';
 import { createExecutor, authContinueHeaders, readCappedBody, DEFAULT_TIMEOUT_MS } from './functions.js';
 import { applyInline, isHtmlFile, refusal } from './inline.js';
 import { loadProject, watchProject } from './project.js';
+import { basicAuthResponse, globalHeaderObject, trailingSlashRedirect, withGlobalHeaders } from './project-config.js';
 import { matchRules, matchFilter } from './rules.js';
 import { startWatchdog } from './watchdog.js';
 import { buildIndex, containsProject, findOnDisk, lookup, serveStatic, notFound, NOT_SERVED } from './static.js';
@@ -235,7 +236,7 @@ async function functionStage(state, ctx, rule, fn) {
     state.log(`Rule ${rule.id}: function ${rule.fnUuid} is not in the functions manifest.`);
     return new Response(null, { status: 500 });
   }
-  return state.executor.run(fn, await functionContext(state, ctx, 'function'));
+  return state.executor.run(fn, { ...(await functionContext(state, ctx, 'function')), baseHeaders: globalHeaderObject(state.project.settings) });
 }
 
 // The matching rules run in order. An auth 201 continues to the next rule;
@@ -363,7 +364,8 @@ async function inlineOutput(state, ctx, uuid) {
   if (!fn) return { text: `Unable to find edge function with uuid: ${uuid}` };
   const refused = refusal(fn.type);
   if (refused) return { text: refused };
-  const response = await state.executor.run(fn, { ...(await functionContext(state, ctx, 'function')), inline: true });
+  const baseHeaders = globalHeaderObject(state.project.settings);
+  const response = await state.executor.run(fn, { ...(await functionContext(state, ctx, 'function')), inline: true, baseHeaders });
   return { text: await response.text(), headers: response.headers };
 }
 
@@ -373,17 +375,29 @@ function inlineStage(state, ctx, response) {
   return applyInline(response, (uuid) => inlineOutput(state, ctx, uuid));
 }
 
+// The site pipeline, in the order of the Quant edge: global headers, basic
+// authentication, rules, the trailing-slash redirect, then the dev server,
+// static content or the 404 page. A function response keeps its own headers
+// over the global headers. The redirect has no global headers.
+async function siteResponse(state, ctx) {
+  const settings = state.project.settings;
+  const denied = basicAuthResponse(settings, ctx.req.headers.authorization);
+  if (denied) return denied;
+  const ruled = await ruleStage(state, ctx);
+  if (ruled) return filterStage(state, ctx, withGlobalHeaders(ruled, settings, false));
+  const redirect = trailingSlashRedirect(settings, ctx.sentPath, ctx.search);
+  if (redirect) return redirect;
+  const response = await devServerStage(state, ctx) || staticStage(state, ctx) || notFoundStage(state);
+  return inlineStage(state, ctx, await filterStage(state, ctx, withGlobalHeaders(response, settings)));
+}
+
 async function respond(state, ctx) {
   if (!hostAllowed(state, ctx.req)) return text(421, MISDIRECTED, { 'cache-control': 'no-store' });
   if (ctx.badPath) return text(400, BAD_PATH, { 'cache-control': 'no-store' });
   if (isControlPath(ctx.pathname)) {
     return state.control({ method: ctx.method, pathname: ctx.pathname, remoteAddress: ctx.remoteAddress, headers: ctx.req.headers });
   }
-  const response = await ruleStage(state, ctx)
-    || await devServerStage(state, ctx)
-    || staticStage(state, ctx)
-    || notFoundStage(state);
-  return inlineStage(state, ctx, await filterStage(state, ctx, response));
+  return siteResponse(state, ctx);
 }
 
 // --- Headers and send ------------------------------------------------------------
@@ -489,6 +503,8 @@ function upgradeAllowed(state, req) {
 // response of an auth that does not answer 201 ends the upgrade. Function
 // rules do not run for an upgrade. An upgrade has no body.
 async function upgradeAuth(state, req) {
+  const denied = basicAuthResponse(state.project.settings, req.headers.authorization);
+  if (denied) return denied;
   const ctx = { ...requestContext(state, req), bodyStreamed: true };
   for (const rule of matchRules(state.project.rules, matchContext(ctx))) {
     if (rule.type !== 'auth') continue;
@@ -518,7 +534,7 @@ async function upgradeRefusal(state, req) {
 }
 
 // WebSocket upgrades go to the dev server (for example, Vite HMR), after
-// the auth rules of the path.
+// basic authentication and the auth rules of the path.
 async function handleUpgrade(state, req, socket, head) {
   socket.on('error', () => socket.destroy());
   if (!upgradeAllowed(state, req)) {

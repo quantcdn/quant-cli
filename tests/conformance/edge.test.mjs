@@ -1,5 +1,5 @@
-// The @quantcdn/edge-conformance rules, static and functions vectors,
-// run in process against quant serve.
+// The @quantcdn/edge-conformance vectors (rules, static, functions, inline
+// and project), run in process against quant serve.
 
 import { expect } from 'chai';
 import { loadCases, run, SUITE_TAGS } from '@quantcdn/edge-conformance';
