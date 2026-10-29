@@ -15,6 +15,7 @@ import { storeId } from '../helper/quant-meta.js';
 import { controlRoutes, isControlPath } from './control.js';
 import { loadProjectLibraries } from './edge-libraries.js';
 import { createExecutor, authContinueHeaders, readCappedBody, DEFAULT_TIMEOUT_MS } from './functions.js';
+import { applyInline, isHtmlFile, refusal } from './inline.js';
 import { loadProject, watchProject } from './project.js';
 import { matchRules, matchFilter } from './rules.js';
 import { startWatchdog } from './watchdog.js';
@@ -172,7 +173,8 @@ function requestContext(state, req) {
     remoteAddress: req.socket.remoteAddress,
     bodyPending: null,
     bodyStreamed: false,
-    authHeaders: null
+    authHeaders: null,
+    inlinePage: false
   };
 }
 
@@ -310,9 +312,24 @@ function staticFile(state, ctx) {
   return findOnDisk(state.dir, state.root, ctx.pathname);
 }
 
+// With inline functions on, an HTML page is read whole (no range, also for
+// HEAD), so that its tokens can be replaced.
 function staticStage(state, ctx) {
   const file = staticFile(state, ctx);
-  return file ? serveStatic(file, ctx.method, ctx.req.headers.range) : null;
+  if (!file) return null;
+  if (state.project.inlineFunctions && isHtmlFile(file.path)) {
+    ctx.inlinePage = true;
+    return serveStatic(file, 'GET', null);
+  }
+  return serveStatic(file, ctx.method, ctx.req.headers.range);
+}
+
+// The dev server stands in for the static site, so its 200 HTML pages get
+// inline functions too.
+async function devServerStage(state, ctx) {
+  const response = await proxyStage(state, ctx);
+  if (response && state.project.inlineFunctions && response.status === 200 && isHtml(response)) ctx.inlinePage = true;
+  return response;
 }
 
 function notFoundStage(state) {
@@ -338,6 +355,24 @@ async function filterStage(state, ctx, response) {
   return state.executor.run(fn, { ...(await functionContext(state, ctx, 'filter')), response });
 }
 
+// The output of one inline token: the body of a request function, a refusal
+// for another type, or a message for a UUID with no function. The function
+// gets the page request.
+async function inlineOutput(state, ctx, uuid) {
+  const fn = state.project.functions.get(uuid);
+  if (!fn) return { text: `Unable to find edge function with uuid: ${uuid}` };
+  const refused = refusal(fn.type);
+  if (refused) return { text: refused };
+  const response = await state.executor.run(fn, { ...(await functionContext(state, ctx, 'function')), inline: true });
+  return { text: await response.text(), headers: response.headers };
+}
+
+// Tokens are replaced after the content filter, in static pages only.
+function inlineStage(state, ctx, response) {
+  if (!ctx.inlinePage) return response;
+  return applyInline(response, (uuid) => inlineOutput(state, ctx, uuid));
+}
+
 async function respond(state, ctx) {
   if (!hostAllowed(state, ctx.req)) return text(421, MISDIRECTED, { 'cache-control': 'no-store' });
   if (ctx.badPath) return text(400, BAD_PATH, { 'cache-control': 'no-store' });
@@ -345,10 +380,10 @@ async function respond(state, ctx) {
     return state.control({ method: ctx.method, pathname: ctx.pathname, remoteAddress: ctx.remoteAddress, headers: ctx.req.headers });
   }
   const response = await ruleStage(state, ctx)
-    || await proxyStage(state, ctx)
+    || await devServerStage(state, ctx)
     || staticStage(state, ctx)
     || notFoundStage(state);
-  return filterStage(state, ctx, response);
+  return inlineStage(state, ctx, await filterStage(state, ctx, response));
 }
 
 // --- Headers and send ------------------------------------------------------------
