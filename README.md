@@ -340,6 +340,7 @@ What is different from the edge:
 - On the edge, a page with inline functions on also gets a client script for `<quant-island>` elements. `quant serve` does not add this script.
 - The "Allow Inline Functions" option of a proxy rule is not in the rules manifest, so `quant serve` does not process proxy rule responses.
 - If a function fails, the terminal shows the error, and the token is replaced by an empty string.
+- A page over 10 MB is sent without inline function output, and a function output over 10 MB is replaced by an empty string. The terminal shows a warning.
 
 ## Local project settings (quant/serve.json)
 

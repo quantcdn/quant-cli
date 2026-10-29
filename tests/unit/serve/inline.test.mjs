@@ -2,7 +2,7 @@ import { expect } from 'chai';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import { inlineSetting, readInlineSetting, tokenUuids, applyInline } from '../../../src/serve/inline.js';
+import { inlineSetting, readInlineSetting, tokenUuids, applyInline, MAX_INLINE_BYTES } from '../../../src/serve/inline.js';
 import { startServer } from '../../../src/serve/server.js';
 
 const A = 'c3d4e5f6-0001-4000-8000-000000000001';
@@ -161,6 +161,25 @@ describe('serve inline functions', () => {
     it('makes a page private when the function that ran gave no cache-control', async () => {
       const response = await applyInline(page(`<p>{{QUANT_FN:${A}}}</p>`, { 'cache-control': 'no-store' }), output('', {}));
       expect(response.headers.get('cache-control')).to.equal('private, max-age=0');
+    });
+
+    it('sends a page over 10 MB unchanged, with a warning', async () => {
+      const big = `<p>{{QUANT_FN:${A}}}</p>${'x'.repeat(MAX_INLINE_BYTES)}`;
+      const warnings = [];
+      let ran = false;
+      const response = await applyInline(page(big), async () => { ran = true; return { text: 'Hello' }; }, (line) => warnings.push(line));
+      expect(await response.text()).to.equal(big);
+      expect(ran).to.equal(false);
+      expect(warnings).to.have.length(1);
+      expect(warnings[0]).to.match(/larger than 10 MB/);
+    });
+
+    it('inserts an empty string for a function output over 10 MB, with a warning', async () => {
+      const warnings = [];
+      const response = await applyInline(page(`<p>{{QUANT_FN:${A}}}</p>`), output('y'.repeat(MAX_INLINE_BYTES + 1), {}), (line) => warnings.push(line));
+      expect(await response.text()).to.equal('<p></p>');
+      expect(warnings).to.have.length(1);
+      expect(warnings[0]).to.include(A);
     });
 
     it('leaves a page without a token as it is', async () => {

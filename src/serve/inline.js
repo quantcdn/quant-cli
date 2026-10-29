@@ -16,6 +16,8 @@ const PRIVATE = 'private, max-age=0';
 const HTML = 'text/html; charset=utf-8';
 // The scan keeps a BOM in the text, so a page with tokens keeps it too.
 const DECODER = new TextDecoder('utf-8', { ignoreBOM: true });
+/** The largest page, and the largest function output, that inline functions process. */
+export const MAX_INLINE_BYTES = 10 * 1024 * 1024;
 // Response headers that a function cannot set.
 const PROTECTED = ['quant-server', 'age'];
 
@@ -126,29 +128,44 @@ function pageHeaders(source, lastHeaders, length) {
   return headers;
 }
 
-/**
- * Replace the tokens of an HTML page response. Each distinct UUID runs once,
- * one at a time, in document order. Every copy of its token is replaced by
- * the output text, which is not scanned for tokens again. A page without a
- * token is sent with its original bytes and headers.
- * @param {Response} response The page.
- * @param {(uuid: string) => Promise<{ text: string, headers?: Headers }>} run
- *   The output of one token; `headers` only when a function ran.
- * @returns {Promise<Response>}
- */
-export async function applyInline(response, run) {
-  const bytes = new Uint8Array(await response.arrayBuffer());
-  const body = DECODER.decode(bytes);
-  const init = { status: response.status, statusText: response.statusText };
-  const { uuids, hit } = tokenUuids(body);
-  if (!hit) return new Response(bytes, { ...init, headers: response.headers });
+// Run each function once, in order. An output over the cap is replaced by
+// an empty string.
+async function runTokens(uuids, run, log) {
   const outputs = new Map();
   let lastHeaders = null;
   for (const uuid of uuids) {
     const output = await run(uuid);
-    outputs.set(uuid, output.text);
+    const tooLarge = Buffer.byteLength(output.text) > MAX_INLINE_BYTES;
+    if (tooLarge) log(`The output of inline function ${uuid} is larger than 10 MB. quant serve inserts an empty string.`);
+    outputs.set(uuid, tooLarge ? '' : output.text);
     if (output.headers) lastHeaders = output.headers;
   }
+  return { outputs, lastHeaders };
+}
+
+/**
+ * Replace the tokens of an HTML page response. Each distinct UUID runs once,
+ * one at a time, in document order. Every copy of its token is replaced by
+ * the output text, which is not scanned for tokens again. A page without a
+ * token, or a page over 10 MB, is sent with its original bytes and headers.
+ * @param {Response} response The page.
+ * @param {(uuid: string) => Promise<{ text: string, headers?: Headers }>} run
+ *   The output of one token; `headers` only when a function ran.
+ * @param {(line: string) => void} [log] Writes a warning to the terminal.
+ * @returns {Promise<Response>}
+ */
+export async function applyInline(response, run, log = () => {}) {
+  const bytes = new Uint8Array(await response.arrayBuffer());
+  const init = { status: response.status, statusText: response.statusText };
+  const unchanged = () => new Response(bytes, { ...init, headers: response.headers });
+  if (bytes.byteLength > MAX_INLINE_BYTES) {
+    log('The page is larger than 10 MB. quant serve sends it without inline function output.');
+    return unchanged();
+  }
+  const body = DECODER.decode(bytes);
+  const { uuids, hit } = tokenUuids(body);
+  if (!hit) return unchanged();
+  const { outputs, lastHeaders } = await runTokens(uuids, run, log);
   const replaced = body.replace(TOKEN, (token, inner) => {
     const text = outputs.get(inner.toLowerCase());
     return text === undefined ? token : text;

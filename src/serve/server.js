@@ -374,7 +374,7 @@ async function inlineOutput(state, ctx, uuid) {
 // Tokens are replaced after the content filter, in static pages only.
 function inlineStage(state, ctx, response) {
   if (!ctx.inlinePage) return response;
-  return applyInline(response, (uuid) => inlineOutput(state, ctx, uuid));
+  return applyInline(response, (uuid) => inlineOutput(state, ctx, uuid), state.log);
 }
 
 // The site pipeline, in the order of the Quant edge: global headers, basic
