@@ -10,6 +10,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { startServer } from '../../../src/serve/server.js';
 import { controlRoutes, isControlPath } from '../../../src/serve/control.js';
+import { createVirtualClock } from '@quantcdn/edge-kv';
 import { loadProject } from '../../../src/serve/project.js';
 import { MAX_REQUEST_BODY_BYTES } from '../../../src/serve/functions.js';
 import { openLocalKv } from '../../../src/serve/kv/wire.js';
@@ -833,11 +834,93 @@ describe('serve control route', () => {
     }
   });
 
-  it('gives 404 for the clock and archive routes in this release', async () => {
-    for (const pathname of ['/_quant_serve/clock/advance', '/_quant_serve/ledger/archive-now']) {
-      const res = await routes({ method: 'POST', pathname, remoteAddress: '127.0.0.1', headers: CONTROL_HEADERS });
-      expect(res.status).to.equal(404);
+  it('gives 404 for an unknown control path', async () => {
+    const res = await routes({ method: 'POST', pathname: '/_quant_serve/clock/advance', remoteAddress: '127.0.0.1', headers: CONTROL_HEADERS });
+    expect(res.status).to.equal(404);
+  });
+
+  describe('with a backend', () => {
+    const NAMES = new Map([['audit', 'acme-site-audit']]);
+    let kv;
+
+    beforeEach(async () => {
+      kv = await openLocalKv({
+        root: ORBIT, org: 'acme', project: 'site', memory: true, clock: createVirtualClock(Date.UTC(2026, 9, 1)),
+        stores: [{ name: 'audit', indexes: [], initialValues: [] }],
+        ledgers: [{ store: 'audit', defs: [{ name: 'events', collection: 'events', chains: 1, retentionDays: 30 }] }]
+      });
+    });
+
+    function call(clock, method, pathname, body) {
+      const control = controlRoutes({ clock, backend: kv.backend, stores: () => NAMES });
+      const bytes = body === undefined ? null : new TextEncoder().encode(typeof body === 'string' ? body : JSON.stringify(body));
+      return control({ method, pathname, remoteAddress: '127.0.0.1', headers: CONTROL_HEADERS, body: async () => bytes });
     }
+
+    it('gives the public key, the clock mode and the time in /_quant_serve/info', async () => {
+      const info = await (await call('manual', 'GET', '/_quant_serve/info')).json();
+      expect(info.clock).to.equal('manual');
+      expect(info.now).to.equal(Date.UTC(2026, 9, 1));
+      expect(info.publicKey).to.equal(kv.backend.publicKey());
+      expect(info.publicKey).to.match(/^-----BEGIN PUBLIC KEY-----/);
+    });
+
+    it('moves the manual clock with advanceMs and setMs', async () => {
+      const advanced = await call('manual', 'POST', '/_quant_serve/clock', { advanceMs: 60000 });
+      expect(advanced.status).to.equal(200);
+      expect(await advanced.json()).to.deep.equal({ now: Date.UTC(2026, 9, 1) + 60000 });
+      const set = await call('manual', 'POST', '/_quant_serve/clock', { setMs: Date.UTC(2027, 0, 1) });
+      expect(await set.json()).to.deep.equal({ now: Date.UTC(2027, 0, 1) });
+      expect(kv.backend.now()).to.equal(Date.UTC(2027, 0, 1));
+    });
+
+    it('refuses the clock route with --clock real', async () => {
+      const res = await call('real', 'POST', '/_quant_serve/clock', { advanceMs: 1000 });
+      expect(res.status).to.equal(409);
+      expect(await res.text()).to.include('--clock manual');
+      expect(kv.backend.now()).to.equal(Date.UTC(2026, 9, 1));
+    });
+
+    it('refuses a clock body that is not one whole number of milliseconds', async () => {
+      for (const body of ['{', [], {}, { advanceMs: -1 }, { advanceMs: 1.5 }, { setMs: '1' }, { advanceMs: 1, setMs: 1 }, undefined]) {
+        const res = await call('manual', 'POST', '/_quant_serve/clock', body);
+        expect(res.status, JSON.stringify(body)).to.equal(400);
+        expect(await res.text()).to.include('advanceMs');
+      }
+    });
+
+    it('archives the ledgers of a store now', async () => {
+      const receipt = await kv.kvStore.append('acme-site-audit', 'events', { what: 'login' });
+      expect((await kv.kvStore.ledgerProof('acme-site-audit', 'events', receipt.key)).status).to.equal('pending');
+      const res = await call('manual', 'POST', '/_quant_serve/ledger/archive-now', { store: 'audit' });
+      expect(res.status).to.equal(200);
+      expect(await res.json()).to.deep.equal({ archived: true });
+      expect((await kv.kvStore.ledgerProof('acme-site-audit', 'events', receipt.key)).status).to.equal('archived');
+    });
+
+    it('reads the request body of a control route over HTTP', async () => {
+      const server = await startServer({
+        root: ORBIT, dir: 'dist', port: 0, host: '127.0.0.1', org: 'acme', project: 'site',
+        kvStore: kv.kvStore, backend: kv.backend, clock: 'manual', log: () => {}
+      });
+      try {
+        const res = await fetch(`${server.url}/_quant_serve/clock`, {
+          method: 'POST', headers: { ...CONTROL_HEADERS, 'content-type': 'application/json' }, body: JSON.stringify({ advanceMs: 5000 })
+        });
+        expect(await res.json()).to.deep.equal({ now: Date.UTC(2026, 9, 1) + 5000 });
+        const info = await (await fetch(`${server.url}/_quant_serve/info`, { headers: CONTROL_HEADERS })).json();
+        expect(info).to.include({ clock: 'manual', now: Date.UTC(2026, 9, 1) + 5000, org: 'acme' });
+      } finally {
+        await server.close();
+      }
+    });
+
+    it('gives 404 to archive-now for a store that meta.json does not declare', async () => {
+      for (const body of [{ store: 'other' }, {}, 'nope']) {
+        const res = await call('real', 'POST', '/_quant_serve/ledger/archive-now', body);
+        expect(res.status, JSON.stringify(body)).to.equal(404);
+      }
+    });
   });
 });
 

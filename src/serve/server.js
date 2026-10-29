@@ -342,7 +342,10 @@ async function respond(state, ctx) {
   if (!hostAllowed(state, ctx.req)) return text(421, MISDIRECTED, { 'cache-control': 'no-store' });
   if (ctx.badPath) return text(400, BAD_PATH, { 'cache-control': 'no-store' });
   if (isControlPath(ctx.pathname)) {
-    return state.control({ method: ctx.method, pathname: ctx.pathname, remoteAddress: ctx.remoteAddress, headers: ctx.req.headers });
+    return state.control({
+      method: ctx.method, pathname: ctx.pathname, remoteAddress: ctx.remoteAddress, headers: ctx.req.headers,
+      body: () => functionRequestBody(ctx)
+    });
   }
   const response = await ruleStage(state, ctx)
     || await proxyStage(state, ctx)
@@ -581,6 +584,9 @@ function createState(options) {
     watch: { enter: (uuid) => state.watchdog && state.watchdog.enter(uuid), leave: (token) => state.watchdog && state.watchdog.leave(token) }
   });
   state.control = controlRoutes({
+    clock: options.clock || 'real',
+    backend: options.backend || null,
+    stores: () => new Map(storeList(state).map((store) => [store.name, store.id])),
     info: () => ({ version: VERSION, org: state.org, project: state.projectName, stores: storeList(state).map((s) => s.id) })
   });
   return state;
@@ -619,7 +625,8 @@ function closer(state, server, cleanups) {
  * Start the server.
  * @param {Object} options The parsed flags plus root and kvStore:
  *   root, dir, port, host, functions, rules, meta, fixtures, org, project,
- *   domain, proxy, watch, geo, clientIp, timeoutMs, kvStore, log, onSourceChange.
+ *   domain, proxy, watch, geo, clientIp, timeoutMs, kvStore, log, onSourceChange,
+ *   backend (the local KV backend, for the control route) and clock ('real' or 'manual').
  * @returns {Promise<{ url: string, close: () => Promise<void>, setRunPid: (pid: number) => void, summary: Object }>}
  *   setRunPid: the --run process group that the watchdog ends when a function blocks the server.
  *   summary: { stores, rules, libraries, warnings } for the start-up output.
