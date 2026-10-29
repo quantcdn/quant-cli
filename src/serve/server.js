@@ -366,7 +366,9 @@ async function inlineOutput(state, ctx, uuid) {
   if (refused) return { text: refused };
   const baseHeaders = globalHeaderObject(state.project.settings);
   const response = await state.executor.run(fn, { ...(await functionContext(state, ctx, 'function')), inline: true, baseHeaders });
-  return { text: await response.text(), headers: response.headers };
+  // A failed function gives a bare 500: the page then has the global headers only.
+  const headers = response.headers.has('cache-control') ? response.headers : new Headers(baseHeaders);
+  return { text: await response.text(), headers };
 }
 
 // Tokens are replaced after the content filter, in static pages only.

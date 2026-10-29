@@ -115,11 +115,11 @@ function mergeFunctionHeaders(target, source) {
 }
 
 // The page headers: the headers of the last function that ran win. When no
-// function ran, the page is private.
+// function ran, or it gave no cache-control, the page is private.
 function pageHeaders(source, lastHeaders, length) {
   const headers = new Headers(source);
   if (lastHeaders) mergeFunctionHeaders(headers, lastHeaders);
-  else headers.set('cache-control', PRIVATE);
+  if (!lastHeaders || !lastHeaders.has('cache-control')) headers.set('cache-control', PRIVATE);
   for (const name of ['etag', 'last-modified']) headers.delete(name);
   headers.set('content-length', String(length));
   headers.set('content-type', HTML);

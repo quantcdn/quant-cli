@@ -158,6 +158,11 @@ describe('serve inline functions', () => {
       expect(response.headers.get('etag')).to.equal(null);
     });
 
+    it('makes a page private when the function that ran gave no cache-control', async () => {
+      const response = await applyInline(page(`<p>{{QUANT_FN:${A}}}</p>`, { 'cache-control': 'no-store' }), output('', {}));
+      expect(response.headers.get('cache-control')).to.equal('private, max-age=0');
+    });
+
     it('leaves a page without a token as it is', async () => {
       const response = await applyInline(page('<p>plain</p>'), output('unused'));
       expect(await response.text()).to.equal('<p>plain</p>');
@@ -228,6 +233,20 @@ describe('serve inline functions', () => {
       const res = await fetch(`${server.url}/bom`);
       expect(res.headers.get('content-length')).to.equal(String(bytes.length));
       expect(Buffer.from(await res.arrayBuffer()).equals(bytes)).to.equal(true);
+    });
+
+    it('makes a page private when its inline function fails, unless a global header sets cache-control', async () => {
+      const broken = { id: 'broken', uuid: A, body: "throw new Error('boom');" };
+      project({ files: { 'index.html': `<p>{{QUANT_FN:${A}}}</p>` }, functions: [broken] });
+      let server = await start();
+      let res = await fetch(`${server.url}/`);
+      expect(await res.text()).to.equal('<p></p>');
+      expect(res.headers.get('cache-control')).to.equal('private, max-age=0');
+      expect(lines.join('\n')).to.include('boom');
+      fs.writeFileSync(path.join(tmp, 'quant', 'serve.json'), JSON.stringify({ globalHeaders: { 'cache-control': 'public, max-age=60' } }));
+      server = await start();
+      res = await fetch(`${server.url}/`);
+      expect(res.headers.get('cache-control')).to.equal('public, max-age=60');
     });
 
     it('answers a HEAD for a page with a token with the page headers and no body', async () => {
