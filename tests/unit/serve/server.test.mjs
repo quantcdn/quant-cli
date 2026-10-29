@@ -874,6 +874,18 @@ describe('serve control route', () => {
       expect(kv.backend.now()).to.equal(Date.UTC(2027, 0, 1));
     });
 
+    it('refuses a clock target outside the Date range', async () => {
+      const MAX_DATE_MS = 8.64e15;
+      for (const body of [{ advanceMs: Number.MAX_SAFE_INTEGER }, { setMs: MAX_DATE_MS + 1 }, { advanceMs: MAX_DATE_MS }]) {
+        const res = await call('manual', 'POST', '/_quant_serve/clock', body);
+        expect(res.status, JSON.stringify(body)).to.equal(400);
+        expect(await res.text()).to.include('Date range');
+      }
+      expect(kv.backend.now()).to.equal(Date.UTC(2026, 9, 1));
+      const edge = await call('manual', 'POST', '/_quant_serve/clock', { setMs: MAX_DATE_MS });
+      expect(await edge.json()).to.deep.equal({ now: MAX_DATE_MS });
+    });
+
     it('refuses the clock route with --clock real', async () => {
       const res = await call('real', 'POST', '/_quant_serve/clock', { advanceMs: 1000 });
       expect(res.status).to.equal(409);
