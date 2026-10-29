@@ -403,6 +403,24 @@ describe('serve server', () => {
       expect(lines.filter((line) => line === warning)).to.have.length(1);
     });
 
+    it('does not serve quant/serve.json or quant/kv-ledgers.json from the site at any depth', async () => {
+      const files = {
+        'quant/serve.json': '{"basicAuth":{"password":"x"}}', 'deep/Quant/KV-Ledgers.json': '{}',
+        'quant/other.json': 'kept', 'serve.json': 'kept', 'kv-ledgers.json': 'kept'
+      };
+      const root = tempProject({ files });
+      for (const watch of [false, true]) {
+        const server = await start({ root, watch });
+        for (const name of ['quant/serve.json', 'deep/Quant/KV-Ledgers.json', 'deep/quant/kv-ledgers.json']) {
+          expect((await fetch(`${server.url}/${name}`)).status, `${name} watch=${watch}`).to.equal(404);
+        }
+        for (const name of ['quant/other.json', 'serve.json', 'kv-ledgers.json']) {
+          expect(await (await fetch(`${server.url}/${name}`)).text(), name).to.equal('kept');
+        }
+        await server.close();
+      }
+    });
+
     it('does not serve project files, dotfiles or node_modules when the site is the project root', async () => {
       const root = fs.mkdtempSync(path.join(tmp, 'root-'));
       const files = {

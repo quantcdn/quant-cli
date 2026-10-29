@@ -509,7 +509,7 @@ Flags:
 - The timers that a function starts (`setTimeout`, `setInterval`) are cleared when its response is ready or its time budget ends.
 - When `--host` is a loopback address (the default), `quant serve` answers only the Host names `localhost`, `127.0.0.1` and `[::1]` (any port) and the `--domain` value. Other Host names get 421.
 - The `/_quant_serve/` routes (`info`, `clock`, `ledger/archive-now`, `ledger/shred`, `ledger/subject-entries`) answer only a client on a loopback address, and only the Host names `localhost`, `127.0.0.1` and `[::1]` (any port). This also applies with a `--host` that is not loopback, and the `--domain` value does not count. Another Host gets 421. A request without the header `x-quant-serve: 1`, or with an `Origin` that is not a local origin (`http` or `https` on one of these names), gets 403. The routes do not exist on the edge.
-- `quant serve` does not serve `quant.json`, the `quant/` folder, `node_modules`, or files and folders whose names start with `.`. It serves the `.well-known/` folder at the top of the site (for example `security.txt`), but not a dotfile inside it.
+- `quant serve` does not serve `quant.json`, the `quant/` folder, `quant/serve.json` and `quant/kv-ledgers.json` at any depth in the site (a deploy never uploads them), `node_modules`, or files and folders whose names start with `.`. It serves the `.well-known/` folder at the top of the site (for example `security.txt`), but not a dotfile inside it.
 
 ## Upgrading from 6.x to 7.0.0
 
