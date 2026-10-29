@@ -358,7 +358,12 @@ curl http://127.0.0.1:8787/_quant_serve/info -H 'x-quant-serve: 1'
 - `archive-now` answers `{ "archived": true }`, and 404 for a store that `quant/meta.json` does not declare.
 - `clock` answers `{ "now": <epoch ms> }`. With `--clock real`, it answers 409. A new time past the Date range (8.64e15 ms) gets 400. A `setMs` can move the time back, but a new ledger entry never gets an earlier time than the last entry.
 - The time that `clock` sets stays in the local KV state. A restart with `--clock manual` keeps it. A start with `--clock real` sets the KV time back to the real time and prints `The local clock offset was cleared (--clock real).`
-- A local proof is signed with a local key. Verify it with the `publicKey` from `/_quant_serve/info`, for example with `kv-ledger-verify verify-proof` from `@quantcdn/kv-ledger-conformance`. A local key never verifies a production proof.
+- A local proof is signed with a local key. Verify it with the `publicKey` from `/_quant_serve/info`. A local key never verifies a production proof. The offline verifier is in the conformance suite, which installs from GitHub (it is not on the npm registry):
+
+  ```bash
+  npm install --save-dev github:quantcdn/kv-ledger-conformance#edge-kv-v0.1.1
+  npx kv-ledger-verify verify-proof proof.json --public-key key.pem
+  ```
 
 `quant kv --local` does not have ledger commands yet. Subject (pseudonym) fields are not emulated yet: `subjectMode` is refused.
 
