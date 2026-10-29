@@ -125,7 +125,13 @@ describe('serve command', () => {
     expect(() => resolveOptions(parse(['--geo', '[1]']), { root: tmp, gitUserName: noGit })).to.throw('--geo');
   });
 
-  for (const flag of [['--clock', 'manual'], ['--pull-rules'], ['--kv-remote', 'orbit']]) {
+  it('takes --clock real (the default) or manual', () => {
+    expect(resolveOptions(parse([]), { root: tmp, gitUserName: noGit }).clock).to.equal('real');
+    expect(resolveOptions(parse(['--clock', 'manual']), { root: tmp, gitUserName: noGit }).clock).to.equal('manual');
+    expect(() => resolveOptions({ clock: 'fast' }, { root: tmp, gitUserName: noGit })).to.throw('--clock must be real or manual');
+  });
+
+  for (const flag of [['--pull-rules'], ['--kv-remote', 'orbit']]) {
     it(`stops for ${flag[0]}, which is available in a later release`, () => {
       expect(() => resolveOptions(parse(flag), { root: tmp, gitUserName: noGit }))
         .to.throw(`${flag[0]} is available in a later release`);
@@ -152,6 +158,18 @@ describe('serve command', () => {
     const positions = order.map((part) => text.indexOf(part));
     expect(positions.every((value) => value >= 0)).to.equal(true);
     expect([...positions].sort((a, b) => a - b)).to.deep.equal(positions);
+  });
+
+  it('lists the local ledgers and the manual clock', () => {
+    const summary = { stores: [], rules: [], libraries: [], warnings: [] };
+    const ledgers = [{ store: 'orbit', defs: [{ name: 'audit' }, { name: 'events' }] }];
+    const text = startupLines({ url: 'http://127.0.0.1:8787', host: '127.0.0.1', summary, ledgers, clock: 'manual' }).join('\n');
+    expect(text).to.include('Ledgers (from quant/kv-ledgers.json, active at start: quant serve skips the activation delay):');
+    expect(text).to.include('  orbit → audit, events');
+    expect(text).to.include('Clock: manual. Time moves only with POST /_quant_serve/clock.');
+    const plain = startupLines({ url: 'http://127.0.0.1:8787', host: '127.0.0.1', summary }).join('\n');
+    expect(plain).not.to.include('Ledgers');
+    expect(plain).not.to.include('Clock:');
   });
 
   it('warns when --host is not a loopback address', () => {
@@ -356,6 +374,21 @@ describe('serve command', () => {
       } finally {
         await new Promise((resolve) => blocker.close(resolve));
       }
+    });
+
+    it('stops with the file, store and entry number when a ledger definition is bad', async () => {
+      const root = path.join(tmp, 'project');
+      fs.cpSync(ORBIT, root, { recursive: true, filter: (src) => !src.includes(`${path.sep}.quant`) });
+      const bad = { name: 'audit', collection: 'audit', chains: 1, retentionDays: 30, subjectMode: 'pseudonym' };
+      fs.writeFileSync(path.join(root, 'quant', 'kv-ledgers.json'), JSON.stringify({ orbit: [bad] }));
+      const opts = resolveOptions({ dir: 'dist', port: 0, memory: true }, { root, gitUserName: noGit });
+      let error = null;
+      try {
+        await runServe(opts, { stop: Promise.resolve(), print: (line) => output.push(line), log: () => {} });
+      } catch (err) {
+        error = err;
+      }
+      expect(error && error.message).to.equal('quant/kv-ledgers.json orbit entry 1: unknown ledger property');
     });
 
     it('reveals no key when a fixture is bad', async () => {
