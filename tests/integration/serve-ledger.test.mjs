@@ -117,6 +117,16 @@ describe('quant serve with a local ledger (integration)', function () {
       expect(window.keys).to.deep.equal([second.key]);
       expect(window.chain.ok).to.equal(true);
     });
+    it('archives a closed period on the clock alone, with no archive-now', async () => {
+      const receipt = (await call(site.url, 'POST', '/api/append', { what: 'export' })).json;
+      expect((await call(site.url, 'GET', `/api/proof?key=${encodeURIComponent(receipt.key)}`)).json).to.deep.equal({ status: 'pending' });
+      const pastClose = LIMITS.archivePeriodMs + LIMITS.archiveDelayMs + 1000;
+      await call(site.url, 'POST', '/_quant_serve/clock', { advanceMs: pastClose }, CONTROL);
+      const proof = (await call(site.url, 'GET', `/api/proof?key=${encodeURIComponent(receipt.key)}`)).json;
+      expect(proof.status).to.equal('archived');
+      const { publicKey } = (await call(site.url, 'GET', '/_quant_serve/info', null, CONTROL)).json;
+      expect(verifyProof({ proof, keys: publicKey }).ok).to.equal(true);
+    });
   });
 
   describe('--clock real', () => {
