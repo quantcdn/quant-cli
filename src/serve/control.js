@@ -11,12 +11,25 @@ const PREFIX = '/_quant_serve';
 const LOOPBACK = new Set(['127.0.0.1', '::1', '::ffff:127.0.0.1']);
 const REFUSED = 'The quant serve control route answers loopback addresses only.';
 const NEEDS_HEADER = 'The quant serve control route needs the request header x-quant-serve: 1.';
+const FOREIGN_ORIGIN = 'The quant serve control route refuses a request with an Origin that is not local.';
+const LOCAL_ORIGIN_HOSTS = new Set(['localhost', '127.0.0.1', '[::1]']);
 const NEEDS_MANUAL = 'The clock route needs quant serve --clock manual.';
 const NEEDS_BACKEND = 'The clock route needs the local KV backend of quant serve.';
 const BAD_CLOCK = 'The body must be JSON: { "advanceMs": <ms> } or { "setMs": <epoch ms> }, a whole number of 0 or more.';
 // The largest time that a Date can hold.
 const MAX_DATE_MS = 8.64e15;
 const OUT_OF_RANGE = `The new time must be in the Date range (at most ${MAX_DATE_MS} ms).`;
+
+// No Origin (curl, scripts), or an http(s) origin on a local host name.
+function localOrigin(origin) {
+  if (origin === undefined) return true;
+  try {
+    const url = new URL(origin);
+    return ['http:', 'https:'].includes(url.protocol) && LOCAL_ORIGIN_HOSTS.has(url.hostname);
+  } catch (_err) {
+    return false;
+  }
+}
 
 /** True for /_quant_serve and every path under /_quant_serve/. */
 export function isControlPath(pathname) {
@@ -141,6 +154,7 @@ export function controlRoutes({ clock = 'real', backend = null, stores = () => n
   return async function control({ method, pathname, remoteAddress, headers = {}, body = async () => null }) {
     if (!LOOPBACK.has(remoteAddress)) return text(403, REFUSED);
     if (headers['x-quant-serve'] !== '1') return text(403, NEEDS_HEADER);
+    if (!localOrigin(headers.origin)) return text(403, FOREIGN_ORIGIN);
     const route = routes[`${method} ${pathname}`];
     return route ? route(body) : text(404, 'Not found');
   };

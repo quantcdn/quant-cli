@@ -338,7 +338,7 @@ With `--watch`, quant serve reads `quant/kv-ledgers.json` again when it changes 
 
 The ledger and its entries stay in the local KV state. If you change a definition, quant serve keeps the old one and prints a warning. If you remove a ledger from the file, the ledger stays in the local state. Run `quant serve --reset` to declare the ledgers again.
 
-A proof is `pending` until its entry is in an archive. The local archives run on the KV time. To get an archived proof at once, use the control route. The routes answer only on loopback, and only a request with the header `x-quant-serve: 1`:
+A proof is `pending` until its entry is in an archive. The local archives run on the KV time. To get an archived proof at once, use the control route. The routes answer only a loopback client, only the Host names `localhost`, `127.0.0.1` and `[::1]`, and only a request with the header `x-quant-serve: 1` (see [Safety](#safety)):
 
 ```bash
 # Archive every ledger entry of the store now
@@ -508,7 +508,7 @@ Flags:
 - A function that blocks the event loop (an endless loop after an await) stops `quant serve` after 20 s.
 - The timers that a function starts (`setTimeout`, `setInterval`) are cleared when its response is ready or its time budget ends.
 - When `--host` is a loopback address (the default), `quant serve` answers only the Host names `localhost`, `127.0.0.1` and `[::1]` (any port) and the `--domain` value. Other Host names get 421.
-- The `/_quant_serve/` routes (`info`, `clock`, `ledger/archive-now`, `ledger/shred`, `ledger/subject-entries`) answer only on loopback, and only a request with the header `x-quant-serve: 1`. They do not exist on the edge.
+- The `/_quant_serve/` routes (`info`, `clock`, `ledger/archive-now`, `ledger/shred`, `ledger/subject-entries`) answer only a client on a loopback address, and only the Host names `localhost`, `127.0.0.1` and `[::1]` (any port). This also applies with a `--host` that is not loopback, and the `--domain` value does not count. Another Host gets 421. A request without the header `x-quant-serve: 1`, or with an `Origin` that is not a local origin (`http` or `https` on one of these names), gets 403. The routes do not exist on the edge.
 - `quant serve` does not serve `quant.json`, the `quant/` folder, `node_modules`, or files and folders whose names start with `.`. It serves the `.well-known/` folder at the top of the site (for example `security.txt`), but not a dotfile inside it.
 
 ## Upgrading from 6.x to 7.0.0

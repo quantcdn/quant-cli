@@ -106,17 +106,17 @@ function waitFor(check, timeoutMs = 3000) {
 }
 
 // A GET with the path exactly as given (fetch and URL do not change it).
-function rawGet(url, rawPath, headers = {}) {
+function rawGet(url, rawPath, headers = {}, { method = 'GET', body = '' } = {}) {
   const { port } = new URL(url);
   return new Promise((resolve, reject) => {
-    const req = http.request({ host: '127.0.0.1', port: Number(port), path: rawPath, method: 'GET', headers }, (res) => {
+    const req = http.request({ host: '127.0.0.1', port: Number(port), path: rawPath, method, headers }, (res) => {
       let body = '';
       res.setEncoding('utf8');
       res.on('data', (chunk) => { body += chunk; });
       res.on('end', () => resolve({ status: res.statusCode, headers: res.headers, body }));
     });
     req.on('error', reject);
-    req.end();
+    req.end(body);
   });
 }
 
@@ -637,6 +637,39 @@ describe('serve server', () => {
     it('does not check the Host when --host is not loopback', async () => {
       const server = await start({ host: '0.0.0.0' });
       expect((await rawGet(server.url, '/app', { host: 'rebind.attacker.example' })).status).to.equal(200);
+    });
+
+    it('answers the control routes only for a local Host, also when --host is not loopback', async () => {
+      const server = await start({ host: '0.0.0.0', domain: 'site.example' });
+      const { port } = new URL(server.url);
+      const body = JSON.stringify({ store: 'orbit' });
+      const post = { method: 'POST', body };
+      for (const host of ['rebind.attacker.example', `rebind.attacker.example:${port}`, 'site.example']) {
+        const res = await rawGet(server.url, '/_quant_serve/ledger/archive-now', { host, ...CONTROL, 'content-type': 'application/json' }, post);
+        expect(res.status, host).to.equal(421);
+        expect(res.headers['cache-control']).to.equal('no-store');
+      }
+      for (const host of [`localhost:${port}`, `127.0.0.1:${port}`, `[::1]:${port}`]) {
+        const res = await rawGet(server.url, '/_quant_serve/info', { host, ...CONTROL });
+        expect(res.status, host).to.equal(200);
+      }
+      expect((await rawGet(server.url, '/app', { host: 'rebind.attacker.example' })).status).to.equal(200);
+    });
+
+    it('refuses a control request with an Origin that is not local', async () => {
+      const server = await start({ host: '0.0.0.0' });
+      const { port } = new URL(server.url);
+      const host = `127.0.0.1:${port}`;
+      for (const origin of ['http://rebind.attacker.example', `http://rebind.attacker.example:${port}`, 'null', 'http://localhost.attacker.example']) {
+        const res = await rawGet(server.url, '/_quant_serve/info', { host, origin, ...CONTROL });
+        expect(res.status, origin).to.equal(403);
+        expect(res.body).to.include('Origin');
+      }
+      for (const origin of [`http://localhost:${port}`, 'https://127.0.0.1', `http://[::1]:${port}`]) {
+        const res = await rawGet(server.url, '/_quant_serve/info', { host, origin, ...CONTROL });
+        expect(res.status, origin).to.equal(200);
+      }
+      expect((await rawGet(server.url, '/_quant_serve/info', { host, ...CONTROL })).status).to.equal(200);
     });
 
     it('answers the control route only with the x-quant-serve header', async () => {

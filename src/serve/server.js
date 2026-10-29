@@ -106,6 +106,10 @@ function checkIdentity(org, project) {
 const LOOPBACK_BINDS = new Set(['127.0.0.1', '::1', 'localhost']);
 const LOCAL_HOSTS = ['localhost', '127.0.0.1', '[::1]'];
 const MISDIRECTED = 'quant serve answers the Host names localhost, 127.0.0.1 and [::1], and the --domain value, only.';
+// The control routes answer the local Host names only, whatever --host and
+// --domain are, so that a page on another name (DNS rebinding) cannot reach them.
+const CONTROL_HOSTS = new Set(LOCAL_HOSTS);
+const CONTROL_MISDIRECTED = 'The quant serve control route answers the Host names localhost, 127.0.0.1 and [::1] only.';
 
 /** The Host header value without the port, in lowercase. */
 export function hostName(value) {
@@ -398,6 +402,7 @@ async function respond(state, ctx) {
   if (!hostAllowed(state, ctx.req)) return text(421, MISDIRECTED, { 'cache-control': 'no-store' });
   if (ctx.badPath) return text(400, BAD_PATH, { 'cache-control': 'no-store' });
   if (isControlPath(ctx.pathname)) {
+    if (!CONTROL_HOSTS.has(hostName(ctx.req.headers.host))) return text(421, CONTROL_MISDIRECTED, { 'cache-control': 'no-store' });
     return state.control({
       method: ctx.method, pathname: ctx.pathname, remoteAddress: ctx.remoteAddress, headers: ctx.req.headers,
       body: () => functionRequestBody(ctx)
