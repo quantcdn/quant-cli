@@ -24,7 +24,7 @@ const FETCH_WARNING = 'This fetch goes to a private address; the Quant edge refu
 const DEFAULT_CACHE_CONTROL = 'private, max-age=0';
 
 // Response headers that a function cannot override.
-const PROTECTED_HEADERS = ['quant-server', 'age', 'quant-project', 'quant-url-hash'];
+const PROTECTED_HEADERS = ['quant-server', 'age'];
 const NULL_BODY_STATUSES = new Set([204, 205, 304]);
 
 // The stub location is Sydney, Australia. The field names are the geolocation
