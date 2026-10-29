@@ -16,7 +16,7 @@ function capabilitiesOf(clock, budgetRows) {
     signedProofs: true,
     search: true,
     secretEncryption: true,
-    subjectV1: false,
+    subjectV1: true,
     setClock: true,
     advanceArchive: true,
     injectFault: true,
@@ -40,6 +40,8 @@ function createAdmin(kv) {
     async dropLedger(storeId, name) {
       await kv.backend.dropLedger(storeId, name);
     },
+    shred: (storeId, ledger, body) => kv.backend.shred(storeId, ledger, body),
+    subjectEntries: async (storeId, ledger, body) => kv.backend.subjectEntries(storeId, ledger, body),
     async proofPublicKey() {
       return kv.backend.publicKey();
     },
