@@ -122,7 +122,11 @@ export function controlRoutes({ clock = 'real', backend = null, stores = () => n
     const request = await bodyObject(body);
     const id = request && typeof request.store === 'string' ? stores().get(request.store) : undefined;
     if (!id || !backend) return noStore();
-    await backend.archiveNow(id);
+    try {
+      await backend.archiveNow(id);
+    } catch (err) {
+      return kvErrorResponse(err);
+    }
     return json({ archived: true });
   }
 

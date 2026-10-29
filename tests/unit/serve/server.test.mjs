@@ -1002,6 +1002,14 @@ describe('serve control route', () => {
       }
     });
 
+    it('gives 404 to archive-now for a meta.json store that the local KV does not have yet', async () => {
+      const control = controlRoutes({ backend: kv.backend, stores: () => new Map([['extra', 'acme-site-extra']]) });
+      const body = async () => new TextEncoder().encode('{"store":"extra"}');
+      const res = await control({ method: 'POST', pathname: '/_quant_serve/ledger/archive-now', remoteAddress: '127.0.0.1', headers: CONTROL_HEADERS, body });
+      expect(res.status).to.equal(404);
+      expect((await res.json()).code).to.equal('STORE_NOT_FOUND');
+    });
+
     it('names the --meta file in the archive-now 404', async () => {
       const control = controlRoutes({ backend: kv.backend, stores: () => NAMES, meta: 'site/meta.json' });
       const body = async () => new TextEncoder().encode('{"store":"other"}');
