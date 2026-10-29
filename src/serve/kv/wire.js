@@ -8,6 +8,7 @@
 import { createLocalKv } from '@quantcdn/edge-kv';
 import { storeId } from '../../helper/quant-meta.js';
 import { seedStore } from '../seed.js';
+import { declareLedgers } from './ledgers.js';
 import path from 'node:path';
 import {
   statePaths, ensureQuantDir, fileStorage, readBackendKeys, replaceState, writeBackendKeys, resetState
@@ -142,6 +143,12 @@ async function seedStores(ctx, { fixtures, userName, seedKey, now }) {
   return { revealed, fixtures: count };
 }
 
+// The meta.json stores and indexes, then the quant/kv-ledgers.json ledgers.
+async function declareAll(ctx, { stores = [], ledgers = [] }) {
+  for (const definition of stores) await declareStore(ctx, definition);
+  await declareLedgers(ctx.backend, { org: ctx.org, project: ctx.project, ledgers, warnings: ctx.warnings });
+}
+
 async function prepareFiles(root, reset) {
   const paths = statePaths(root);
   ensureQuantDir(root);
@@ -172,12 +179,14 @@ function backendOptions(paths, storage, options) {
  * @param {boolean} [options.reset] Delete the state files first.
  * @param {number} [options.lagMs] Index list delay (--kv-lag).
  * @param {string} [options.indexState] 'active' or 'building' (--indexes). Absent: index states are left as they are.
+ * @param {{ store: string, defs: Object[] }[]} [options.ledgers] The ledgers from readLedgerFile() (quant serve only).
+ * @param {Object} [options.clock] The clock of the backend (`{ now() }`). Default: the real clock.
  * @param {(message: string) => void} [options.warn] Unknown set and delete options.
  * @returns {Promise<{ kvStore, backend, warnings: string[], paths: Object|null,
  *   declare: (store: Object) => Promise<string>, seed: (options: Object) => Promise<Object> }>}
  */
 export async function openLocalKv(options) {
-  const { root, org, project, stores = [], memory = false, reset = false, warn } = options;
+  const { root, org, project, memory = false, reset = false, warn } = options;
   const paths = memory ? null : await prepareFiles(root, reset);
   const allowed = new Map();
   const storage = paths ? fileStorage(paths) : undefined;
@@ -187,7 +196,7 @@ export async function openLocalKv(options) {
     org, project, backend, kvStore, paths, allowed, options, warn,
     indexState: options.indexState === undefined ? null : indexState(options.indexState), warnings: [], seededInMemory: {}
   };
-  for (const definition of stores) await declareStore(ctx, definition);
+  await declareAll(ctx, options);
   return {
     kvStore,
     backend,
