@@ -386,7 +386,7 @@ describe('serve command', () => {
     it('stops with the file, store and entry number when a ledger definition is bad', async () => {
       const root = path.join(tmp, 'project');
       fs.cpSync(ORBIT, root, { recursive: true, filter: (src) => !src.includes(`${path.sep}.quant`) });
-      const bad = { name: 'audit', collection: 'audit', chains: 1, retentionDays: 30, subjectMode: 'pseudonym' };
+      const bad = { name: 'audit', collection: 'audit', chains: 1, retentionDays: 30, colour: 'blue' };
       fs.writeFileSync(path.join(root, 'quant', 'kv-ledgers.json'), JSON.stringify({ orbit: [bad] }));
       const opts = resolveOptions({ dir: 'dist', port: 0, memory: true }, { root, gitUserName: noGit });
       let error = null;

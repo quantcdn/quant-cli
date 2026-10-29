@@ -147,7 +147,7 @@ describe('quant serve local ledgers', () => {
     });
 
     it('gives the backend error with the store and the entry number', async () => {
-      const bad = { ...EVENTS, subjectMode: 'pseudonym' };
+      const bad = { ...EVENTS, colour: 'blue' };
       const err = await asyncFailure(open({ memory: true, ledgers: [{ store: 'audit', defs: [EVENTS, bad] }] }));
       expect(err.message).to.equal('quant/kv-ledgers.json audit entry 2: unknown ledger property');
     });
