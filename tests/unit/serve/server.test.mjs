@@ -791,6 +791,31 @@ describe('serve server', () => {
       await waitFor(async () => (await fetch(`${server.url}/built.html`)).status === 200, 8000);
     });
 
+    it('declares a new ledger of quant/kv-ledgers.json and keeps the last good ledgers on an invalid edit', async () => {
+      const root = tempProject({ files: { 'index.html': 'home' } });
+      const stores = [{ name: 'audit', indexes: [], initial_values: [] }];
+      writeJson(path.join(root, 'quant', 'meta.json'), { kv_stores: stores });
+      const kv = await openLocalKv({ root, org: 'acme', project: 'site', memory: true, stores: loadProject({ root }).stores });
+      const server = await start({ root, watch: true, kvStore: kv.kvStore, backend: kv.backend });
+      await settle();
+      const ledgersFile = path.join(root, 'quant', 'kv-ledgers.json');
+      const events = { name: 'events', collection: 'events', chains: 1, retentionDays: 30 };
+      writeJson(ledgersFile, { audit: [events] });
+      const declared = async () => {
+        try {
+          return (await kv.kvStore.ledgerStatus('acme-site-audit', 'events')).state === 'ACTIVE';
+        } catch (_err) {
+          return false;
+        }
+      };
+      await waitFor(declared, 8000);
+      fs.writeFileSync(ledgersFile, '{ not json');
+      await waitFor(() => lines.some((line) => line.includes('quant serve keeps the last valid version of the ledgers.')), 8000);
+      expect(lines.join('\n')).to.include('quant/kv-ledgers.json: ');
+      expect(await declared()).to.equal(true);
+      expect((await fetch(`${server.url}/index.html`)).status).to.equal(200);
+    });
+
     it('rebuilds the static index when the site changes', async () => {
       const root = tempProject({ files: { 'index.html': 'home' } });
       const server = await start({ root, watch: true });

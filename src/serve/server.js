@@ -16,6 +16,7 @@ import { controlRoutes, isControlPath } from './control.js';
 import { loadProjectLibraries } from './edge-libraries.js';
 import { createExecutor, authContinueHeaders, readCappedBody, DEFAULT_TIMEOUT_MS } from './functions.js';
 import { loadProject, watchProject } from './project.js';
+import { LEDGERS_FILE, declareLedgers, readLedgerFile } from './kv/ledgers.js';
 import { matchRules, matchFilter } from './rules.js';
 import { startWatchdog } from './watchdog.js';
 import { buildIndex, containsProject, findOnDisk, lookup, serveStatic, notFound, NOT_SERVED } from './static.js';
@@ -536,6 +537,23 @@ function reloadProject(state) {
   }
 }
 
+// --watch: declare the new ledgers of quant/kv-ledgers.json. A ledger that
+// the state has stays as it is. An invalid file is logged, and the ledgers
+// stay as they were.
+async function reloadLedgers(state) {
+  const { backend, clock } = state.options;
+  try {
+    const ledgers = readLedgerFile({ root: state.root, stores: state.project.stores, meta: state.options.meta || 'quant/meta.json' });
+    const warnings = [];
+    await declareLedgers(backend, {
+      org: state.org, project: state.projectName, ledgers, wait: clock !== 'manual', kvStore: state.options.kvStore, warnings
+    });
+    for (const warning of warnings) state.log(warning);
+  } catch (err) {
+    state.log(`${errorMessage(err)}\nquant serve keeps the last valid version of the ledgers.`);
+  }
+}
+
 function changedUnder(paths, prefix) {
   if (prefix === '.') return paths.length > 0;
   return paths.some((item) => item === prefix || item.startsWith(`${prefix}${path.sep}`));
@@ -545,6 +563,7 @@ function changedUnder(paths, prefix) {
 // static index is built again after it.
 function onWatchChange(state, paths, siteRel) {
   if (changedUnder(paths, 'quant')) reloadProject(state);
+  if (state.options.backend && changedUnder(paths, path.normalize(LEDGERS_FILE))) reloadLedgers(state);
   const sourceChanged = changedUnder(paths, 'src') || changedUnder(paths, 'public');
   const build = sourceChanged && state.options.onSourceChange;
   if (build) state.options.onSourceChange(paths);
