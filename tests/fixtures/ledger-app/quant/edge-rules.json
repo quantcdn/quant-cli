@@ -1,0 +1,7 @@
+{
+  "version": 1,
+  "namespace": "ledger",
+  "rules": [
+    { "id": "api", "name": "Ledger API", "type": "function", "urls": ["/api/*"], "weight": 10, "function_ref": "ledger-api" }
+  ]
+}

@@ -1,0 +1,9 @@
+[
+  {
+    "type": "function",
+    "path": "quant/edge-functions/ledger.js",
+    "description": "Append to the events ledger and read its status and proofs.",
+    "id": "ledger-api",
+    "uuid": "5d1c9a4e-7b2f-4c3a-9e8d-1f2a3b4c5d6e"
+  }
+]

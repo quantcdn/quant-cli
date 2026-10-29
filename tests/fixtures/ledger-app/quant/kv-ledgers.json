@@ -1,0 +1,5 @@
+{
+  "audit": [
+    { "name": "events", "collection": "events", "chains": 1, "retentionDays": 30 }
+  ]
+}
