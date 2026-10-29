@@ -124,4 +124,4 @@ functions, and it does not apply production security protections or production
 time, memory and capacity limits. Geolocation and the client address are values
 that you set with `--geo` and `--client-ip`. KV ledgers run locally from
 `quant/kv-ledgers.json` (see [Local ledgers](../README.md#local-ledgers)), but
-subject pseudonyms and shredding are not emulated yet. See [What quant serve does not emulate](../README.md#what-quant-serve-does-not-emulate).
+the subject keys are local keys, so never put real personal data in the local KV. See [What quant serve does not emulate](../README.md#what-quant-serve-does-not-emulate).

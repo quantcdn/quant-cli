@@ -328,7 +328,7 @@ Declare the local ledgers in `quant/kv-ledgers.json`. Each key is a store name f
 }
 ```
 
-Each definition has `name`, `collection`, `chains` and `retentionDays`. The optional fields are `lockMode` (`governance` or `compliance`), `personalFields`, `subjectField` and `anchor` (`{ "type": "none" }`, `customer-bucket` or `rfc3161`). If a definition is not valid, `quant serve` stops with `quant/kv-ledgers.json <store> entry <n>: <message>`.
+Each definition has `name`, `collection`, `chains` and `retentionDays`. The optional fields are `lockMode` (`governance` or `compliance`), `personalFields`, `subjectField`, `subjectMode` (`pseudonym` or `clear`, default `pseudonym`), `subjectCase` (`exact` or `fold`, default `exact`) and `anchor` (`{ "type": "none" }`, `customer-bucket` or `rfc3161`). `subjectMode` and `subjectCase` need `subjectField`. If a definition is not valid, `quant serve` stops with `quant/kv-ledgers.json <store> entry <n>: <message>`.
 
 Only `quant serve` reads `quant/kv-ledgers.json`. A deploy never reads it. In production, declare ledgers with the API or the portal.
 
@@ -365,7 +365,16 @@ curl http://127.0.0.1:8787/_quant_serve/info -H 'x-quant-serve: 1'
   npx kv-ledger-verify verify-proof proof.json --public-key key.pem
   ```
 
-`quant kv --local` does not have ledger commands yet. Subject pseudonyms (`subjectMode`) are not emulated yet: a definition with `subjectMode` is refused.
+`quant kv --local` does not have ledger commands yet.
+
+### Ledger subjects
+
+A ledger with a `subjectField` names a data subject in each entry. Quant serve emulates version 1 of the ledger subject contract with `@quantcdn/edge-kv`:
+
+- `pseudonym` mode stores a token in the subject field. `clear` mode keeps the field as given. In both modes, the personal fields are sealed with a key for each subject.
+- Reads of an entry show the value as appended. After a shred, each sealed field reads `{ "$shredded": true }`.
+
+> **Caution:** The subject keys are local keys in `.quant/kv/state.json`, not KMS keys. Anyone who can read the state file can read every personal field, also a shredded field in an older copy of the file. Never put real personal data in the local KV.
 
 ## Edge libraries in quant serve
 
@@ -415,7 +424,7 @@ Flags:
 - Production security protections do not apply.
 - Time, memory and capacity limits of production are not the same.
 - Geolocation and the client address are simulated values. Set them with `--geo` and `--client-ip`.
-- Subject pseudonyms and shredding are not emulated yet.
+- Ledger subject keys are local keys, not KMS keys. There are no backups, no reference key rotation, and a shred always finishes at once (no 202 answer).
 
 ### Safety
 

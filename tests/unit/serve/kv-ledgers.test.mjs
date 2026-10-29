@@ -144,6 +144,39 @@ describe('quant serve local ledgers', () => {
       expect(text).not.to.include('ledger events is pending');
     });
 
+    describe('subjects', () => {
+      const PEOPLE = {
+        name: 'people', collection: 'people', chains: 1, retentionDays: 30,
+        subjectField: 'userId', subjectMode: 'pseudonym', subjectCase: 'fold', personalFields: ['email']
+      };
+      const withPeople = (over = {}) => open({ ledgers: [{ store: 'audit', defs: [PEOPLE] }], ...over });
+
+      it('passes subjectMode and subjectCase to the backend', async () => {
+        const { kvStore, backend } = await withPeople({ memory: true });
+        const declared = backend.ledgers(ID).find((ledger) => ledger.name === 'people').definition;
+        expect(declared).to.include({ subjectField: 'userId', subjectMode: 'pseudonym', subjectCase: 'fold' });
+        const receipt = await kvStore.append(ID, 'people', { userId: 'U-17', email: 'a@example.com' });
+        expect(await kvStore.get(ID, receipt.key)).to.deep.equal({ userId: 'U-17', email: 'a@example.com' });
+      });
+
+      it('accepts subjectMode clear', async () => {
+        const { backend } = await withPeople({ memory: true, ledgers: [{ store: 'audit', defs: [{ ...PEOPLE, subjectMode: 'clear' }] }] });
+        expect(backend.ledgers(ID)[0].definition.subjectMode).to.equal('clear');
+      });
+
+      it('gives the backend error for a bad subjectMode or subjectCase', async () => {
+        for (const bad of [{ ...PEOPLE, subjectMode: 'hidden' }, { ...PEOPLE, subjectCase: 'upper' }]) {
+          const err = await asyncFailure(withPeople({ memory: true, ledgers: [{ store: 'audit', defs: [bad] }] }));
+          expect(err.message).to.match(/^quant\/kv-ledgers\.json audit entry 1: /);
+        }
+      });
+
+      it('gives no definition warning on a restart', async () => {
+        await withPeople();
+        expect((await withPeople()).warnings).to.deep.equal([]);
+      });
+    });
+
     it('gives the backend error with the store and the entry number', async () => {
       const bad = { ...EVENTS, colour: 'blue' };
       const err = await asyncFailure(open({ memory: true, ledgers: [{ store: 'audit', defs: [EVENTS, bad] }] }));
