@@ -332,7 +332,9 @@ Each definition has `name`, `collection`, `chains` and `retentionDays`. The opti
 
 Only `quant serve` reads `quant/kv-ledgers.json`. A deploy never reads it. In production, declare ledgers with the API or the portal.
 
-A ledger in this file is active when `quant serve` starts: quant serve skips the activation delay of the platform. The ledger and its entries stay in the local KV state. If you change a definition, quant serve keeps the old one and prints a warning. Run `quant serve --reset` to declare the ledgers again.
+With `--clock real` (the default), a ledger in this file is active when `quant serve` starts: quant serve skips the activation delay of the platform. With `--clock manual`, a new ledger stays pending until the activation delay has passed on the manual clock, so you can test `LEDGER_NOT_READY`. Move the clock forward to activate it.
+
+The ledger and its entries stay in the local KV state. If you change a definition, quant serve keeps the old one and prints a warning. If you remove a ledger from the file, the ledger stays in the local state. Run `quant serve --reset` to declare the ledgers again.
 
 A proof is `pending` until its entry is in an archive. The local archives run on the KV time. To get an archived proof at once, use the control route. The routes answer only on loopback, and only a request with the header `x-quant-serve: 1`:
 
