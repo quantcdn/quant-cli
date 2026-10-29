@@ -11,7 +11,6 @@ const REFUSED = 'The quant serve control route answers loopback addresses only.'
 const NEEDS_HEADER = 'The quant serve control route needs the request header x-quant-serve: 1.';
 const NEEDS_MANUAL = 'The clock route needs quant serve --clock manual.';
 const BAD_CLOCK = 'The body must be JSON: { "advanceMs": <ms> } or { "setMs": <epoch ms> }, a whole number of 0 or more.';
-const NO_STORE = 'No KV store with that name in quant/meta.json. Send { "store": "<store name>" }.';
 
 /** True for /_quant_serve and every path under /_quant_serve/. */
 export function isControlPath(pathname) {
@@ -63,11 +62,12 @@ function backendInfo(backend) {
  * @param {string} [options.clock] The clock mode: 'real' or 'manual'.
  * @param {Object} [options.backend] The local KV backend.
  * @param {() => Map<string, string>} [options.stores] The meta.json store names and their ids.
+ * @param {string} [options.meta] The meta.json file in use (--meta), for the error text.
  * @param {Function} [options.info] Returns the server fields for /_quant_serve/info.
  * @returns {(request: { method: string, pathname: string, remoteAddress: string, headers: Object,
  *   body?: () => Promise<Uint8Array|null> }) => Promise<Response>}
  */
-export function controlRoutes({ clock = 'real', backend = null, stores = () => new Map(), info = () => ({}) } = {}) {
+export function controlRoutes({ clock = 'real', backend = null, stores = () => new Map(), meta = 'quant/meta.json', info = () => ({}) } = {}) {
   async function moveClock(body) {
     if (clock !== 'manual' || !backend) return text(409, NEEDS_MANUAL);
     const target = clockTarget(await bodyObject(body), backend.now());
@@ -79,7 +79,7 @@ export function controlRoutes({ clock = 'real', backend = null, stores = () => n
   async function archiveNow(body) {
     const request = await bodyObject(body);
     const id = request && typeof request.store === 'string' ? stores().get(request.store) : undefined;
-    if (!id || !backend) return text(404, NO_STORE);
+    if (!id || !backend) return text(404, `No KV store with that name in ${meta}. Send { "store": "<store name>" }.`);
     await backend.archiveNow(id);
     return json({ archived: true });
   }

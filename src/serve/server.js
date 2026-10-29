@@ -587,6 +587,7 @@ function createState(options) {
     clock: options.clock || 'real',
     backend: options.backend || null,
     stores: () => new Map(storeList(state).map((store) => [store.name, store.id])),
+    meta: options.meta || 'quant/meta.json',
     info: () => ({ version: VERSION, org: state.org, project: state.projectName, stores: storeList(state).map((s) => s.id) })
   });
   return state;

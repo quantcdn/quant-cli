@@ -919,7 +919,16 @@ describe('serve control route', () => {
       for (const body of [{ store: 'other' }, {}, 'nope']) {
         const res = await call('real', 'POST', '/_quant_serve/ledger/archive-now', body);
         expect(res.status, JSON.stringify(body)).to.equal(404);
+        expect(await res.text()).to.include('quant/meta.json');
       }
+    });
+
+    it('names the --meta file in the archive-now 404', async () => {
+      const control = controlRoutes({ backend: kv.backend, stores: () => NAMES, meta: 'site/meta.json' });
+      const body = async () => new TextEncoder().encode('{"store":"other"}');
+      const res = await control({ method: 'POST', pathname: '/_quant_serve/ledger/archive-now', remoteAddress: '127.0.0.1', headers: CONTROL_HEADERS, body });
+      expect(res.status).to.equal(404);
+      expect(await res.text()).to.include('No KV store with that name in site/meta.json.');
     });
   });
 });
