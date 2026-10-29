@@ -199,6 +199,26 @@ describe('serve project settings (quant/serve.json)', () => {
       expect(error && error.message).to.equal('quant/serve.json: trailingSlash must be "redirect" or "none".');
     });
 
+    it('keeps the last valid settings after an invalid edit with --watch, and never prints the password', async function () {
+      this.timeout(5000);
+      const password = 'SecretPw-4821';
+      const credentials = `Basic ${Buffer.from(`u:${password}`).toString('base64')}`;
+      project({ basicAuth: { username: 'u', password } });
+      const server = await start({ watch: true });
+      expect((await fetch(`${server.url}/`)).status).to.equal(401);
+      write('quant/serve.json', `{ "basicAuth": { "username": "u", "password": ${password} } }`);
+      const started = Date.now();
+      while (!lines.some((line) => line.includes('not valid JSON')) && Date.now() - started < 4000) {
+        await new Promise((resolve) => setTimeout(resolve, 100));
+      }
+      expect(lines.join('\n')).to.include('quant/serve.json is not valid JSON.');
+      expect((await fetch(`${server.url}/`)).status).to.equal(401);
+      expect((await fetch(`${server.url}/`, { headers: { authorization: credentials } })).status).to.equal(200);
+      const output = lines.join('\n');
+      expect(output).to.not.include(password);
+      expect(output).to.not.include(password.slice(0, 6));
+    });
+
     it('reloads serve.json with --watch', async function () {
       this.timeout(5000);
       project({});
