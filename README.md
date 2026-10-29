@@ -280,7 +280,7 @@ Flags:
 - `--seed-key` - Value of the first reveal-once entry (in the first store that has one), in hex: two characters for each byte of its `generate.bytes`. The other reveal-once entries get random values.
 - `--kv-lag` - Delay in milliseconds before index lists show a change (default: `0`).
 - `--indexes` - Index state for the session: `active` or `building` (default: `active`). With `building`, the indexes of the stores stay in the building state.
-- `--clock` - `real` or `manual` (default: `real`). With `manual`, the time of the local KV stops at the start time and moves only with `POST /_quant_serve/clock`. See [Local ledgers](#local-ledgers).
+- `--clock` - `real` or `manual` (default: `real`). With `manual`, the time of the local KV stops at the start time and, in a session, moves only with `POST /_quant_serve/clock`. See [Local ledgers](#local-ledgers).
 - `--version-info` - Print the versions of the CLI and its KV and test packages, then exit.
 - `--pull-rules`, `--kv-remote` - Not available yet. The command stops with a message.
 
@@ -365,7 +365,7 @@ curl http://127.0.0.1:8787/_quant_serve/info -H 'x-quant-serve: 1'
   npx kv-ledger-verify verify-proof proof.json --public-key key.pem
   ```
 
-`quant kv --local` does not have ledger commands yet. Subject (pseudonym) fields are not emulated yet: `subjectMode` is refused.
+`quant kv --local` does not have ledger commands yet. Subject pseudonyms (`subjectMode`) are not emulated yet: a definition with `subjectMode` is refused.
 
 ## Edge libraries in quant serve
 
