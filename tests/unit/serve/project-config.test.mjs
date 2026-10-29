@@ -109,8 +109,11 @@ describe('serve project settings (quant/serve.json)', () => {
       expect(redirect.headers.get('cache-control')).to.equal('public, max-age=300, s-maxage=86400');
       expect(trailingSlashRedirect(on, '/', '')).to.equal(null);
       expect(trailingSlashRedirect(on, '/about', '')).to.equal(null);
-      expect(trailingSlashRedirect(on, '//x/', '')).to.equal(null);
       expect(trailingSlashRedirect(settings({}), '/about/', '')).to.equal(null);
+    });
+
+    it('keeps a path that starts with two slashes as it is', () => {
+      expect(trailingSlashRedirect(on, '//x/', '')).to.equal(null);
     });
   });
 
