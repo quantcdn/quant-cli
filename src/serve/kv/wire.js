@@ -144,9 +144,9 @@ async function seedStores(ctx, { fixtures, userName, seedKey, now }) {
 }
 
 // The meta.json stores and indexes, then the quant/kv-ledgers.json ledgers.
-async function declareAll(ctx, { stores = [], ledgers = [] }) {
+async function declareAll(ctx, { stores = [], ledgers = [], ledgerWait = true }) {
   for (const definition of stores) await declareStore(ctx, definition);
-  await declareLedgers(ctx.backend, { org: ctx.org, project: ctx.project, ledgers, warnings: ctx.warnings });
+  await declareLedgers(ctx.backend, { org: ctx.org, project: ctx.project, ledgers, wait: ledgerWait, warnings: ctx.warnings });
 }
 
 async function prepareFiles(root, reset) {
@@ -180,6 +180,7 @@ function backendOptions(paths, storage, options) {
  * @param {number} [options.lagMs] Index list delay (--kv-lag).
  * @param {string} [options.indexState] 'active' or 'building' (--indexes). Absent: index states are left as they are.
  * @param {{ store: string, defs: Object[] }[]} [options.ledgers] The ledgers from readLedgerFile() (quant serve only).
+ * @param {boolean} [options.ledgerWait] false: a new ledger stays PENDING until its activation time (--clock manual).
  * @param {Object} [options.clock] The clock of the backend (`{ now() }`). Default: the real clock.
  * @param {(message: string) => void} [options.warn] Unknown set and delete options.
  * @returns {Promise<{ kvStore, backend, warnings: string[], paths: Object|null,

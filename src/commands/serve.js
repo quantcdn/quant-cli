@@ -178,9 +178,13 @@ function networkWarning(host) {
   return [`--host ${host}: the local site, its KV data and its keys are reachable on the network.`];
 }
 
-// The ledgers are declared with wait: true, so each one is ACTIVE at start.
-function ledgerLines(ledgers) {
-  const title = `Ledgers (from ${LEDGERS_FILE}, active at start: quant serve skips the activation delay):`;
+// With --clock real the ledgers are declared with wait: true, so each one is
+// ACTIVE at start. With --clock manual the activation follows the manual clock.
+function ledgerLines(ledgers, clock) {
+  const when = clock === 'manual'
+    ? 'active after the activation delay on the manual clock'
+    : 'active at start: quant serve skips the activation delay';
+  const title = `Ledgers (from ${LEDGERS_FILE}, ${when}):`;
   return section(title, ledgers.map(({ store, defs }) => `${store} → ${defs.map((def) => def.name).join(', ')}`));
 }
 
@@ -198,7 +202,7 @@ export function startupLines({ url, host, summary, keys = [], ledgers = [], cloc
   return [
     `quant serve is running at ${url}`,
     ...section('KV stores:', summary.stores.map((store) => `${store.name} → ${store.location || store.id}`)),
-    ...ledgerLines(ledgers),
+    ...ledgerLines(ledgers, clock),
     ...clockLines(clock),
     ...section('Rules:', summary.rules.map((rule) => `${rule.id} ${rule.type} ${rule.urls.join(' ')}`)),
     `Edge libraries from the project: ${libraries}`,
@@ -312,7 +316,7 @@ async function localKv(options, log, print) {
   const kv = await openLocalKv({
     root: options.root, org: options.org, project: options.project, stores, ledgers,
     memory: options.memory, reset: options.reset, lagMs: options.kvLag, indexState: options.indexes,
-    warn: log, ...backendClock(options.clock)
+    warn: log, ledgerWait: options.clock !== 'manual', ...backendClock(options.clock)
   });
   const withFile = (list) => list.map((key) => ({ ...key, file: kv.paths ? kv.paths.revealKeys(key.storeId) : null }));
   let seeded;

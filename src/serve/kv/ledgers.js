@@ -81,9 +81,9 @@ function differentDefinition(id, name, source) {
     + 'quant serve keeps the old definition. Run quant serve --reset to use the new one.';
 }
 
-async function declareOne(backend, id, def, where) {
+async function declareOne(backend, id, def, { where, wait }) {
   try {
-    await backend.declareLedger(id, def, { wait: true });
+    await backend.declareLedger(id, def, { wait });
   } catch (err) {
     throw new Error(`${where}: ${err.message}`);
   }
@@ -91,18 +91,19 @@ async function declareOne(backend, id, def, where) {
 
 /**
  * Declare the ledgers in the local backend. A ledger that the state already
- * has is kept; a changed definition gives a warning. `wait: true` makes a new
- * ledger ACTIVE at once, with no activation delay.
+ * has is kept; a changed definition gives a warning. `wait: true` (the
+ * default) makes a new ledger ACTIVE at once, with no activation delay;
+ * `wait: false` keeps it PENDING until the activation time on the backend clock.
  * @param {Object} backend The local backend.
- * @param {{ org: string, project: string, ledgers: { store: string, defs: Object[] }[], source?: string, warnings: string[] }} options
+ * @param {{ org: string, project: string, ledgers: { store: string, defs: Object[] }[], source?: string, wait?: boolean, warnings: string[] }} options
  */
-export async function declareLedgers(backend, { org, project, ledgers, source = LEDGERS_FILE, warnings }) {
+export async function declareLedgers(backend, { org, project, ledgers, source = LEDGERS_FILE, wait = true, warnings }) {
   for (const { store, defs } of ledgers) {
     const id = storeId(org, project, store);
     const existing = ledgersOf(backend, id);
     for (const [i, def] of defs.entries()) {
       const declared = existing.get(def.name);
-      if (!declared) await declareOne(backend, id, def, `${source} ${store} entry ${i + 1}`);
+      if (!declared) await declareOne(backend, id, def, { where: `${source} ${store} entry ${i + 1}`, wait });
       else if (!sameFields(def, declared)) warnings.push(differentDefinition(id, def.name, source));
     }
   }

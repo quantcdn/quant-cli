@@ -164,9 +164,11 @@ describe('serve command', () => {
     const summary = { stores: [], rules: [], libraries: [], warnings: [] };
     const ledgers = [{ store: 'orbit', defs: [{ name: 'audit' }, { name: 'events' }] }];
     const text = startupLines({ url: 'http://127.0.0.1:8787', host: '127.0.0.1', summary, ledgers, clock: 'manual' }).join('\n');
-    expect(text).to.include('Ledgers (from quant/kv-ledgers.json, active at start: quant serve skips the activation delay):');
+    expect(text).to.include('Ledgers (from quant/kv-ledgers.json, active after the activation delay on the manual clock):');
     expect(text).to.include('  orbit → audit, events');
     expect(text).to.include('Clock: manual. Time moves only with POST /_quant_serve/clock.');
+    const real = startupLines({ url: 'http://127.0.0.1:8787', host: '127.0.0.1', summary, ledgers }).join('\n');
+    expect(real).to.include('Ledgers (from quant/kv-ledgers.json, active at start: quant serve skips the activation delay):');
     const plain = startupLines({ url: 'http://127.0.0.1:8787', host: '127.0.0.1', summary }).join('\n');
     expect(plain).not.to.include('Ledgers');
     expect(plain).not.to.include('Clock:');

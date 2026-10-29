@@ -8,6 +8,7 @@ import { expect } from 'chai';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { verifyProof } from '@quantcdn/kv-ledger-conformance/verifier';
+import { LIMITS } from '@quantcdn/edge-kv';
 import { resolveOptions, runServe } from '../../src/commands/serve.js';
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
@@ -61,8 +62,17 @@ describe('quant serve with a local ledger (integration)', function () {
     it('prints the ledgers and the manual clock at start', () => {
       const text = site.output.join('\n');
       expect(text).to.include('audit → events');
-      expect(text).to.include('quant serve skips the activation delay');
+      expect(text).to.include('active after the activation delay on the manual clock');
       expect(text).to.include('Clock: manual.');
+    });
+
+    it('refuses an append before the activation time, then is ACTIVE after a clock advance', async () => {
+      const early = await call(site.url, 'POST', '/api/append', { what: 'too early' });
+      expect(early.json.code).to.equal('LEDGER_NOT_READY');
+      expect((await call(site.url, 'GET', '/api/status')).json.state).to.equal('PENDING');
+      const moved = await call(site.url, 'POST', '/_quant_serve/clock', { advanceMs: LIMITS.ledgerActivationMs }, CONTROL);
+      expect(moved.status).to.equal(200);
+      expect((await call(site.url, 'GET', '/api/status')).json.state).to.equal('ACTIVE');
     });
 
     it('appends, gives a pending proof, then an archived proof that verifies', async () => {

@@ -4,6 +4,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { readLedgerFile, LEDGERS_FILE } from '../../../src/serve/kv/ledgers.js';
 import { openLocalKv } from '../../../src/serve/kv/wire.js';
+import { createVirtualClock, LIMITS } from '@quantcdn/edge-kv';
 
 const STORES = [{ name: 'audit', indexes: [], initialValues: [] }, { name: 'other', indexes: [], initialValues: [] }];
 const ID = 'acme-site-audit';
@@ -96,6 +97,16 @@ describe('quant serve local ledgers', () => {
       const receipt = await kvStore.append(ID, 'events', { what: 'login' });
       expect(receipt.seq).to.equal(1);
       expect((await kvStore.ledgerStatus(ID, 'events')).state).to.equal('ACTIVE');
+    });
+
+    it('keeps a ledger PENDING on the manual clock until the activation time', async () => {
+      const clock = createVirtualClock(Date.UTC(2026, 9, 1));
+      const { kvStore, backend } = await open({ memory: true, clock, ledgerWait: false });
+      const early = await asyncFailure(kvStore.append(ID, 'events', { what: 'login' }));
+      expect(early.code).to.equal('LEDGER_NOT_READY');
+      await backend.setClock(backend.now() + LIMITS.ledgerActivationMs);
+      const receipt = await kvStore.append(ID, 'events', { what: 'login' });
+      expect(receipt.seq).to.equal(1);
     });
 
     it('gives the backend error with the store and the entry number', async () => {
