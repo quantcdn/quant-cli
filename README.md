@@ -332,7 +332,7 @@ Each definition has `name`, `collection`, `chains` and `retentionDays`. The opti
 
 Only `quant serve` reads `quant/kv-ledgers.json`. A deploy never reads it. In production, declare ledgers with the API or the portal.
 
-With `--clock real` (the default), a ledger in this file is active when `quant serve` starts: quant serve skips the activation delay of the platform. With `--clock manual`, a new ledger stays pending until the activation delay has passed on the manual clock, so you can test `LEDGER_NOT_READY`. Move the clock forward to activate it.
+With `--clock real` (the default), a ledger in this file is active when `quant serve` starts: quant serve skips the activation delay of the platform. With `--clock manual`, a new ledger stays pending until the activation delay has passed on the manual clock, so you can test `LEDGER_NOT_READY`. Move the clock forward to activate it. A ledger that a `--clock manual` session declared can still be pending in a later `--clock real` start. Quant serve then prints a warning with the time when the ledger becomes active. Run `quant serve --reset` to declare it again.
 
 The ledger and its entries stay in the local KV state. If you change a definition, quant serve keeps the old one and prints a warning. If you remove a ledger from the file, the ledger stays in the local state. Run `quant serve --reset` to declare the ledgers again.
 

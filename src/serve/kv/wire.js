@@ -146,7 +146,21 @@ async function seedStores(ctx, { fixtures, userName, seedKey, now }) {
 // The meta.json stores and indexes, then the quant/kv-ledgers.json ledgers.
 async function declareAll(ctx, { stores = [], ledgers = [], ledgerWait = true }) {
   for (const definition of stores) await declareStore(ctx, definition);
-  await declareLedgers(ctx.backend, { org: ctx.org, project: ctx.project, ledgers, wait: ledgerWait, warnings: ctx.warnings });
+  await declareLedgers(ctx.backend, {
+    org: ctx.org, project: ctx.project, ledgers, wait: ledgerWait, kvStore: ctx.kvStore, warnings: ctx.warnings
+  });
+}
+
+// An offset of the KV time from the real time below this is not cleared.
+const OFFSET_TOLERANCE_MS = 1000;
+
+// realTime (--clock real): clear a clock offset that an earlier --clock
+// manual session stored. It runs before the declarations, so that no ledger
+// is declared on an old offset. True when there was an offset.
+async function clearClockOffset(backend, realTime) {
+  if (!realTime || Math.abs(backend.now() - Date.now()) < OFFSET_TOLERANCE_MS) return false;
+  await backend.setClock(Date.now());
+  return true;
 }
 
 async function prepareFiles(root, reset) {
@@ -181,9 +195,10 @@ function backendOptions(paths, storage, options) {
  * @param {string} [options.indexState] 'active' or 'building' (--indexes). Absent: index states are left as they are.
  * @param {{ store: string, defs: Object[] }[]} [options.ledgers] The ledgers from readLedgerFile() (quant serve only).
  * @param {boolean} [options.ledgerWait] false: a new ledger stays PENDING until its activation time (--clock manual).
+ * @param {boolean} [options.realTime] Clear a stored clock offset before the declarations (--clock real).
  * @param {Object} [options.clock] The clock of the backend (`{ now() }`). Default: the real clock.
  * @param {(message: string) => void} [options.warn] Unknown set and delete options.
- * @returns {Promise<{ kvStore, backend, warnings: string[], paths: Object|null,
+ * @returns {Promise<{ kvStore, backend, warnings: string[], paths: Object|null, offsetCleared: boolean,
  *   declare: (store: Object) => Promise<string>, seed: (options: Object) => Promise<Object> }>}
  */
 export async function openLocalKv(options) {
@@ -197,11 +212,13 @@ export async function openLocalKv(options) {
     org, project, backend, kvStore, paths, allowed, options, warn,
     indexState: options.indexState === undefined ? null : indexState(options.indexState), warnings: [], seededInMemory: {}
   };
+  const offsetCleared = await clearClockOffset(backend, options.realTime === true);
   await declareAll(ctx, options);
   return {
     kvStore,
     backend,
     paths,
+    offsetCleared,
     warnings: ctx.warnings,
     declare: (definition) => declareStore(ctx, definition),
     seed: (seedOptions = {}) => seedAll(ctx, seedOptions)

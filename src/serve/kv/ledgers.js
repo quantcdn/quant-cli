@@ -89,15 +89,31 @@ async function declareOne(backend, id, def, { where, wait }) {
   }
 }
 
+function pendingWarning(id, name, status) {
+  return `KV store ${id}: ledger ${name} is pending until ${status.activeAfter} (declared with --clock manual). `
+    + 'Run quant serve --reset to declare it again.';
+}
+
+// On the real clock, a ledger that an earlier --clock manual session declared
+// can still be PENDING. Each one gets a warning.
+async function pendingWarnings(kvStore, id, defs, warnings) {
+  for (const def of defs) {
+    const status = await kvStore.ledgerStatus(id, def.name);
+    if (status.state === 'PENDING') warnings.push(pendingWarning(id, def.name, status));
+  }
+}
+
 /**
  * Declare the ledgers in the local backend. A ledger that the state already
  * has is kept; a changed definition gives a warning. `wait: true` (the
  * default) makes a new ledger ACTIVE at once, with no activation delay;
  * `wait: false` keeps it PENDING until the activation time on the backend clock.
+ * With `wait: true` and a kvStore, a ledger that is still PENDING gets a warning.
  * @param {Object} backend The local backend.
- * @param {{ org: string, project: string, ledgers: { store: string, defs: Object[] }[], source?: string, wait?: boolean, warnings: string[] }} options
+ * @param {{ org: string, project: string, ledgers: { store: string, defs: Object[] }[], source?: string, wait?: boolean,
+ *   kvStore?: Object, warnings: string[] }} options
  */
-export async function declareLedgers(backend, { org, project, ledgers, source = LEDGERS_FILE, wait = true, warnings }) {
+export async function declareLedgers(backend, { org, project, ledgers, source = LEDGERS_FILE, wait = true, kvStore, warnings }) {
   for (const { store, defs } of ledgers) {
     const id = storeId(org, project, store);
     const existing = ledgersOf(backend, id);
@@ -106,5 +122,6 @@ export async function declareLedgers(backend, { org, project, ledgers, source = 
       if (!declared) await declareOne(backend, id, def, { where: `${source} ${store} entry ${i + 1}`, wait });
       else if (!sameFields(def, declared)) warnings.push(differentDefinition(id, def.name, source));
     }
+    if (wait && kvStore) await pendingWarnings(kvStore, id, defs, warnings);
   }
 }
