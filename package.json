@@ -64,7 +64,7 @@
     "serialize-javascript": "^7.0.5"
   },
   "devDependencies": {
-    "@quantcdn/edge-conformance": "0.1.0",
+    "@quantcdn/edge-conformance": "file:../edge-conformance",
     "@quantcdn/kv-ledger-conformance": "github:quantcdn/kv-ledger-conformance#edge-kv-v0.2.0",
     "axios-mock-adapter": "^2.1.0",
     "c8": "^10.1.0",
