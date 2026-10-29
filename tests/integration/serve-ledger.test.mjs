@@ -5,6 +5,7 @@
 // /_quant_serve/info.
 
 import { expect } from 'chai';
+import http from 'node:http';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { verifyProof } from '@quantcdn/kv-ledger-conformance/verifier';
@@ -33,6 +34,20 @@ async function serve(flags = {}) {
     check();
   });
   return { url, output, close: async () => { stop(); await running; } };
+}
+
+// A raw request, so that the test can send any Host header.
+function raw(url, route, { method = 'POST', headers = {}, body = '' } = {}) {
+  return new Promise((resolve, reject) => {
+    const target = new URL(route, url);
+    const req = http.request({ hostname: target.hostname, port: target.port, path: target.pathname, method, headers }, (res) => {
+      let text = '';
+      res.on('data', (chunk) => { text += chunk; });
+      res.on('end', () => resolve({ status: res.statusCode, text }));
+    });
+    req.on('error', reject);
+    req.end(body);
+  });
 }
 
 async function call(url, method, route, body, headers = {}) {
@@ -126,6 +141,45 @@ describe('quant serve with a local ledger (integration)', function () {
       expect(proof.status).to.equal('archived');
       const { publicKey } = (await call(site.url, 'GET', '/_quant_serve/info', null, CONTROL)).json;
       expect(verifyProof({ proof, keys: publicKey }).ok).to.equal(true);
+    });
+  });
+
+  describe('ledger subjects over HTTP', () => {
+    let site;
+    const SHRED = { reason: 'Erasure request 1', authority: 'Policy 4', requestedBy: 'Privacy officer' };
+
+    before(async () => {
+      site = await serve();
+    });
+
+    after(async () => {
+      if (site) await site.close();
+    });
+
+    it('answers shred and subject-entries with the header, and refuses a foreign Host or a missing header', async () => {
+      const receipt = (await call(site.url, 'POST', '/api/person', { userId: 'u-17', email: 'a@example.com' })).json;
+      expect(receipt.ledger).to.equal('people');
+      const entries = await call(site.url, 'POST', '/_quant_serve/ledger/subject-entries', { store: 'audit', ledger: 'people', subjectId: 'u-17' }, CONTROL);
+      expect(entries.status).to.equal(200);
+      expect(entries.json).to.include({ subjectState: 'live' });
+      expect(entries.json.entries.map((entry) => entry.key)).to.deep.equal([receipt.key]);
+
+      const shred = await call(site.url, 'POST', '/_quant_serve/ledger/shred', { store: 'audit', ledger: 'people', subjectId: 'u-17', ...SHRED }, CONTROL);
+      expect(shred.status).to.equal(200);
+      expect(shred.json.receipt.keyId).to.be.a('string');
+      const read = (await call(site.url, 'GET', `/api/get?key=${encodeURIComponent(receipt.key)}`)).json;
+      expect(read.value).to.deep.equal({ userId: { $shredded: true }, email: { $shredded: true } });
+      const after = await call(site.url, 'POST', '/_quant_serve/ledger/subject-entries', { store: 'audit', ledger: 'people', subjectId: 'u-17' }, CONTROL);
+      expect(after.json.subjectState).to.equal('shredded');
+
+      const { port } = new URL(site.url);
+      const body = JSON.stringify({ store: 'audit', ledger: 'people', subjectId: 'u-18', ...SHRED });
+      for (const route of ['/_quant_serve/ledger/shred', '/_quant_serve/ledger/subject-entries']) {
+        const foreign = await raw(site.url, route, { headers: { host: 'evil.example', ...CONTROL }, body });
+        expect(foreign.status, route).to.equal(421);
+        const bare = await raw(site.url, route, { headers: { host: `localhost:${port}`, 'content-type': 'application/json' }, body });
+        expect(bare.status, route).to.equal(403);
+      }
     });
   });
 

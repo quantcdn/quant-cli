@@ -10,6 +10,8 @@ try {
   if (event.request.method === 'POST' && url.pathname === '/api/append') {
     return json(await store.append('events', await event.request.json(), { idempotencyKey: url.searchParams.get('id') || undefined }));
   }
+  if (event.request.method === 'POST' && url.pathname === '/api/person') return json(await store.append('people', await event.request.json()));
+  if (url.pathname === '/api/get') return json({ value: await store.get(url.searchParams.get('key')) });
   if (url.pathname === '/api/status') return json(await store.ledgerStatus('events'));
   if (url.pathname === '/api/proof') return json(await store.ledgerProof('events', url.searchParams.get('key')));
   if (url.pathname === '/api/window') {
