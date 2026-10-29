@@ -5,6 +5,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { spawnSync } from 'node:child_process';
 import yargs from 'yargs';
+import { createVirtualClock } from '@quantcdn/edge-kv';
 import { openLocalKv } from '../../../src/serve/kv/wire.js';
 import { loadProject } from '../../../src/serve/project.js';
 import kv, { runKv } from '../../../src/commands/kv.js';
@@ -14,6 +15,7 @@ import { getCommand, getCommandOptions } from '../../../src/commandLoader.js';
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 const ORBIT = path.join(HERE, '..', '..', 'fixtures', 'orbit');
 const CLI = path.join(HERE, '..', '..', '..', 'cli.js');
+const RETIRED_STATE = path.join(HERE, '..', '..', 'fixtures', 'edge-kv-0.1-subject-state.json');
 
 function parse(argv) {
   let parsed = null;
@@ -125,6 +127,39 @@ describe('kv command', () => {
     const second = await openLocalKv({ root, org: 'local', project: 'dev', stores: [] });
     const after = second.backend.indexes(second.backend.storeIds()[0]).map((index) => index.state);
     expect(after).to.deep.equal(before);
+  });
+
+  it('prints a PENDING ledger warning to stderr once, before the JSON output', async () => {
+    const { stores } = loadProject({ root });
+    const events = { name: 'events', collection: 'events', chains: 1, retentionDays: 30 };
+    await openLocalKv({
+      root, org: 'local', project: 'dev', stores, clock: createVirtualClock(Date.now()), ledgerWait: false,
+      ledgers: [{ store: 'orbit', defs: [events] }]
+    });
+    const order = [];
+    const code = await runKv(parse(['--local', 'get', 'orbit', 'a']), {
+      root, print: (line) => order.push(['out', line]), error: (line) => order.push(['err', line])
+    });
+    expect(code).to.equal(0);
+    expect(order.map(([stream]) => stream)).to.deep.equal(['err', 'out']);
+    expect(order[0][1]).to.match(/^KV store local-dev-orbit: ledger events is pending until \S+Z\. Appends give LEDGER_NOT_READY until then\.$/);
+    expect(order[1][1]).to.equal('null');
+  });
+
+  it('prints a retired-format ledger warning to stderr', async () => {
+    fs.writeFileSync(path.join(root, 'quant.json'), JSON.stringify({ clientid: 'acme', project: 'site' }));
+    fs.writeFileSync(path.join(root, 'quant', 'meta.json'), JSON.stringify({ kv_stores: [{ name: 'audit', indexes: [], initial_values: [] }] }));
+    fs.mkdirSync(path.join(root, '.quant', 'kv'), { recursive: true });
+    fs.copyFileSync(RETIRED_STATE, path.join(root, '.quant', 'kv', 'state.json'));
+    expect(await run(['--local', 'list', 'audit'])).to.equal(0);
+    expect(err).to.have.length(1);
+    expect(err[0]).to.include('KV store acme-site-audit: ledger people has a subjectField and no subjectMode');
+    expect(err[0]).to.include('LEDGER_FORMAT_RETIRED');
+  });
+
+  it('prints no ledger warning when there is none', async () => {
+    expect(await run(['--local', 'get', 'orbit', 'a'])).to.equal(0);
+    expect(err).to.deep.equal([]);
   });
 
   it('a write is seen by a running server', async () => {

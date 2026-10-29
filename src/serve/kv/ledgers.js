@@ -119,6 +119,19 @@ export function retiredLedgerWarnings(backend, ids) {
 }
 
 /**
+ * Warnings for the PENDING ledgers in the state (for quant kv --local).
+ * @param {Object} backend The local backend.
+ * @param {string[]} ids The store ids.
+ * @returns {string[]}
+ */
+export function pendingLedgerWarnings(backend, ids) {
+  return ids.flatMap((id) => backend.ledgers(id)
+    .filter((ledger) => ledger.state === 'PENDING')
+    .map((ledger) => `KV store ${id}: ledger ${ledger.name} is pending until ${ledger.activeAfter}. `
+      + 'Appends give LEDGER_NOT_READY until then.'));
+}
+
+/**
  * Declare the ledgers in the local backend. A ledger that the state already
  * has is kept; a changed definition gives a warning. `wait: true` (the
  * default) makes a new ledger ACTIVE at once, with no activation delay;

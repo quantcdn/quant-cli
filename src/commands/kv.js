@@ -8,6 +8,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { select, text, isCancel } from '@clack/prompts';
 import { openLocalKv } from '../serve/kv/wire.js';
+import { pendingLedgerWarnings } from '../serve/kv/ledgers.js';
 import { DEFAULT_FILES } from '../serve/project.js';
 import { parseMeta, storeId } from '../helper/quant-meta.js';
 import { resolveOptions } from './serve.js';
@@ -118,7 +119,8 @@ async function execute(args, root) {
   // kv only creates missing stores: it declares no index and holds no index state.
   const stores = readStores(root, options.meta).map((store) => ({ ...store, indexes: [] }));
   const local = await openLocalKv({ root, org: options.org, project: options.project, stores });
-  return OPERATIONS[args.action](local.kvStore.open(id), args);
+  const warnings = [...local.warnings, ...pendingLedgerWarnings(local.backend, local.backend.storeIds())];
+  return { warnings, result: await OPERATIONS[args.action](local.kvStore.open(id), args) };
 }
 
 /**
@@ -133,7 +135,9 @@ export async function runKv(args, { root = process.cwd(), print = console.log, e
     return 1;
   }
   try {
-    print(JSON.stringify(await execute(args, root), null, 2));
+    const { warnings, result } = await execute(args, root);
+    for (const warning of warnings) error(warning);
+    print(JSON.stringify(result, null, 2));
     return 0;
   } catch (err) {
     error(describeError(err));
