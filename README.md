@@ -290,7 +290,7 @@ A key that `initial_values` reveals once is shown in a box when the store is fir
 
 `quant serve` keeps the KV data in `.quant/kv/` in the project directory. The folder is git-ignored. Use `--memory` to keep no files, or `--reset` to start again.
 
-`quant kv --local` reads and writes the same data. It needs no token. A running `quant serve` sees each write. The store name is the name from `quant/meta.json`.
+`quant kv --local` reads and writes the same data. It needs no token. A running `quant serve` sees each write. The store name is the name from `quant/meta.json`. For a pending ledger and for a ledger in a retired subject format, it prints a warning to stderr before the output, also when the command fails.
 
 ```bash
 quant kv list notes --local
@@ -365,7 +365,7 @@ curl http://127.0.0.1:8787/_quant_serve/info -H 'x-quant-serve: 1'
   npx kv-ledger-verify verify-proof proof.json --public-key key.pem
   ```
 
-`quant kv --local` does not have ledger commands yet.
+`quant kv --local` does not have ledger commands yet. It prints a warning to stderr for a pending ledger and for a ledger in a retired format.
 
 ### Ledger subjects
 
