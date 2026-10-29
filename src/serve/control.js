@@ -10,6 +10,7 @@ const LOOPBACK = new Set(['127.0.0.1', '::1', '::ffff:127.0.0.1']);
 const REFUSED = 'The quant serve control route answers loopback addresses only.';
 const NEEDS_HEADER = 'The quant serve control route needs the request header x-quant-serve: 1.';
 const NEEDS_MANUAL = 'The clock route needs quant serve --clock manual.';
+const NEEDS_BACKEND = 'The clock route needs the local KV backend of quant serve.';
 const BAD_CLOCK = 'The body must be JSON: { "advanceMs": <ms> } or { "setMs": <epoch ms> }, a whole number of 0 or more.';
 // The largest time that a Date can hold.
 const MAX_DATE_MS = 8.64e15;
@@ -72,7 +73,8 @@ function backendInfo(backend) {
  */
 export function controlRoutes({ clock = 'real', backend = null, stores = () => new Map(), meta = 'quant/meta.json', info = () => ({}) } = {}) {
   async function moveClock(body) {
-    if (clock !== 'manual' || !backend) return text(409, NEEDS_MANUAL);
+    if (clock !== 'manual') return text(409, NEEDS_MANUAL);
+    if (!backend) return text(409, NEEDS_BACKEND);
     const target = clockTarget(await bodyObject(body), backend.now());
     if (target === null) return text(400, BAD_CLOCK);
     if (target > MAX_DATE_MS) return text(400, OUT_OF_RANGE);

@@ -864,6 +864,14 @@ describe('serve control route', () => {
     expect(res.status).to.equal(404);
   });
 
+  it('says that the clock route needs the local KV when there is no backend', async () => {
+    const control = controlRoutes({ clock: 'manual' });
+    const body = async () => new TextEncoder().encode('{"advanceMs":1}');
+    const res = await control({ method: 'POST', pathname: '/_quant_serve/clock', remoteAddress: '127.0.0.1', headers: CONTROL_HEADERS, body });
+    expect(res.status).to.equal(409);
+    expect(await res.text()).to.equal('The clock route needs the local KV backend of quant serve.');
+  });
+
   describe('with a backend', () => {
     const NAMES = new Map([['audit', 'acme-site-audit']]);
     let kv;
