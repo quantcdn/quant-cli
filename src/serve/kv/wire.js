@@ -22,11 +22,8 @@ function indexState(value) {
 }
 
 // The index entries of a store in the backend: Map name -> { def, state }.
-// It reads the snapshot layout of @quantcdn/edge-kv 0.1.1 (stores[].indexes),
-// which the package does not document. Check this at each edge-kv upgrade.
 function indexesOf(backend, id) {
-  const store = backend.snapshot().stores.find((item) => item.id === id);
-  return new Map(store ? store.indexes : []);
+  return new Map(backend.indexes(id).map((index) => [index.name, { def: index.definition, state: index.state }]));
 }
 
 function differentDefinition(id, name) {
@@ -149,7 +146,7 @@ async function seedStores(ctx, { fixtures, userName, seedKey, now }) {
 async function declareAll(ctx, { stores = [], ledgers = [], ledgerWait = true }) {
   for (const definition of stores) await declareStore(ctx, definition);
   await declareLedgers(ctx.backend, {
-    org: ctx.org, project: ctx.project, ledgers, wait: ledgerWait, kvStore: ctx.kvStore, warnings: ctx.warnings
+    org: ctx.org, project: ctx.project, ledgers, wait: ledgerWait, warnings: ctx.warnings
   });
 }
 

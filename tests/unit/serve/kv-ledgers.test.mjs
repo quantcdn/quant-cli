@@ -118,9 +118,7 @@ describe('quant serve local ledgers', () => {
       expect(Math.abs(real.backend.now() - Date.now())).to.be.below(1000);
       const status = await real.kvStore.ledgerStatus(ID, 'more');
       expect(status.state).to.equal('ACTIVE');
-      // The test reads the snapshot layout of edge-kv 0.1.1: the definition keeps its createdAt.
-      const store = real.backend.snapshot().stores.find((item) => item.id === ID);
-      const declared = new Map(store.ledgers).get('more').definition;
+      const declared = real.backend.ledgers(ID).find((ledger) => ledger.name === 'more').definition;
       expect(Math.abs(Date.parse(declared.createdAt) - Date.now())).to.be.below(5000);
       expect(real.warnings).to.deep.equal([]);
     });

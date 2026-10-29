@@ -546,7 +546,7 @@ async function reloadLedgers(state) {
     const ledgers = readLedgerFile({ root: state.root, stores: state.project.stores, meta: state.options.meta || 'quant/meta.json' });
     const warnings = [];
     await declareLedgers(backend, {
-      org: state.org, project: state.projectName, ledgers, wait: clock !== 'manual', kvStore: state.options.kvStore, warnings
+      org: state.org, project: state.projectName, ledgers, wait: clock !== 'manual', warnings
     });
     for (const warning of warnings) state.log(warning);
   } catch (err) {

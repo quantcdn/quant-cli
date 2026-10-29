@@ -119,11 +119,11 @@ describe('kv command', () => {
   it('leaves a BUILDING index BUILDING', async () => {
     const { stores } = loadProject({ root });
     const first = await openLocalKv({ root, org: 'local', project: 'dev', stores, indexState: 'BUILDING' });
-    const before = first.backend.snapshot().stores[0].indexes.map(([, entry]) => entry.state);
+    const before = first.backend.indexes(first.backend.storeIds()[0]).map((index) => index.state);
     expect(before).to.include('BUILDING');
     expect(await run(['--local', 'set', 'orbit', 'a', '1'])).to.equal(0);
     const second = await openLocalKv({ root, org: 'local', project: 'dev', stores: [] });
-    const after = second.backend.snapshot().stores[0].indexes.map(([, entry]) => entry.state);
+    const after = second.backend.indexes(second.backend.storeIds()[0]).map((index) => index.state);
     expect(after).to.deep.equal(before);
   });
 

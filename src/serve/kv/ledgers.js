@@ -66,13 +66,8 @@ function stable(value) {
 }
 
 // The ledger definitions of a store in the backend: Map name -> definition.
-// It reads the snapshot layout of @quantcdn/edge-kv 0.1.1 (stores[].ledgers as
-// [name, { definition }] pairs), which the package does not document. Edge-kv
-// has no documented call that lists the ledgers of a store. Check this at each
-// edge-kv upgrade.
 function ledgersOf(backend, id) {
-  const store = backend.snapshot().stores.find((item) => item.id === id);
-  return new Map((store ? store.ledgers : []).map(([name, entry]) => [name, entry.definition]));
+  return new Map(backend.ledgers(id).map((ledger) => [ledger.name, ledger.definition]));
 }
 
 // The fields of the file entry must be the same in the declared definition.
@@ -93,17 +88,17 @@ async function declareOne(backend, id, def, { where, wait }) {
   }
 }
 
-function pendingWarning(id, name, status) {
-  return `KV store ${id}: ledger ${name} is pending until ${status.activeAfter} (declared with --clock manual). `
+function pendingWarning(id, ledger) {
+  return `KV store ${id}: ledger ${ledger.name} is pending until ${ledger.activeAfter} (declared with --clock manual). `
     + 'Run quant serve --reset to declare it again.';
 }
 
-// On the real clock, a ledger that an earlier --clock manual session declared
-// can still be PENDING. Each one gets a warning.
-async function pendingWarnings(kvStore, id, defs, warnings) {
-  for (const def of defs) {
-    const status = await kvStore.ledgerStatus(id, def.name);
-    if (status.state === 'PENDING') warnings.push(pendingWarning(id, def.name, status));
+// On the real clock, a ledger of the file that an earlier --clock manual
+// session declared can still be PENDING. Each one gets a warning.
+function pendingWarnings(backend, id, defs, warnings) {
+  const names = new Set(defs.map((def) => def.name));
+  for (const ledger of backend.ledgers(id)) {
+    if (names.has(ledger.name) && ledger.state === 'PENDING') warnings.push(pendingWarning(id, ledger));
   }
 }
 
@@ -112,12 +107,12 @@ async function pendingWarnings(kvStore, id, defs, warnings) {
  * has is kept; a changed definition gives a warning. `wait: true` (the
  * default) makes a new ledger ACTIVE at once, with no activation delay;
  * `wait: false` keeps it PENDING until the activation time on the backend clock.
- * With `wait: true` and a kvStore, a ledger that is still PENDING gets a warning.
+ * With `wait: true`, a ledger of the file that is still PENDING gets a warning.
  * @param {Object} backend The local backend.
  * @param {{ org: string, project: string, ledgers: { store: string, defs: Object[] }[], source?: string, wait?: boolean,
- *   kvStore?: Object, warnings: string[] }} options
+ *   warnings: string[] }} options
  */
-export async function declareLedgers(backend, { org, project, ledgers, source = LEDGERS_FILE, wait = true, kvStore, warnings }) {
+export async function declareLedgers(backend, { org, project, ledgers, source = LEDGERS_FILE, wait = true, warnings }) {
   for (const { store, defs } of ledgers) {
     const id = storeId(org, project, store);
     const existing = ledgersOf(backend, id);
@@ -126,6 +121,6 @@ export async function declareLedgers(backend, { org, project, ledgers, source = 
       if (!declared) await declareOne(backend, id, def, { where: `${source} ${store} entry ${i + 1}`, wait });
       else if (!sameFields(def, declared)) warnings.push(differentDefinition(id, def.name, source));
     }
-    if (wait && kvStore) await pendingWarnings(kvStore, id, defs, warnings);
+    if (wait) pendingWarnings(backend, id, defs, warnings);
   }
 }
