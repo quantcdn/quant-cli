@@ -18,6 +18,8 @@ import { LEDGERS_FILE, readLedgerFile } from '../serve/kv/ledgers.js';
 const DEFAULTS = Object.freeze({ dir: 'dist', port: 8787, host: '127.0.0.1', org: 'local', project: 'dev', userName: 'Owner' });
 const LATER_RELEASE = ['pull-rules', 'kv-remote'];
 const CLOCKS = ['real', 'manual'];
+// An offset of the KV time from the real time below this is not reported.
+const OFFSET_TOLERANCE_MS = 1000;
 const LOOPBACK_HOSTS = ['127.0.0.1', '::1', 'localhost'];
 const POSIX = process.platform !== 'win32';
 /** The signals that stop quant serve. SIGHUP comes when the terminal closes. */
@@ -306,6 +308,14 @@ function backendClock(mode) {
   return mode === 'manual' ? { clock: createVirtualClock(Date.now()) } : {};
 }
 
+// --clock real: a clock offset that an earlier --clock manual session stored
+// in the state is cleared (the KV time is set to the real time).
+async function clearClockOffset(backend, mode, print) {
+  if (mode !== 'real' || Math.abs(backend.now() - Date.now()) < OFFSET_TOLERANCE_MS) return;
+  await backend.setClock(Date.now());
+  print('The local clock offset was cleared (--clock real).');
+}
+
 // The local KV of the project (unless the caller gives a kvStore): open the
 // state, declare the meta.json stores and indexes and the local ledgers,
 // then seed new stores.
@@ -318,6 +328,7 @@ async function localKv(options, log, print) {
     memory: options.memory, reset: options.reset, lagMs: options.kvLag, indexState: options.indexes,
     warn: log, ledgerWait: options.clock !== 'manual', ...backendClock(options.clock)
   });
+  await clearClockOffset(kv.backend, options.clock, print);
   const withFile = (list) => list.map((key) => ({ ...key, file: kv.paths ? kv.paths.revealKeys(key.storeId) : null }));
   let seeded;
   try {

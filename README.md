@@ -353,7 +353,7 @@ curl http://127.0.0.1:8787/_quant_serve/info -H 'x-quant-serve: 1'
 
 - `archive-now` answers `{ "archived": true }`, and 404 for a store that `quant/meta.json` does not declare.
 - `clock` answers `{ "now": <epoch ms> }`. With `--clock real`, it answers 409.
-- The time that `clock` sets stays in the local KV state, also after a restart. Run `quant serve --reset` to clear it.
+- The time that `clock` sets stays in the local KV state. A restart with `--clock manual` keeps it. A start with `--clock real` sets the KV time back to the real time and prints `The local clock offset was cleared (--clock real).`
 - A local proof is signed with a local key. Verify it with the `publicKey` from `/_quant_serve/info`, for example with `kv-ledger-verify verify-proof` from `@quantcdn/kv-ledger-conformance`. A local key never verifies a production proof.
 
 `quant kv --local` does not have ledger commands yet. Subject (pseudonym) fields are not emulated yet: `subjectMode` is refused.

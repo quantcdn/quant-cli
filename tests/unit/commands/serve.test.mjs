@@ -15,6 +15,8 @@ import serve, {
   STOP_SIGNALS
 } from '../../../src/commands/serve.js';
 import { getCommand, getCommandOptions } from '../../../src/commandLoader.js';
+import { openLocalKv } from '../../../src/serve/kv/wire.js';
+import { loadProject } from '../../../src/serve/project.js';
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 
@@ -27,6 +29,9 @@ function nodeCommand(dir, source) {
 }
 
 const ORBIT = path.join(HERE, '..', '..', 'fixtures', 'orbit');
+const LEDGER_APP = path.join(HERE, '..', '..', 'fixtures', 'ledger-app');
+const HOUR = 3600000;
+const CLEARED = 'The local clock offset was cleared (--clock real).';
 
 function parse(argv) {
   let parsed = null;
@@ -391,6 +396,60 @@ describe('serve command', () => {
         error = err;
       }
       expect(error && error.message).to.equal('quant/kv-ledgers.json orbit entry 1: unknown ledger property');
+    });
+
+    describe('clock offset', () => {
+      let root;
+
+      beforeEach(() => {
+        root = path.join(tmp, 'ledger-app');
+        fs.cpSync(LEDGER_APP, root, { recursive: true });
+      });
+
+      async function storeOffset(ms) {
+        const kv = await openLocalKv({ root, org: 'local', project: 'dev', stores: loadProject({ root }).stores });
+        await kv.backend.setClock(Date.now() + ms);
+      }
+
+      // Start quant serve on the state files, read the KV time, then stop.
+      async function serverNow(clock) {
+        let stop;
+        const stopped = new Promise((resolve) => { stop = resolve; });
+        let url;
+        const opts = resolveOptions({ dir: 'dist', port: 0, clock }, { root, gitUserName: noGit });
+        const running = runServe(opts, { stop: stopped, print: (line) => output.push(line), log: () => {}, onListening: (server) => { url = server.url; } });
+        await new Promise((resolve, reject) => {
+          running.catch(reject);
+          const check = () => (url ? resolve() : setTimeout(check, 20));
+          check();
+        });
+        try {
+          return (await (await fetch(`${url}/_quant_serve/info`, { headers: { 'x-quant-serve': '1' } })).json()).now;
+        } finally {
+          stop();
+          await running;
+        }
+      }
+
+      it('clears a stored clock offset with --clock real and says so', async () => {
+        await storeOffset(HOUR);
+        const now = await serverNow('real');
+        expect(Math.abs(now - Date.now())).to.be.below(1000);
+        expect(output).to.include(CLEARED);
+      });
+
+      it('says nothing with --clock real when there is no offset', async () => {
+        await storeOffset(0);
+        await serverNow('real');
+        expect(output).not.to.include(CLEARED);
+      });
+
+      it('keeps a stored clock offset with --clock manual', async () => {
+        await storeOffset(HOUR);
+        const now = await serverNow('manual');
+        expect(now - Date.now()).to.be.above(HOUR - 5000);
+        expect(output).not.to.include(CLEARED);
+      });
     });
 
     it('reveals no key when a fixture is bad', async () => {
