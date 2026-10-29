@@ -2,7 +2,7 @@ import { expect } from 'chai';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import { readLedgerFile, LEDGERS_FILE } from '../../../src/serve/kv/ledgers.js';
+import { declareLedgers, readLedgerFile, LEDGERS_FILE } from '../../../src/serve/kv/ledgers.js';
 import { openLocalKv } from '../../../src/serve/kv/wire.js';
 import { createVirtualClock, LIMITS } from '@quantcdn/edge-kv';
 import { fileURLToPath } from 'node:url';
@@ -202,6 +202,15 @@ describe('quant serve local ledgers', () => {
         const { warnings } = await open({ reset: true, ledgers: [] });
         expect(warnings).to.deep.equal([]);
       });
+    });
+
+    it('names the file, the store, the entry and the next step for a store that the local KV does not have', async () => {
+      const { backend } = await open({ memory: true, ledgers: [] });
+      const err = await asyncFailure(declareLedgers(backend, {
+        org: 'acme', project: 'site', ledgers: [{ store: 'extra', defs: [EVENTS] }], warnings: []
+      }));
+      expect(err.message).to.equal('quant/kv-ledgers.json extra entry 1: the store acme-site-extra is not in the local KV yet. '
+        + 'Restart quant serve to declare the store, then its ledgers.');
     });
 
     it('gives the backend error with the store and the entry number', async () => {

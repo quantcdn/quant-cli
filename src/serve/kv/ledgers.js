@@ -88,6 +88,12 @@ async function declareOne(backend, id, def, { where, wait }) {
   }
 }
 
+// A store that --watch found in meta.json is not declared until a restart.
+function missingStore(source, store, id) {
+  return `${source} ${store} entry 1: the store ${id} is not in the local KV yet. `
+    + 'Restart quant serve to declare the store, then its ledgers.';
+}
+
 function pendingWarning(id, ledger) {
   return `KV store ${id}: ledger ${ledger.name} is pending until ${ledger.activeAfter} (declared with --clock manual). `
     + 'Run quant serve --reset to declare it again.';
@@ -144,6 +150,7 @@ export function pendingLedgerWarnings(backend, ids) {
 export async function declareLedgers(backend, { org, project, ledgers, source = LEDGERS_FILE, wait = true, warnings }) {
   for (const { store, defs } of ledgers) {
     const id = storeId(org, project, store);
+    if (!backend.storeIds().includes(id)) throw new Error(missingStore(source, store, id));
     const existing = ledgersOf(backend, id);
     for (const [i, def] of defs.entries()) {
       const declared = existing.get(def.name);
