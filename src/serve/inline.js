@@ -122,9 +122,16 @@ function pageHeaders(source, lastHeaders, length) {
   const headers = new Headers(source);
   if (lastHeaders) mergeFunctionHeaders(headers, lastHeaders);
   if (!lastHeaders || !lastHeaders.has('cache-control')) headers.set('cache-control', PRIVATE);
-  for (const name of ['etag', 'last-modified']) headers.delete(name);
+  for (const name of ['etag', 'last-modified', 'accept-ranges']) headers.delete(name);
   headers.set('content-length', String(length));
   headers.set('content-type', HTML);
+  return headers;
+}
+
+// With inline functions on, a page is always sent whole.
+function withoutRanges(source) {
+  const headers = new Headers(source);
+  headers.delete('accept-ranges');
   return headers;
 }
 
@@ -147,7 +154,8 @@ async function runTokens(uuids, run, log) {
  * Replace the tokens of an HTML page response. Each distinct UUID runs once,
  * one at a time, in document order. Every copy of its token is replaced by
  * the output text, which is not scanned for tokens again. A page without a
- * token, or a page over 10 MB, is sent with its original bytes and headers.
+ * token, or a page over 10 MB, is sent with its original bytes and headers
+ * (without accept-ranges).
  * @param {Response} response The page.
  * @param {(uuid: string) => Promise<{ text: string, headers?: Headers }>} run
  *   The output of one token; `headers` only when a function ran.
@@ -157,7 +165,7 @@ async function runTokens(uuids, run, log) {
 export async function applyInline(response, run, log = () => {}) {
   const bytes = new Uint8Array(await response.arrayBuffer());
   const init = { status: response.status, statusText: response.statusText };
-  const unchanged = () => new Response(bytes, { ...init, headers: response.headers });
+  const unchanged = () => new Response(bytes, { ...init, headers: withoutRanges(response.headers) });
   if (bytes.byteLength > MAX_INLINE_BYTES) {
     log('The page is larger than 10 MB. quant serve sends it without inline function output.');
     return unchanged();

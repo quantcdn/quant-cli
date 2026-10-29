@@ -182,6 +182,12 @@ describe('serve inline functions', () => {
       expect(warnings[0]).to.include(A);
     });
 
+    it('removes accept-ranges from a page with and without a token', async () => {
+      const ranged = (body) => page(body, { 'accept-ranges': 'bytes' });
+      expect((await applyInline(ranged(`<p>{{QUANT_FN:${A}}}</p>`), output('x', {}))).headers.get('accept-ranges')).to.equal(null);
+      expect((await applyInline(ranged('<p>plain</p>'), output('x'))).headers.get('accept-ranges')).to.equal(null);
+    });
+
     it('leaves a page without a token as it is', async () => {
       const response = await applyInline(page('<p>plain</p>'), output('unused'));
       expect(await response.text()).to.equal('<p>plain</p>');
@@ -283,6 +289,7 @@ describe('serve inline functions', () => {
       const res = await fetch(`${server.url}/`, { headers: { range: 'bytes=0-3' } });
       expect(res.status).to.equal(200);
       expect(await res.text()).to.match(/^<div>\/ GET/);
+      expect(res.headers.get('accept-ranges')).to.equal(null);
     });
 
     it('inserts the refusal text for a token of an auth or filter function', async () => {
