@@ -146,6 +146,20 @@ describe('kv command', () => {
     expect(order[1][1]).to.equal('null');
   });
 
+  it('prints the ledger warnings also when the operation fails', async () => {
+    const { stores } = loadProject({ root });
+    const events = { name: 'events', collection: 'events', chains: 1, retentionDays: 30 };
+    await openLocalKv({
+      root, org: 'local', project: 'dev', stores, clock: createVirtualClock(Date.now()), ledgerWait: false,
+      ledgers: [{ store: 'orbit', defs: [events] }]
+    });
+    expect(await run(['--local', 'set', 'orbit', 'a', '1', '--if-version', '01ARZ3NDEKTSV4RRFFQ69G5FAV'])).to.equal(1);
+    expect(err).to.have.length(2);
+    expect(err[0]).to.include('ledger events is pending until');
+    expect(err[1]).to.match(/^[A-Z_]+: /);
+    expect(out).to.deep.equal([]);
+  });
+
   it('prints a retired-format ledger warning to stderr', async () => {
     fs.writeFileSync(path.join(root, 'quant.json'), JSON.stringify({ clientid: 'acme', project: 'site' }));
     fs.writeFileSync(path.join(root, 'quant', 'meta.json'), JSON.stringify({ kv_stores: [{ name: 'audit', indexes: [], initial_values: [] }] }));

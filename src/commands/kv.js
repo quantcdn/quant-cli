@@ -111,7 +111,7 @@ function describeError(err) {
   return err.code ? `${err.code}: ${err.message}` : err.message;
 }
 
-async function execute(args, root) {
+async function execute(args, root, error) {
   if (!ACTIONS.includes(args.action)) throw new UsageError(`The action must be one of: ${ACTIONS.join(', ')}`);
   const options = resolveOptions({ org: args.org, project: args.project, meta: args.meta }, { root, gitUserName: () => null });
   const id = idOf(options, args.store);
@@ -119,8 +119,9 @@ async function execute(args, root) {
   // kv only creates missing stores: it declares no index and holds no index state.
   const stores = readStores(root, options.meta).map((store) => ({ ...store, indexes: [] }));
   const local = await openLocalKv({ root, org: options.org, project: options.project, stores });
-  const warnings = [...local.warnings, ...pendingLedgerWarnings(local.backend, local.backend.storeIds())];
-  return { warnings, result: await OPERATIONS[args.action](local.kvStore.open(id), args) };
+  // The warnings come before the operation, so a failed operation keeps them.
+  for (const warning of [...local.warnings, ...pendingLedgerWarnings(local.backend, local.backend.storeIds())]) error(warning);
+  return OPERATIONS[args.action](local.kvStore.open(id), args);
 }
 
 /**
@@ -135,9 +136,7 @@ export async function runKv(args, { root = process.cwd(), print = console.log, e
     return 1;
   }
   try {
-    const { warnings, result } = await execute(args, root);
-    for (const warning of warnings) error(warning);
-    print(JSON.stringify(result, null, 2));
+    print(JSON.stringify(await execute(args, root, error), null, 2));
     return 0;
   } catch (err) {
     error(describeError(err));
