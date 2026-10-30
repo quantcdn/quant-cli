@@ -9,12 +9,15 @@ import path from 'node:path';
 import { spawn, spawnSync } from 'node:child_process';
 import { createRequire } from 'node:module';
 import { text, isCancel } from '@clack/prompts';
+import { createVirtualClock } from '@quantcdn/edge-kv';
 import { startServer } from '../serve/server.js';
 import { DEFAULT_FILES, loadProject } from '../serve/project.js';
 import { openLocalKv } from '../serve/kv/wire.js';
+import { LEDGERS_FILE, readLedgerFile } from '../serve/kv/ledgers.js';
 
 const DEFAULTS = Object.freeze({ dir: 'dist', port: 8787, host: '127.0.0.1', org: 'local', project: 'dev', userName: 'Owner' });
-const LATER_RELEASE = ['clock', 'pull-rules', 'kv-remote'];
+const LATER_RELEASE = ['pull-rules', 'kv-remote'];
+const CLOCKS = ['real', 'manual'];
 const LOOPBACK_HOSTS = ['127.0.0.1', '::1', 'localhost'];
 const POSIX = process.platform !== 'win32';
 /** The signals that stop quant serve. SIGHUP comes when the terminal closes. */
@@ -87,6 +90,12 @@ function kvLagOf(value) {
   return lag;
 }
 
+function clockOf(value) {
+  const clock = first([value], 'real');
+  if (!CLOCKS.includes(clock)) throw new Error('--clock must be real or manual');
+  return clock;
+}
+
 function siteOptions(args) {
   return {
     dir: first([args.dir], DEFAULTS.dir),
@@ -115,7 +124,8 @@ function kvOptions(args) {
     memory: args.memory === true,
     seedKey: first([args['seed-key']], undefined),
     kvLag: kvLagOf(args['kv-lag']),
-    indexes: first([args.indexes], 'active')
+    indexes: first([args.indexes], 'active'),
+    clock: clockOf(args.clock)
   };
 }
 
@@ -168,15 +178,32 @@ function networkWarning(host) {
   return [`--host ${host}: the local site, its KV data and its keys are reachable on the network.`];
 }
 
+// With --clock real the ledgers are declared with wait: true, so each one is
+// ACTIVE at start. With --clock manual the activation follows the manual clock.
+function ledgerLines(ledgers, clock) {
+  const when = clock === 'manual'
+    ? 'active after the activation delay on the manual clock'
+    : 'active at start: quant serve skips the activation delay';
+  const title = `Ledgers (from ${LEDGERS_FILE}, ${when}):`;
+  return section(title, ledgers.map(({ store, defs }) => `${store} → ${defs.map((def) => def.name).join(', ')}`));
+}
+
+function clockLines(clock) {
+  return clock === 'manual' ? ['Clock: manual. Time moves only with POST /_quant_serve/clock.'] : [];
+}
+
 /**
- * The start-up output: the URL, the stores, the rules, the edge libraries
- * from the project, the warnings, then the revealed keys in a box.
+ * The start-up output: the URL, the stores, the ledgers, the clock, the
+ * rules, the edge libraries from the project, the warnings, then the
+ * revealed keys in a box.
  */
-export function startupLines({ url, host, summary, keys = [] }) {
+export function startupLines({ url, host, summary, keys = [], ledgers = [], clock = 'real' }) {
   const libraries = summary.libraries.length > 0 ? summary.libraries.join(', ') : 'none';
   return [
     `quant serve is running at ${url}`,
     ...section('KV stores:', summary.stores.map((store) => `${store.name} → ${store.location || store.id}`)),
+    ...ledgerLines(ledgers, clock),
+    ...clockLines(clock),
     ...section('Rules:', summary.rules.map((rule) => `${rule.id} ${rule.type} ${rule.urls.join(' ')}`)),
     `Edge libraries from the project: ${libraries}`,
     ...section('Warnings:', [...networkWarning(host), ...summary.warnings]),
@@ -274,16 +301,24 @@ export function waitForSignal(signals = STOP_SIGNALS) {
   });
 }
 
+// --clock manual: a virtual clock that moves only with the control route.
+function backendClock(mode) {
+  return mode === 'manual' ? { clock: createVirtualClock(Date.now()) } : {};
+}
+
 // The local KV of the project (unless the caller gives a kvStore): open the
-// state, declare the meta.json stores and indexes, then seed new stores.
+// state, declare the meta.json stores and indexes and the local ledgers,
+// then seed new stores.
 async function localKv(options, log, print) {
   const files = { root: options.root, functions: options.functions, rules: options.rules, meta: options.meta, fixtures: options.fixtures };
   const { stores, fixtures } = loadProject(files);
+  const ledgers = readLedgerFile({ root: options.root, stores, meta: options.meta });
   const kv = await openLocalKv({
-    root: options.root, org: options.org, project: options.project, stores,
+    root: options.root, org: options.org, project: options.project, stores, ledgers,
     memory: options.memory, reset: options.reset, lagMs: options.kvLag, indexState: options.indexes,
-    warn: log
+    warn: log, ledgerWait: options.clock !== 'manual', realTime: options.clock === 'real', ...backendClock(options.clock)
   });
+  if (kv.offsetCleared) print('The local clock offset was cleared (--clock real).');
   const withFile = (list) => list.map((key) => ({ ...key, file: kv.paths ? kv.paths.revealKeys(key.storeId) : null }));
   let seeded;
   try {
@@ -293,13 +328,17 @@ async function localKv(options, log, print) {
     throw err;
   }
   const keys = withFile(seeded.revealed);
-  return { kvStore: kv.kvStore, keys, warnings: kv.warnings, location: kv.paths ? kv.paths.file : 'memory' };
+  return {
+    kvStore: kv.kvStore, backend: kv.backend, ledgers, keys, warnings: kv.warnings,
+    location: kv.paths ? kv.paths.file : 'memory'
+  };
 }
 
-function serverOptions(options, { kvStore, log }, print) {
+function serverOptions(options, { kvStore, backend, log }, print) {
   return {
     ...options,
     kvStore,
+    backend,
     log,
     onSourceChange: options.watch && options.build ? () => rebuild(options, print) : undefined
   };
@@ -314,10 +353,11 @@ async function kvFor(options, kvStore, log, print) {
   return kvStore ? { kvStore, given: true } : localKv(options, log || stderrLine, print);
 }
 
-// The start-up summary and keys, with the KV state location, warnings and revealed keys.
+// The start-up summary and keys, with the KV state location, warnings, ledgers and revealed keys.
 function startupSummary(summary, kv) {
   if (kv.given) return { summary, keys: [] };
   return {
+    ledgers: kv.ledgers,
     summary: {
       ...summary,
       stores: summary.stores.map((store) => ({ ...store, location: `${store.id} in ${kv.location}` })),
@@ -360,8 +400,9 @@ function watchRun(server, child) {
 export async function runServe(options, { stop, print = console.log, log, kvStore, onListening } = {}) {
   if (options.build) runBuild(options.build, options.root);
   const kv = await kvFor(options, kvStore, log, print);
-  const server = await startOrShowKeys(serverOptions(options, { kvStore: kv.kvStore, log }, print), kv, print);
-  for (const line of startupLines({ url: server.url, host: options.host, ...startupSummary(server.summary, kv) })) print(line);
+  const server = await startOrShowKeys(serverOptions(options, { kvStore: kv.kvStore, backend: kv.backend, log }, print), kv, print);
+  const lines = startupLines({ url: server.url, host: options.host, clock: options.clock, ...startupSummary(server.summary, kv) });
+  for (const line of lines) print(line);
   const child = options.run ? startRun(options.run, options.root, print) : null;
   watchRun(server, child);
   const onExit = () => killRun(child);
@@ -438,7 +479,7 @@ export default {
     .option('seed-key', { type: 'string', describe: 'Value of the first reveal-once entry (in the first store that has one)' })
     .option('kv-lag', { type: 'number', default: 0, describe: 'Index list visibility delay in ms' })
     .option('indexes', { type: 'string', choices: ['active', 'building'], default: 'active', describe: 'Index state for the session' })
-    .option('clock', { type: 'string', choices: ['real', 'manual'], describe: 'Clock mode (a later release)' })
+    .option('clock', { type: 'string', choices: CLOCKS, default: 'real', describe: 'Clock mode: manual moves time only with POST /_quant_serve/clock' })
     .option('geo', { type: 'string', describe: 'Geolocation fields for functions, as JSON' })
     .option('client-ip', { type: 'string', describe: 'Client address for functions' })
     .option('build', { type: 'string', describe: 'Command to run once before start' })

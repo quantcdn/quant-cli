@@ -17,18 +17,26 @@ const BUILT_IN_404 = '<!doctype html><html lang="en"><head><meta charset="utf-8"
   + '<body><h1>404</h1><p>This page was not found.</p></body></html>';
 const RANGE_PATTERN = /^bytes=(\d*)-(\d*)$/;
 
-export const NOT_SERVED = 'quant.json, the quant/ folder, node_modules, and files and folders whose names start with "." '
+export const NOT_SERVED = 'quant.json, the quant/ folder, quant/serve.json and quant/kv-ledgers.json at any depth, node_modules, '
+  + 'and files and folders whose names start with "." '
   + '(except the .well-known folder at the top of the site)';
 const WELL_KNOWN = '.well-known';
+// The local-only files of quant serve in a quant/ folder: never deployed, so never served.
+const LOCAL_ONLY = new Set(['serve.json', 'kv-ledgers.json']);
+
+function localOnly(name, full) {
+  return LOCAL_ONLY.has(name) && path.basename(path.dirname(full)).toLowerCase() === 'quant';
+}
 
 // Files that are never served: dotfiles and dot-folders (.env, .git, .quant),
-// node_modules, quant.json, and the quant/ folder of the project. The
+// node_modules, quant.json, quant/serve.json and quant/kv-ledgers.json (at
+// any depth, as a deploy skips them), and the quant/ folder of the project. The
 // .well-known folder at the top of the site is served (security.txt, ACME).
 function excluded(entry, full, walkState) {
   const name = entry.name.toLowerCase();
   if (entry.isDirectory() && name === WELL_KNOWN && path.dirname(full) === walkState.dir) return false;
   if (name.startsWith('.') || name === 'node_modules') return true;
-  if (entry.isFile()) return name === 'quant.json';
+  if (entry.isFile()) return name === 'quant.json' || localOnly(name, full);
   return full === walkState.projectQuant;
 }
 

@@ -1,0 +1,6 @@
+{
+  "title": "Ledger fixture",
+  "kv_stores": [
+    { "name": "audit", "indexes": [], "initial_values": [] }
+  ]
+}

@@ -29,11 +29,14 @@ function functionsManifest(functions) {
   }));
 }
 
-function writeProject(root, { files = {}, functions = [], rules }) {
+// meta is quant/meta.json; project is the local project settings (quant/serve.json).
+function writeProject(root, { files = {}, functions = [], rules, meta, project }) {
   const manifest = functionsManifest(functions);
   functions.forEach((fn, index) => writeFile(path.join(root, manifest[index].path), fn.body || ''));
   writeFile(path.join(root, 'quant', 'edge-functions.json'), JSON.stringify(manifest));
   if (rules) writeFile(path.join(root, 'quant', 'edge-rules.json'), JSON.stringify(rules));
+  if (meta) writeFile(path.join(root, 'quant', 'meta.json'), JSON.stringify(meta));
+  if (project) writeFile(path.join(root, 'quant', 'serve.json'), JSON.stringify(project));
   fs.mkdirSync(path.join(root, 'dist'), { recursive: true });
   for (const [name, content] of Object.entries(files)) writeFile(path.join(root, 'dist', name), content);
 }

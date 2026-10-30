@@ -15,7 +15,10 @@ import { storeId } from '../helper/quant-meta.js';
 import { controlRoutes, isControlPath } from './control.js';
 import { loadProjectLibraries } from './edge-libraries.js';
 import { createExecutor, authContinueHeaders, readCappedBody, DEFAULT_TIMEOUT_MS } from './functions.js';
+import { applyInline, isHtmlFile, refusal } from './inline.js';
 import { loadProject, watchProject } from './project.js';
+import { LEDGERS_FILE, declareLedgers, readLedgerFile } from './kv/ledgers.js';
+import { basicAuthResponse, globalHeaderObject, trailingSlashRedirect, withGlobalHeaders } from './project-config.js';
 import { matchRules, matchFilter } from './rules.js';
 import { startWatchdog } from './watchdog.js';
 import { buildIndex, containsProject, findOnDisk, lookup, serveStatic, notFound, NOT_SERVED } from './static.js';
@@ -103,6 +106,10 @@ function checkIdentity(org, project) {
 const LOOPBACK_BINDS = new Set(['127.0.0.1', '::1', 'localhost']);
 const LOCAL_HOSTS = ['localhost', '127.0.0.1', '[::1]'];
 const MISDIRECTED = 'quant serve answers the Host names localhost, 127.0.0.1 and [::1], and the --domain value, only.';
+// The control routes answer the local Host names only, whatever --host and
+// --domain are, so that a page on another name (DNS rebinding) cannot reach them.
+const CONTROL_HOSTS = new Set(LOCAL_HOSTS);
+const CONTROL_MISDIRECTED = 'The quant serve control route answers the Host names localhost, 127.0.0.1 and [::1] only.';
 
 /** The Host header value without the port, in lowercase. */
 export function hostName(value) {
@@ -172,7 +179,8 @@ function requestContext(state, req) {
     remoteAddress: req.socket.remoteAddress,
     bodyPending: null,
     bodyStreamed: false,
-    authHeaders: null
+    authHeaders: null,
+    inlinePage: false
   };
 }
 
@@ -233,7 +241,7 @@ async function functionStage(state, ctx, rule, fn) {
     state.log(`Rule ${rule.id}: function ${rule.fnUuid} is not in the functions manifest.`);
     return new Response(null, { status: 500 });
   }
-  return state.executor.run(fn, await functionContext(state, ctx, 'function'));
+  return state.executor.run(fn, { ...(await functionContext(state, ctx, 'function')), baseHeaders: globalHeaderObject(state.project.settings) });
 }
 
 // The matching rules run in order. An auth 201 continues to the next rule;
@@ -310,9 +318,24 @@ function staticFile(state, ctx) {
   return findOnDisk(state.dir, state.root, ctx.pathname);
 }
 
+// With inline functions on, an HTML page is read whole (no range, also for
+// HEAD), so that its tokens can be replaced.
 function staticStage(state, ctx) {
   const file = staticFile(state, ctx);
-  return file ? serveStatic(file, ctx.method, ctx.req.headers.range) : null;
+  if (!file) return null;
+  if (state.project.inlineFunctions && isHtmlFile(file.path)) {
+    ctx.inlinePage = true;
+    return serveStatic(file, 'GET', null);
+  }
+  return serveStatic(file, ctx.method, ctx.req.headers.range);
+}
+
+// The dev server stands in for the static site, so its 200 HTML pages get
+// inline functions too.
+async function devServerStage(state, ctx) {
+  const response = await proxyStage(state, ctx);
+  if (response && state.project.inlineFunctions && response.status === 200 && isHtml(response)) ctx.inlinePage = true;
+  return response;
 }
 
 function notFoundStage(state) {
@@ -338,17 +361,54 @@ async function filterStage(state, ctx, response) {
   return state.executor.run(fn, { ...(await functionContext(state, ctx, 'filter')), response });
 }
 
+// The output of one inline token: the body of a request function, a refusal
+// for another type, or a message for a UUID with no function. The function
+// gets the page request.
+async function inlineOutput(state, ctx, uuid) {
+  const fn = state.project.functions.get(uuid);
+  if (!fn) return { text: `Unable to find edge function with uuid: ${uuid}` };
+  const refused = refusal(fn.type);
+  if (refused) return { text: refused };
+  const baseHeaders = globalHeaderObject(state.project.settings);
+  const response = await state.executor.run(fn, { ...(await functionContext(state, ctx, 'function')), inline: true, baseHeaders });
+  // A failed function gives a bare 500: the page then has the global headers only.
+  const headers = response.headers.has('cache-control') ? response.headers : new Headers(baseHeaders);
+  return { text: await response.text(), headers };
+}
+
+// Tokens are replaced after the content filter, in static pages only.
+function inlineStage(state, ctx, response) {
+  if (!ctx.inlinePage) return response;
+  return applyInline(response, (uuid) => inlineOutput(state, ctx, uuid), state.log);
+}
+
+// The site pipeline, in the order of the Quant edge: global headers, basic
+// authentication, rules, the trailing-slash redirect, then the dev server,
+// static content or the 404 page. A function response keeps its own headers
+// over the global headers. The redirect has no global headers.
+async function siteResponse(state, ctx) {
+  const settings = state.project.settings;
+  const denied = basicAuthResponse(settings, ctx.req.headers.authorization);
+  if (denied) return denied;
+  const ruled = await ruleStage(state, ctx);
+  if (ruled) return filterStage(state, ctx, withGlobalHeaders(ruled, settings, false));
+  const redirect = trailingSlashRedirect(settings, ctx.sentPath, ctx.search);
+  if (redirect) return redirect;
+  const response = await devServerStage(state, ctx) || staticStage(state, ctx) || notFoundStage(state);
+  return inlineStage(state, ctx, await filterStage(state, ctx, withGlobalHeaders(response, settings)));
+}
+
 async function respond(state, ctx) {
   if (!hostAllowed(state, ctx.req)) return text(421, MISDIRECTED, { 'cache-control': 'no-store' });
   if (ctx.badPath) return text(400, BAD_PATH, { 'cache-control': 'no-store' });
   if (isControlPath(ctx.pathname)) {
-    return state.control({ method: ctx.method, pathname: ctx.pathname, remoteAddress: ctx.remoteAddress, headers: ctx.req.headers });
+    if (!CONTROL_HOSTS.has(hostName(ctx.req.headers.host))) return text(421, CONTROL_MISDIRECTED, { 'cache-control': 'no-store' });
+    return state.control({
+      method: ctx.method, pathname: ctx.pathname, remoteAddress: ctx.remoteAddress, headers: ctx.req.headers,
+      body: () => functionRequestBody(ctx)
+    });
   }
-  const response = await ruleStage(state, ctx)
-    || await proxyStage(state, ctx)
-    || staticStage(state, ctx)
-    || notFoundStage(state);
-  return filterStage(state, ctx, response);
+  return siteResponse(state, ctx);
 }
 
 // --- Headers and send ------------------------------------------------------------
@@ -454,6 +514,8 @@ function upgradeAllowed(state, req) {
 // response of an auth that does not answer 201 ends the upgrade. Function
 // rules do not run for an upgrade. An upgrade has no body.
 async function upgradeAuth(state, req) {
+  const denied = basicAuthResponse(state.project.settings, req.headers.authorization);
+  if (denied) return denied;
   const ctx = { ...requestContext(state, req), bodyStreamed: true };
   for (const rule of matchRules(state.project.rules, matchContext(ctx))) {
     if (rule.type !== 'auth') continue;
@@ -483,7 +545,7 @@ async function upgradeRefusal(state, req) {
 }
 
 // WebSocket upgrades go to the dev server (for example, Vite HMR), after
-// the auth rules of the path.
+// basic authentication and the auth rules of the path.
 async function handleUpgrade(state, req, socket, head) {
   socket.on('error', () => socket.destroy());
   if (!upgradeAllowed(state, req)) {
@@ -533,6 +595,23 @@ function reloadProject(state) {
   }
 }
 
+// --watch: declare the new ledgers of quant/kv-ledgers.json. A ledger that
+// the state has stays as it is. An invalid file is logged, and the ledgers
+// stay as they were.
+async function reloadLedgers(state) {
+  const { backend, clock } = state.options;
+  try {
+    const ledgers = readLedgerFile({ root: state.root, stores: state.project.stores, meta: state.options.meta || 'quant/meta.json' });
+    const warnings = [];
+    await declareLedgers(backend, {
+      org: state.org, project: state.projectName, ledgers, wait: clock !== 'manual', warnings
+    });
+    for (const warning of warnings) state.log(warning);
+  } catch (err) {
+    state.log(`${errorMessage(err)}\nquant serve keeps the last valid version of the ledgers.`);
+  }
+}
+
 function changedUnder(paths, prefix) {
   if (prefix === '.') return paths.length > 0;
   return paths.some((item) => item === prefix || item.startsWith(`${prefix}${path.sep}`));
@@ -542,6 +621,7 @@ function changedUnder(paths, prefix) {
 // static index is built again after it.
 function onWatchChange(state, paths, siteRel) {
   if (changedUnder(paths, 'quant')) reloadProject(state);
+  if (state.options.backend && changedUnder(paths, path.normalize(LEDGERS_FILE))) reloadLedgers(state);
   const sourceChanged = changedUnder(paths, 'src') || changedUnder(paths, 'public');
   const build = sourceChanged && state.options.onSourceChange;
   if (build) state.options.onSourceChange(paths);
@@ -581,6 +661,10 @@ function createState(options) {
     watch: { enter: (uuid) => state.watchdog && state.watchdog.enter(uuid), leave: (token) => state.watchdog && state.watchdog.leave(token) }
   });
   state.control = controlRoutes({
+    clock: options.clock || 'real',
+    backend: options.backend || null,
+    stores: () => new Map(storeList(state).map((store) => [store.name, store.id])),
+    meta: options.meta || 'quant/meta.json',
     info: () => ({ version: VERSION, org: state.org, project: state.projectName, stores: storeList(state).map((s) => s.id) })
   });
   return state;
@@ -619,7 +703,8 @@ function closer(state, server, cleanups) {
  * Start the server.
  * @param {Object} options The parsed flags plus root and kvStore:
  *   root, dir, port, host, functions, rules, meta, fixtures, org, project,
- *   domain, proxy, watch, geo, clientIp, timeoutMs, kvStore, log, onSourceChange.
+ *   domain, proxy, watch, geo, clientIp, timeoutMs, kvStore, log, onSourceChange,
+ *   backend (the local KV backend, for the control route) and clock ('real' or 'manual').
  * @returns {Promise<{ url: string, close: () => Promise<void>, setRunPid: (pid: number) => void, summary: Object }>}
  *   setRunPid: the --run process group that the watchdog ends when a function blocks the server.
  *   summary: { stores, rules, libraries, warnings } for the start-up output.

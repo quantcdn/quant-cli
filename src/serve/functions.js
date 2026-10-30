@@ -24,7 +24,7 @@ const FETCH_WARNING = 'This fetch goes to a private address; the Quant edge refu
 const DEFAULT_CACHE_CONTROL = 'private, max-age=0';
 
 // Response headers that a function cannot override.
-const PROTECTED_HEADERS = ['quant-server', 'age', 'quant-project', 'quant-url-hash'];
+const PROTECTED_HEADERS = ['quant-server', 'age'];
 const NULL_BODY_STATUSES = new Set([204, 205, 304]);
 
 // The stub location is Sydney, Australia. The field names are the geolocation
@@ -140,6 +140,12 @@ function geoRecord(override, address) {
   return { ...STUB_GEO, ip_address: address, ...override };
 }
 
+// The URL of the event. A function rule sees /fn/<uuid>; an inline function
+// sees the page URL.
+function eventUrl(fn, ctx, mode) {
+  return mode === 'function' && !ctx.inline ? functionUrl(ctx.url, fn.uuid) : ctx.url;
+}
+
 // The plain event payload: the shape the edge passes before it builds the
 // Request and URL objects.
 function buildEventPayload(fn, ctx, mode, options) {
@@ -147,7 +153,7 @@ function buildEventPayload(fn, ctx, mode, options) {
   const address = clientAddress(options, ctx);
   return {
     request: { url: ctx.url, method, headers: [...new Headers(ctx.headers || {})], body: requestBody(method, ctx.body) },
-    url: mode === 'function' ? functionUrl(ctx.url, fn.uuid) : ctx.url,
+    url: eventUrl(fn, ctx, mode),
     client: { address },
     geo: geoRecord(options.geo, address),
     quantOrg: options.org,
@@ -467,7 +473,8 @@ const NO_WATCH = Object.freeze({ enter() {}, leave() {} });
  * @returns {{ run: (fn: { uuid: string, path: string }, ctx: Object) => Promise<Response>, fromFunction: (err: unknown) => boolean }}
  *   fromFunction: whether an uncaught error comes from function code that this executor ran.
  *   ctx: { mode ('function' | 'auth' | 'filter'), url, method, headers, body,
- *   clientAddress, baseHeaders (function mode), response (filter mode) }.
+ *   clientAddress, baseHeaders (function mode), inline (function mode: the event
+ *   URL is the page URL), response (filter mode) }.
  */
 export function createExecutor({ kvStore, org, project, root = process.cwd(), timeoutMs = DEFAULT_TIMEOUT_MS, geo, clientIp, log = defaultLog, watch = NO_WATCH }) {
   let libraries = null;

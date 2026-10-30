@@ -10,6 +10,8 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { startServer } from '../../../src/serve/server.js';
 import { controlRoutes, isControlPath } from '../../../src/serve/control.js';
+import { createVirtualClock } from '@quantcdn/edge-kv';
+import { verifySigned } from '@quantcdn/kv-ledger-conformance/verifier';
 import { loadProject } from '../../../src/serve/project.js';
 import { MAX_REQUEST_BODY_BYTES } from '../../../src/serve/functions.js';
 import { openLocalKv } from '../../../src/serve/kv/wire.js';
@@ -104,17 +106,17 @@ function waitFor(check, timeoutMs = 3000) {
 }
 
 // A GET with the path exactly as given (fetch and URL do not change it).
-function rawGet(url, rawPath, headers = {}) {
+function rawGet(url, rawPath, headers = {}, { method = 'GET', body = '' } = {}) {
   const { port } = new URL(url);
   return new Promise((resolve, reject) => {
-    const req = http.request({ host: '127.0.0.1', port: Number(port), path: rawPath, method: 'GET', headers }, (res) => {
+    const req = http.request({ host: '127.0.0.1', port: Number(port), path: rawPath, method, headers }, (res) => {
       let body = '';
       res.setEncoding('utf8');
       res.on('data', (chunk) => { body += chunk; });
       res.on('end', () => resolve({ status: res.statusCode, headers: res.headers, body }));
     });
     req.on('error', reject);
-    req.end();
+    req.end(body);
   });
 }
 
@@ -401,6 +403,24 @@ describe('serve server', () => {
       expect(lines.filter((line) => line === warning)).to.have.length(1);
     });
 
+    it('does not serve quant/serve.json or quant/kv-ledgers.json from the site at any depth', async () => {
+      const files = {
+        'quant/serve.json': '{"basicAuth":{"password":"x"}}', 'deep/Quant/KV-Ledgers.json': '{}',
+        'quant/other.json': 'kept', 'serve.json': 'kept', 'kv-ledgers.json': 'kept'
+      };
+      const root = tempProject({ files });
+      for (const watch of [false, true]) {
+        const server = await start({ root, watch });
+        for (const name of ['quant/serve.json', 'deep/Quant/KV-Ledgers.json', 'deep/quant/kv-ledgers.json']) {
+          expect((await fetch(`${server.url}/${name}`)).status, `${name} watch=${watch}`).to.equal(404);
+        }
+        for (const name of ['quant/other.json', 'serve.json', 'kv-ledgers.json']) {
+          expect(await (await fetch(`${server.url}/${name}`)).text(), name).to.equal('kept');
+        }
+        await server.close();
+      }
+    });
+
     it('does not serve project files, dotfiles or node_modules when the site is the project root', async () => {
       const root = fs.mkdtempSync(path.join(tmp, 'root-'));
       const files = {
@@ -637,6 +657,39 @@ describe('serve server', () => {
       expect((await rawGet(server.url, '/app', { host: 'rebind.attacker.example' })).status).to.equal(200);
     });
 
+    it('answers the control routes only for a local Host, also when --host is not loopback', async () => {
+      const server = await start({ host: '0.0.0.0', domain: 'site.example' });
+      const { port } = new URL(server.url);
+      const body = JSON.stringify({ store: 'orbit' });
+      const post = { method: 'POST', body };
+      for (const host of ['rebind.attacker.example', `rebind.attacker.example:${port}`, 'site.example']) {
+        const res = await rawGet(server.url, '/_quant_serve/ledger/archive-now', { host, ...CONTROL, 'content-type': 'application/json' }, post);
+        expect(res.status, host).to.equal(421);
+        expect(res.headers['cache-control']).to.equal('no-store');
+      }
+      for (const host of [`localhost:${port}`, `127.0.0.1:${port}`, `[::1]:${port}`]) {
+        const res = await rawGet(server.url, '/_quant_serve/info', { host, ...CONTROL });
+        expect(res.status, host).to.equal(200);
+      }
+      expect((await rawGet(server.url, '/app', { host: 'rebind.attacker.example' })).status).to.equal(200);
+    });
+
+    it('refuses a control request with an Origin that is not local', async () => {
+      const server = await start({ host: '0.0.0.0' });
+      const { port } = new URL(server.url);
+      const host = `127.0.0.1:${port}`;
+      for (const origin of ['http://rebind.attacker.example', `http://rebind.attacker.example:${port}`, 'null', 'http://localhost.attacker.example']) {
+        const res = await rawGet(server.url, '/_quant_serve/info', { host, origin, ...CONTROL });
+        expect(res.status, origin).to.equal(403);
+        expect(res.body).to.include('Origin');
+      }
+      for (const origin of [`http://localhost:${port}`, 'https://127.0.0.1', `http://[::1]:${port}`]) {
+        const res = await rawGet(server.url, '/_quant_serve/info', { host, origin, ...CONTROL });
+        expect(res.status, origin).to.equal(200);
+      }
+      expect((await rawGet(server.url, '/_quant_serve/info', { host, ...CONTROL })).status).to.equal(200);
+    });
+
     it('answers the control route only with the x-quant-serve header', async () => {
       const server = await start();
       const { port } = new URL(server.url);
@@ -790,6 +843,31 @@ describe('serve server', () => {
       await waitFor(async () => (await fetch(`${server.url}/built.html`)).status === 200, 8000);
     });
 
+    it('declares a new ledger of quant/kv-ledgers.json and keeps the last good ledgers on an invalid edit', async () => {
+      const root = tempProject({ files: { 'index.html': 'home' } });
+      const stores = [{ name: 'audit', indexes: [], initial_values: [] }];
+      writeJson(path.join(root, 'quant', 'meta.json'), { kv_stores: stores });
+      const kv = await openLocalKv({ root, org: 'acme', project: 'site', memory: true, stores: loadProject({ root }).stores });
+      const server = await start({ root, watch: true, kvStore: kv.kvStore, backend: kv.backend });
+      await settle();
+      const ledgersFile = path.join(root, 'quant', 'kv-ledgers.json');
+      const events = { name: 'events', collection: 'events', chains: 1, retentionDays: 30 };
+      writeJson(ledgersFile, { audit: [events] });
+      const declared = async () => {
+        try {
+          return (await kv.kvStore.ledgerStatus('acme-site-audit', 'events')).state === 'ACTIVE';
+        } catch (_err) {
+          return false;
+        }
+      };
+      await waitFor(declared, 8000);
+      fs.writeFileSync(ledgersFile, '{ not json');
+      await waitFor(() => lines.some((line) => line.includes('quant serve keeps the last valid version of the ledgers.')), 8000);
+      expect(lines.join('\n')).to.include('quant/kv-ledgers.json: ');
+      expect(await declared()).to.equal(true);
+      expect((await fetch(`${server.url}/index.html`)).status).to.equal(200);
+    });
+
     it('rebuilds the static index when the site changes', async () => {
       const root = tempProject({ files: { 'index.html': 'home' } });
       const server = await start({ root, watch: true });
@@ -833,11 +911,203 @@ describe('serve control route', () => {
     }
   });
 
-  it('gives 404 for the clock and archive routes in this release', async () => {
-    for (const pathname of ['/_quant_serve/clock/advance', '/_quant_serve/ledger/archive-now']) {
-      const res = await routes({ method: 'POST', pathname, remoteAddress: '127.0.0.1', headers: CONTROL_HEADERS });
-      expect(res.status).to.equal(404);
+  it('gives 404 for an unknown control path', async () => {
+    const res = await routes({ method: 'POST', pathname: '/_quant_serve/clock/advance', remoteAddress: '127.0.0.1', headers: CONTROL_HEADERS });
+    expect(res.status).to.equal(404);
+  });
+
+  it('says that the clock route needs the local KV when there is no backend', async () => {
+    const control = controlRoutes({ clock: 'manual' });
+    const body = async () => new TextEncoder().encode('{"advanceMs":1}');
+    const res = await control({ method: 'POST', pathname: '/_quant_serve/clock', remoteAddress: '127.0.0.1', headers: CONTROL_HEADERS, body });
+    expect(res.status).to.equal(409);
+    expect(await res.text()).to.equal('The clock route needs the local KV backend of quant serve.');
+  });
+
+  describe('with a backend', () => {
+    const NAMES = new Map([['audit', 'acme-site-audit']]);
+    let kv;
+
+    beforeEach(async () => {
+      kv = await openLocalKv({
+        root: ORBIT, org: 'acme', project: 'site', memory: true, clock: createVirtualClock(Date.UTC(2026, 9, 1)),
+        stores: [{ name: 'audit', indexes: [], initialValues: [] }],
+        ledgers: [{ store: 'audit', defs: [{ name: 'events', collection: 'events', chains: 1, retentionDays: 30 }] }]
+      });
+    });
+
+    function call(clock, method, pathname, body) {
+      const control = controlRoutes({ clock, backend: kv.backend, stores: () => NAMES });
+      const bytes = body === undefined ? null : new TextEncoder().encode(typeof body === 'string' ? body : JSON.stringify(body));
+      return control({ method, pathname, remoteAddress: '127.0.0.1', headers: CONTROL_HEADERS, body: async () => bytes });
     }
+
+    it('gives the public key, the clock mode and the time in /_quant_serve/info', async () => {
+      const info = await (await call('manual', 'GET', '/_quant_serve/info')).json();
+      expect(info.clock).to.equal('manual');
+      expect(info.now).to.equal(Date.UTC(2026, 9, 1));
+      expect(info.publicKey).to.equal(kv.backend.publicKey());
+      expect(info.publicKey).to.match(/^-----BEGIN PUBLIC KEY-----/);
+    });
+
+    it('moves the manual clock with advanceMs and setMs', async () => {
+      const advanced = await call('manual', 'POST', '/_quant_serve/clock', { advanceMs: 60000 });
+      expect(advanced.status).to.equal(200);
+      expect(await advanced.json()).to.deep.equal({ now: Date.UTC(2026, 9, 1) + 60000 });
+      const set = await call('manual', 'POST', '/_quant_serve/clock', { setMs: Date.UTC(2027, 0, 1) });
+      expect(await set.json()).to.deep.equal({ now: Date.UTC(2027, 0, 1) });
+      expect(kv.backend.now()).to.equal(Date.UTC(2027, 0, 1));
+    });
+
+    it('refuses a clock target outside the Date range', async () => {
+      const MAX_DATE_MS = 8.64e15;
+      for (const body of [{ advanceMs: Number.MAX_SAFE_INTEGER }, { setMs: MAX_DATE_MS + 1 }, { advanceMs: MAX_DATE_MS }]) {
+        const res = await call('manual', 'POST', '/_quant_serve/clock', body);
+        expect(res.status, JSON.stringify(body)).to.equal(400);
+        expect(await res.text()).to.include('Date range');
+      }
+      expect(kv.backend.now()).to.equal(Date.UTC(2026, 9, 1));
+      const edge = await call('manual', 'POST', '/_quant_serve/clock', { setMs: MAX_DATE_MS });
+      expect(await edge.json()).to.deep.equal({ now: MAX_DATE_MS });
+    });
+
+    it('refuses the clock route with --clock real', async () => {
+      const res = await call('real', 'POST', '/_quant_serve/clock', { advanceMs: 1000 });
+      expect(res.status).to.equal(409);
+      expect(await res.text()).to.include('--clock manual');
+      expect(kv.backend.now()).to.equal(Date.UTC(2026, 9, 1));
+    });
+
+    it('refuses a clock body that is not one whole number of milliseconds', async () => {
+      for (const body of ['{', [], {}, { advanceMs: -1 }, { advanceMs: 1.5 }, { setMs: '1' }, { advanceMs: 1, setMs: 1 }, undefined]) {
+        const res = await call('manual', 'POST', '/_quant_serve/clock', body);
+        expect(res.status, JSON.stringify(body)).to.equal(400);
+        expect(await res.text()).to.include('advanceMs');
+      }
+    });
+
+    it('archives the ledgers of a store now', async () => {
+      const receipt = await kv.kvStore.append('acme-site-audit', 'events', { what: 'login' });
+      expect((await kv.kvStore.ledgerProof('acme-site-audit', 'events', receipt.key)).status).to.equal('pending');
+      const res = await call('manual', 'POST', '/_quant_serve/ledger/archive-now', { store: 'audit' });
+      expect(res.status).to.equal(200);
+      expect(await res.json()).to.deep.equal({ archived: true });
+      expect((await kv.kvStore.ledgerProof('acme-site-audit', 'events', receipt.key)).status).to.equal('archived');
+    });
+
+    it('reads the request body of a control route over HTTP', async () => {
+      const server = await startServer({
+        root: ORBIT, dir: 'dist', port: 0, host: '127.0.0.1', org: 'acme', project: 'site',
+        kvStore: kv.kvStore, backend: kv.backend, clock: 'manual', log: () => {}
+      });
+      try {
+        const res = await fetch(`${server.url}/_quant_serve/clock`, {
+          method: 'POST', headers: { ...CONTROL_HEADERS, 'content-type': 'application/json' }, body: JSON.stringify({ advanceMs: 5000 })
+        });
+        expect(await res.json()).to.deep.equal({ now: Date.UTC(2026, 9, 1) + 5000 });
+        const info = await (await fetch(`${server.url}/_quant_serve/info`, { headers: CONTROL_HEADERS })).json();
+        expect(info).to.include({ clock: 'manual', now: Date.UTC(2026, 9, 1) + 5000, org: 'acme' });
+      } finally {
+        await server.close();
+      }
+    });
+
+    it('gives 404 to archive-now for a store that meta.json does not declare', async () => {
+      for (const body of [{ store: 'other' }, {}, 'nope']) {
+        const res = await call('real', 'POST', '/_quant_serve/ledger/archive-now', body);
+        expect(res.status, JSON.stringify(body)).to.equal(404);
+        expect(await res.text()).to.include('quant/meta.json');
+      }
+    });
+
+    it('gives 404 to archive-now for a meta.json store that the local KV does not have yet', async () => {
+      const control = controlRoutes({ backend: kv.backend, stores: () => new Map([['extra', 'acme-site-extra']]) });
+      const body = async () => new TextEncoder().encode('{"store":"extra"}');
+      const res = await control({ method: 'POST', pathname: '/_quant_serve/ledger/archive-now', remoteAddress: '127.0.0.1', headers: CONTROL_HEADERS, body });
+      expect(res.status).to.equal(404);
+      expect((await res.json()).code).to.equal('STORE_NOT_FOUND');
+    });
+
+    it('names the --meta file in the archive-now 404', async () => {
+      const control = controlRoutes({ backend: kv.backend, stores: () => NAMES, meta: 'site/meta.json' });
+      const body = async () => new TextEncoder().encode('{"store":"other"}');
+      const res = await control({ method: 'POST', pathname: '/_quant_serve/ledger/archive-now', remoteAddress: '127.0.0.1', headers: CONTROL_HEADERS, body });
+      expect(res.status).to.equal(404);
+      expect(await res.text()).to.include('No KV store with that name in site/meta.json.');
+    });
+  });
+});
+
+describe('serve control route: ledger subjects', () => {
+  const CONTROL_HEADERS = { 'x-quant-serve': '1' };
+  const ID = 'acme-site-audit';
+  const PEOPLE = {
+    name: 'people', collection: 'people', chains: 1, retentionDays: 30, subjectField: 'userId', personalFields: ['email']
+  };
+  const SHRED = { reason: 'Erasure request 1', authority: 'Policy 4', requestedBy: 'Privacy officer' };
+  let kv;
+  let control;
+
+  beforeEach(async () => {
+    kv = await openLocalKv({
+      root: ORBIT, org: 'acme', project: 'site', memory: true,
+      stores: [{ name: 'audit', indexes: [], initialValues: [] }],
+      ledgers: [{ store: 'audit', defs: [PEOPLE] }]
+    });
+    control = controlRoutes({ backend: kv.backend, stores: () => new Map([['audit', ID]]), meta: 'quant/meta.json' });
+  });
+
+  async function post(pathname, body) {
+    const bytes = body === undefined ? null : new TextEncoder().encode(typeof body === 'string' ? body : JSON.stringify(body));
+    const res = await control({ method: 'POST', pathname, remoteAddress: '127.0.0.1', headers: CONTROL_HEADERS, body: async () => bytes });
+    const text = await res.text();
+    return { status: res.status, text, json: text.startsWith('{') ? JSON.parse(text) : null };
+  }
+
+  it('shreds a subject and answers the backend result with a signed receipt', async () => {
+    const receipt = await kv.kvStore.append(ID, 'people', { userId: 'u-17', email: 'a@example.com' });
+    const res = await post('/_quant_serve/ledger/shred', { store: 'audit', ledger: 'people', subjectId: 'u-17', ...SHRED });
+    expect(res.status).to.equal(200);
+    expect(res.json).to.include({ ledger: 'people' });
+    expect(res.json.subjectRef).to.match(/^[0-9a-f]{32}$/);
+    expect(verifySigned(res.json.receipt, kv.backend.publicKey()).ok).to.equal(true);
+    expect(await kv.kvStore.get(ID, receipt.key)).to.deep.equal({ userId: { $shredded: true }, email: { $shredded: true } });
+    const again = await post('/_quant_serve/ledger/shred', { store: 'audit', ledger: 'people', subjectId: 'u-17', ...SHRED });
+    expect(again.json).to.include({ alreadyShredded: true, shredId: res.json.shredId });
+  });
+
+  it('gives the entries of a subject', async () => {
+    await kv.kvStore.append(ID, 'people', { userId: 'u-17', email: 'a@example.com' });
+    await kv.kvStore.append(ID, 'people', { userId: 'u-18', email: 'b@example.com' });
+    const res = await post('/_quant_serve/ledger/subject-entries', { store: 'audit', ledger: 'people', subjectId: 'u-17', limit: 10 });
+    expect(res.status).to.equal(200);
+    expect(res.json).to.include({ ledger: 'people', subjectState: 'live', complete: true });
+    expect(res.json.entries.map((entry) => entry.value.email)).to.deep.equal(['a@example.com']);
+  });
+
+  it('gives 404 for an unknown store, with the meta file', async () => {
+    for (const pathname of ['/_quant_serve/ledger/shred', '/_quant_serve/ledger/subject-entries']) {
+      const res = await post(pathname, { store: 'other', ledger: 'people', subjectId: 'u-17', ...SHRED });
+      expect(res.status, pathname).to.equal(404);
+      expect(res.text).to.include('quant/meta.json');
+    }
+  });
+
+  it('gives 400 for a body that is not a JSON object with a ledger name', async () => {
+    for (const body of ['{', '[]', undefined, { store: 'audit', subjectId: 'u-17' }]) {
+      const res = await post('/_quant_serve/ledger/subject-entries', body);
+      expect(res.status, JSON.stringify(body)).to.equal(400);
+    }
+  });
+
+  it('maps a backend KVError to its status and code', async () => {
+    const missing = await post('/_quant_serve/ledger/shred', { store: 'audit', ledger: 'nope', subjectId: 'u-17', ...SHRED });
+    expect(missing.status).to.equal(404);
+    expect(missing.json.code).to.equal('LEDGER_NOT_FOUND');
+    const invalid = await post('/_quant_serve/ledger/shred', { store: 'audit', ledger: 'people', subjectId: 'u-17' });
+    expect(invalid.status).to.equal(400);
+    expect(invalid.json.code).to.equal('VALIDATION');
+    expect(invalid.json.message).to.be.a('string');
   });
 });
 

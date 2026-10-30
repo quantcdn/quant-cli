@@ -122,6 +122,6 @@ bundles function sources into the committed function bodies.
 quant serve runs documented edge behaviour. It does not run scheduled
 functions, and it does not apply production security protections or production
 time, memory and capacity limits. Geolocation and the client address are values
-that you set with `--geo` and `--client-ip`. KV ledgers are not in quant serve
-yet, so a feature that uses a ledger needs the deployed site until a later
-release adds them. See [What quant serve does not emulate](../README.md#what-quant-serve-does-not-emulate).
+that you set with `--geo` and `--client-ip`. KV ledgers run locally from
+`quant/kv-ledgers.json` (see [Local ledgers](../README.md#local-ledgers)), but
+the subject keys are local keys, so never put real personal data in the local KV. See [What quant serve does not emulate](../README.md#what-quant-serve-does-not-emulate).

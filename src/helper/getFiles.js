@@ -4,7 +4,7 @@
 
 import fs from 'fs';
 import { promisify } from 'util';
-import { resolve, basename } from 'path';
+import { resolve, basename, dirname } from 'path';
 
 const readdir = promisify(fs.readdir);
 const stat = promisify(fs.stat);
@@ -50,13 +50,25 @@ function isQuantJson(file) {
   return QUANT_JSON.test(basename(file));
 }
 
+// The local-only files of `quant serve` in a quant/ folder (any case).
+const LOCAL_ONLY = new Set(['serve.json', 'kv-ledgers.json']);
+
+/**
+ * True for quant/serve.json and quant/kv-ledgers.json (any case): the local
+ * settings and the local ledgers of `quant serve`. serve.json can hold a basic
+ * authentication password. Neither file is ever deployed.
+ */
+function isServeConfig(file) {
+  return LOCAL_ONLY.has(basename(file).toLowerCase()) && basename(dirname(file)).toLowerCase() === 'quant';
+}
+
 /**
  * Build a path test. Extra exclusions are regex sources. No global flag,
  * so no state is shared between calls.
  */
 function buildExclusionTest(exclusions) {
   const extra = exclusions.length ? new RegExp(exclusions.join('|'), 'i') : null;
-  return (file) => isQuantJson(file) || (extra !== null && extra.test(file));
+  return (file) => isQuantJson(file) || isServeConfig(file) || (extra !== null && extra.test(file));
 }
 
 export default getFiles;

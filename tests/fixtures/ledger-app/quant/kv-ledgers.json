@@ -1,0 +1,20 @@
+{
+  "audit": [
+    {
+      "name": "events",
+      "collection": "events",
+      "chains": 1,
+      "retentionDays": 30
+    },
+    {
+      "name": "people",
+      "collection": "people",
+      "chains": 1,
+      "retentionDays": 30,
+      "subjectField": "userId",
+      "personalFields": [
+        "email"
+      ]
+    }
+  ]
+}

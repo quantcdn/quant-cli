@@ -249,11 +249,12 @@ quant serve --build "npm run build" --watch  # build again when src/ or public/ 
 quant serve --run "npm run dev" --proxy http://localhost:4321
 quant serve --memory --seed-key $(openssl rand -hex 32)
 quant serve --indexes building --kv-lag 500
+quant serve --clock manual                   # time moves only with the control route
 quant serve --reset
 quant serve --version-info
 ```
 
-Quant serve reads these files from the project directory: `quant/edge-functions.json`, `quant/edge-rules.json`, `quant/meta.json` and the KV fixtures. It reads `quant.json` only for the organisation and the project.
+Quant serve reads these files from the project directory: `quant/edge-functions.json`, `quant/edge-rules.json`, `quant/meta.json` and the KV fixtures. It also reads two local-only files, `quant/kv-ledgers.json` (local ledgers) and `quant/serve.json` (local project settings). No deploy command reads them, and they are never deployed. It reads `quant.json` only for the organisation and the project.
 
 Flags:
 
@@ -279,8 +280,9 @@ Flags:
 - `--seed-key` - Value of the first reveal-once entry (in the first store that has one), in hex: two characters for each byte of its `generate.bytes`. The other reveal-once entries get random values.
 - `--kv-lag` - Delay in milliseconds before index lists show a change (default: `0`).
 - `--indexes` - Index state for the session: `active` or `building` (default: `active`). With `building`, the indexes of the stores stay in the building state.
+- `--clock` - `real` or `manual` (default: `real`). With `manual`, the time of the local KV stops at the start time and, in a session, moves only with `POST /_quant_serve/clock`. See [Local ledgers](#local-ledgers).
 - `--version-info` - Print the versions of the CLI and its KV and test packages, then exit.
-- `--clock`, `--pull-rules`, `--kv-remote` - Not available yet. The command stops with a message.
+- `--pull-rules`, `--kv-remote` - Not available yet. The command stops with a message.
 
 A key that `initial_values` reveals once is shown in a box when the store is first seeded. Save the key then. Quant serve also writes it to a file under `.quant/kv/`.
 
@@ -288,7 +290,7 @@ A key that `initial_values` reveals once is shown in a box when the store is fir
 
 `quant serve` keeps the KV data in `.quant/kv/` in the project directory. The folder is git-ignored. Use `--memory` to keep no files, or `--reset` to start again.
 
-`quant kv --local` reads and writes the same data. It needs no token. A running `quant serve` sees each write. The store name is the name from `quant/meta.json`.
+`quant kv --local` reads and writes the same data. It needs no token. A running `quant serve` sees each write. The store name is the name from `quant/meta.json`. For a pending ledger and for a ledger in a retired subject format, it prints a warning to stderr before the output, also when the command fails.
 
 ```bash
 quant kv list notes --local
@@ -311,6 +313,143 @@ Flags:
 - `--org` - Organisation (default: the `quant.json` clientid, then `local`).
 - `--project` - Project (default: the `quant.json` project, then `dev`).
 - `--meta` - Template metadata with the KV stores (default: `quant/meta.json`).
+
+## Local ledgers
+
+`quant serve` can run KV ledgers locally. Functions use the ledger methods of `kvStore` as on the edge: `append`, `ledgerStatus`, `ledgerProof`, and `list` with `collection`, `since` and `until`.
+
+Declare the local ledgers in `quant/kv-ledgers.json`. Each key is a store name from `quant/meta.json`. Each value is a list of ledger definitions:
+
+```json
+{
+  "audit": [
+    { "name": "events", "collection": "events", "chains": 1, "retentionDays": 30 }
+  ]
+}
+```
+
+Each definition has `name`, `collection`, `chains` and `retentionDays`. The optional fields are `lockMode` (`governance` or `compliance`), `personalFields`, `subjectField`, `subjectMode` (`pseudonym` or `clear`, default `pseudonym`), `subjectCase` (`exact` or `fold`, default `exact`) and `anchor` (`{ "type": "none" }`, `customer-bucket` or `rfc3161`). `subjectMode` and `subjectCase` need `subjectField`. If a definition is not valid, `quant serve` stops with `quant/kv-ledgers.json <store> entry <n>: <message>`.
+
+Only `quant serve` reads `quant/kv-ledgers.json`. A deploy never reads it. In production, declare ledgers with the API or the portal.
+
+With `--clock real` (the default), a ledger in this file is active when `quant serve` starts: quant serve skips the activation delay of the platform. With `--clock manual`, a new ledger stays pending until the activation delay has passed on the manual clock, so you can test `LEDGER_NOT_READY`. Move the clock forward to activate it. A ledger that a `--clock manual` session declared can still be pending in a later `--clock real` start. Quant serve then prints a warning with the time when the ledger becomes active. Run `quant serve --reset` to declare it again.
+
+With `--watch`, quant serve reads `quant/kv-ledgers.json` again when it changes and declares the new ledgers. If the file is not valid, quant serve prints the error and keeps the ledgers that it has.
+
+The ledger and its entries stay in the local KV state. If you change a definition, quant serve keeps the old one and prints a warning. If you remove a ledger from the file, the ledger stays in the local state. Run `quant serve --reset` to declare the ledgers again.
+
+A proof is `pending` until its entry is in an archive. The local archives run on the KV time. To get an archived proof at once, use the control route. The routes answer only a loopback client, only the Host names `localhost`, `127.0.0.1` and `[::1]`, and only a request with the header `x-quant-serve: 1` (see [Safety](#safety)):
+
+```bash
+# Archive every ledger entry of the store now
+curl -X POST http://127.0.0.1:8787/_quant_serve/ledger/archive-now \
+  -H 'x-quant-serve: 1' -H 'content-type: application/json' -d '{"store":"audit"}'
+
+# With --clock manual: move the time forward 10 minutes, or set it (epoch ms)
+curl -X POST http://127.0.0.1:8787/_quant_serve/clock \
+  -H 'x-quant-serve: 1' -H 'content-type: application/json' -d '{"advanceMs":600000}'
+curl -X POST http://127.0.0.1:8787/_quant_serve/clock \
+  -H 'x-quant-serve: 1' -H 'content-type: application/json' -d '{"setMs":1798761600000}'
+
+# The clock mode, the KV time and the public key that signs local proofs
+curl http://127.0.0.1:8787/_quant_serve/info -H 'x-quant-serve: 1'
+```
+
+- `archive-now` answers `{ "archived": true }`, and 404 for a store that `quant/meta.json` does not declare.
+- `clock` answers `{ "now": <epoch ms> }`. With `--clock real`, it answers 409. A new time past the Date range (8.64e15 ms) gets 400. A `setMs` can move the time back, but a new ledger entry never gets an earlier time than the last entry.
+- The time that `clock` sets stays in the local KV state. A restart with `--clock manual` keeps it. A start with `--clock real` sets the KV time back to the real time and prints `The local clock offset was cleared (--clock real).`
+- A local proof is signed with a local key. Verify it with the `publicKey` from `/_quant_serve/info`. A local key never verifies a production proof. The offline verifier is in the conformance suite, which installs from GitHub (it is not on the npm registry):
+
+  ```bash
+  npm install --save-dev github:quantcdn/kv-ledger-conformance#edge-kv-v0.2.0
+  npx kv-ledger-verify verify-proof proof.json --public-key key.pem
+  ```
+
+`quant kv --local` does not have ledger commands yet. It prints a warning to stderr for a pending ledger and for a ledger in a retired format.
+
+### Ledger subjects
+
+A ledger with a `subjectField` names a data subject in each entry. Quant serve emulates version 1 of the ledger subject contract with `@quantcdn/edge-kv`:
+
+- `pseudonym` mode stores a token in the subject field. `clear` mode keeps the field as given. In both modes, the personal fields are sealed with a key for each subject.
+- Reads of an entry show the value as appended. After a shred, each sealed field reads `{ "$shredded": true }`.
+
+The local control route has the two subject calls. They take the body of the platform admin routes, and they answer the platform answer body. In production, these are admin API calls (`POST …/ledgers/{name}/shred` and `POST …/ledgers/{name}/subject-entries`). The edge `kvStore` does not have them.
+
+```bash
+# Shred a data subject: shred entries, then the subject key is destroyed. The answer holds a signed receipt.
+curl -X POST http://127.0.0.1:8787/_quant_serve/ledger/shred \
+  -H 'x-quant-serve: 1' -H 'content-type: application/json' \
+  -d '{"store":"audit","ledger":"people","subjectId":"u-17","reason":"Erasure request 1","authority":"Policy 4","requestedBy":"Privacy officer"}'
+
+# The entries of one data subject (optional: collection, since, until, limit, nextToken, personal)
+curl -X POST http://127.0.0.1:8787/_quant_serve/ledger/subject-entries \
+  -H 'x-quant-serve: 1' -H 'content-type: application/json' \
+  -d '{"store":"audit","ledger":"people","subjectId":"u-17"}'
+```
+
+- A store that `quant/meta.json` does not declare gets 404. A body that is not a JSON object with `store` and `ledger` gets 400.
+- A backend error answers its status and `{ "code", "message" }`, for example 404 `LEDGER_NOT_FOUND` or 400 `VALIDATION`.
+- A repeat shred answers `alreadyShredded: true` with the same receipt. The receipt is signed with the local key, the `publicKey` from `/_quant_serve/info`.
+
+A ledger with a `subjectField` that an earlier quant serve (edge-kv 0.1.x) declared has no `subjectMode`. Its appends and reads now give `LEDGER_FORMAT_RETIRED`, as on the platform. Quant serve prints a warning that names the ledger at start. Run `quant serve --reset`, or declare a new ledger.
+
+> **Caution:** The subject keys are local keys in `.quant/kv/state.json`, not KMS keys. Anyone who can read the state file can read every personal field, also a shredded field in an older copy of the file. Never put real personal data in the local KV.
+
+## Inline functions
+
+`quant serve` replaces `{{QUANT_FN:uuid}}` tokens in pages, as the edge does, when `quant/meta.json` turns inline functions on:
+
+```json
+{
+  "project_settings": {
+    "enable_inline_fn": true
+  }
+}
+```
+
+`project_settings` accepts only `enable_inline_fn`, with `true` or `false`. A file with another key or value stops `quant serve` with the message that the portal shows.
+
+- Tokens are replaced in static HTML pages with status 200, and in HTML pages with status 200 from the `--proxy` dev server. Tokens in other files, function responses and the 404 page stay as they are.
+- The token must hold a full function UUID. Any other text between the braces stays in the page. The token is not case sensitive.
+- Each function runs once, in the order of its first token, one at a time. Every copy of its token is replaced by the function body as text. The status of the function does not change the page status.
+- A token for a UUID with no function in `quant/edge-functions.json` is replaced by `Unable to find edge function with uuid: <uuid>`.
+- The output of a function is not scanned for tokens.
+- A content filter runs before the tokens are replaced.
+- The function gets the page request: `event.request` and `event.url` are the page request and URL.
+- A page with a token gets `content-type: text/html; charset=utf-8`, and loses `etag` and `last-modified`. The headers of the last function that ran are added. Without a `cache-control` from the function (or from `globalHeaders`), the page gets `cache-control: private, max-age=0`.
+
+What is different from the edge:
+
+- On the edge, a page with inline functions on also gets a client script for `<quant-island>` elements. `quant serve` does not add this script.
+- The "Allow Inline Functions" option of a proxy rule is not in the rules manifest, so `quant serve` does not process proxy rule responses.
+- If a function fails, the terminal shows the error, and the token is replaced by an empty string.
+- A page over 10 MB is sent without inline function output, and a function output over 10 MB is replaced by an empty string. The terminal shows a warning.
+
+## Local project settings (quant/serve.json)
+
+On a real project, the dashboard sets the custom headers, basic authentication and the trailing-slash behaviour. `quant serve` reads these settings from `quant/serve.json`:
+
+```json
+{
+  "globalHeaders": {
+    "x-frame-options": "DENY",
+    "cache-control": "public, max-age=60"
+  },
+  "basicAuth": { "username": "demo", "password": "local-only" },
+  "trailingSlash": "redirect"
+}
+```
+
+Each field is optional.
+
+- `globalHeaders` - Headers for every response from the site: pages, files, function responses, the 404 page and the basic authentication 401. A header that a function sets replaces the global header of the same name. `quant-server` and `age` cannot be set.
+- `basicAuth` - With a username and a password, every path needs these credentials. A request without them gets 401 with `WWW-Authenticate: Basic`. The check applies before the rules, so functions and redirects need the credentials too. WebSocket upgrades also need them. The `/_quant_serve/` control routes do not need them: they are local only and need the `x-quant-serve: 1` header (see [Safety](#safety)).
+- `trailingSlash` - `"redirect"`: a path that ends with `/` (except `/`) gets a 301 to the path without the trailing slashes, with the query string. A path that a rule answers is not redirected. `"none"` (the default): no redirect.
+
+The order is the order of the edge: global headers, basic authentication, rules, the trailing-slash redirect, then static content.
+
+`quant/serve.json` is local only. No deploy command reads it, and `quant deploy` never uploads it. `quant serve` never prints the password. Do not put a production password in the file. A file with the wrong shape stops `quant serve` at start-up, with a message that names the field. With `--watch`, `quant serve` reads the file again when it changes. If the new file has the wrong shape, `quant serve` prints the message and keeps the last valid settings.
 
 ## Edge libraries in quant serve
 
@@ -360,7 +499,7 @@ Flags:
 - Production security protections do not apply.
 - Time, memory and capacity limits of production are not the same.
 - Geolocation and the client address are simulated values. Set them with `--geo` and `--client-ip`.
-- Ledgers come in a later release.
+- Ledger subject keys are local keys, not KMS keys. There are no backups, no reference key rotation, and a shred always finishes at once (no 202 answer).
 
 ### Safety
 
@@ -369,8 +508,8 @@ Flags:
 - A function that blocks the event loop (an endless loop after an await) stops `quant serve` after 20 s.
 - The timers that a function starts (`setTimeout`, `setInterval`) are cleared when its response is ready or its time budget ends.
 - When `--host` is a loopback address (the default), `quant serve` answers only the Host names `localhost`, `127.0.0.1` and `[::1]` (any port) and the `--domain` value. Other Host names get 421.
-- The `/_quant_serve/` routes answer only on loopback, and only a request with the header `x-quant-serve: 1`. They do not exist on the edge.
-- `quant serve` does not serve `quant.json`, the `quant/` folder, `node_modules`, or files and folders whose names start with `.`. It serves the `.well-known/` folder at the top of the site (for example `security.txt`), but not a dotfile inside it.
+- The `/_quant_serve/` routes (`info`, `clock`, `ledger/archive-now`, `ledger/shred`, `ledger/subject-entries`) answer only a client on a loopback address, and only the Host names `localhost`, `127.0.0.1` and `[::1]` (any port). This also applies with a `--host` that is not loopback, and the `--domain` value does not count. Another Host gets 421. A request without the header `x-quant-serve: 1`, or with an `Origin` that is not a local origin (`http` or `https` on one of these names), gets 403. The routes do not exist on the edge.
+- `quant serve` does not serve `quant.json`, the `quant/` folder, `quant/serve.json` and `quant/kv-ledgers.json` at any depth in the site (a deploy never uploads them), `node_modules`, or files and folders whose names start with `.`. It serves the `.well-known/` folder at the top of the site (for example `security.txt`), but not a dotfile inside it.
 
 ## Upgrading from 6.x to 7.0.0
 
