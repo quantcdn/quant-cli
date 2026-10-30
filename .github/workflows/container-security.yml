@@ -1,0 +1,21 @@
+name: Container security smoke checks
+on:
+  pull_request:
+  push:
+    branches: [main]
+permissions:
+  contents: read
+jobs:
+  container:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+      - name: Build runtime image
+        run: docker build --pull -f .docker/quant-cli.Dockerfile -t quant-cli-security:test .
+      - name: Verify runtime and command entrypoints
+        run: |
+          docker run --rm --network none quant-cli-security:test --version
+          docker run --rm --network none quant-cli-security:test deploy --help
+          docker run --rm --network none quant-cli-security:test purge --help
+          docker run --rm --network none quant-cli-security:test search --help
+          docker run --rm --network none --entrypoint node quant-cli-security:test -e 'const v=process.versions.node.split(".").map(Number); if(v[0]!==22 || v[1]<23 || (v[1]===23 && v[2]<4))process.exit(1); console.log(process.versions.node)'

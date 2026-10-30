@@ -460,3 +460,12 @@ takes over a rule this manifest did not create (a rule ID collision).
 
 Portal-issued template tokens expire after one year; rotate the token and update
 `QUANT_API_TOKEN` before expiry.
+
+### Container security rebuilds
+
+The Docker image uses a fixed-vendor Node runtime floor, a locked production-only
+dependency tree and independently updated npm tooling. The `image.yml` workflow
+can rebuild the current CLI version for container security updates without
+changing the CLI API or publishing a new npm package. The supplied image version
+must match package.json. Digest-pinned action consumers must update their image
+reference after a security rebuild.
