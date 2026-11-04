@@ -59,10 +59,26 @@ function refusalError(rules) {
   return new Error('Managed rules were changed outside code; nothing was written. Re-run with --force to overwrite them with this manifest.');
 }
 
+const MESSAGE_STATUSES = [409, 422];
+const MAX_MESSAGE = 300;
+
+// The `message` (else `error`) text of a 409 or 422 body, as one short line, or null.
+function serverMessage(status, data) {
+  if (!MESSAGE_STATUSES.includes(status)) return null;
+  const text = [data?.message, data?.error].find(value => typeof value === 'string' && value.trim() !== '');
+  if (text === undefined) return null;
+  const line = text.replace(/[\u0000-\u001f\u007f-\u009f]+/g, ' ').replace(/\s+/g, ' ').trim();
+  return line.length > MAX_MESSAGE ? `${line.slice(0, MAX_MESSAGE - 3)}...` : line;
+}
+
 // Never print Axios config/headers or an arbitrary upstream body containing credentials.
+// A 409 or 422 message is printed: the API writes it for the user (for example,
+// that the change may already be live, or that the rule order cannot be kept).
 function deployError(error) {
   const status = error.response?.status;
   if (status === 409 && Array.isArray(error.response?.data?.rules)) return refusalError(error.response.data.rules);
+  const message = serverMessage(status, error.response?.data);
+  if (message) return new Error(`Rules deployment failed (${status}): ${message}`);
   if (status === 409) return new Error('Rules are being changed by another request (409). Retry shortly.');
   return new Error(`Rules deployment failed (${status || error.code || 'network error'}). Check portal URL, token scopes and project access.`);
 }

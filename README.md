@@ -597,6 +597,14 @@ exits non-zero and lists each changed field (values only for matchers and weight
 Re-run with `--force` to overwrite those rules with the manifest. `--force` never
 takes over a rule this manifest did not create (a rule ID collision).
 
+When the rules API refuses a deploy with 409 or 422 and gives a message, `quant rules`
+prints that message and exits non-zero. Examples:
+
+- 409: the change may already be live. Reload the rules and check them. A retry is safe.
+- 422: the requested rule order cannot be kept. A retry does not help. Contact support.
+
+Without a message, a 409 means another request is changing the rules (retry shortly).
+
 Portal-issued template tokens expire after one year; rotate the token and update
 `QUANT_API_TOKEN` before expiry.
 

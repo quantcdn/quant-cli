@@ -97,4 +97,42 @@ describe('Rules deployment', () => {
     try { await run({ force: true }); expect.fail('must fail'); } catch (error) { expect(error.message).to.include('does not own'); }
     try { await run(); expect.fail('must fail'); } catch (error) { expect(error.message).to.include('Retry'); }
   });
+  describe('409 and 422 responses', () => {
+    async function failure(response) {
+      files();
+      sinon.stub(axios, 'post').rejects({ response });
+      sinon.stub(console, 'log');
+      try { await run(); } catch (error) { return error.message; }
+      throw new Error('must fail');
+    }
+    it('keeps the refusal for a 409 with a rules list', async () => {
+      const message = await failure({ status: 409, data: { message: 'Some managed rules changed outside code.', rules: [{ id: 'api', status: 'drift', diff: {} }] } });
+      expect(message).to.include('--force').and.not.to.include('Some managed rules');
+    });
+    it('prints the server message of a 409', async () => {
+      const text = 'The change may already be live. Reload the rules and check them; a retry is safe.';
+      const message = await failure({ status: 409, data: { error: 'conflict', message: text } });
+      expect(message).to.equal(`Rules deployment failed (409): ${text}`);
+    });
+    it('keeps the retry text for a 409 without a body', async () => {
+      expect(await failure({ status: 409 })).to.equal('Rules are being changed by another request (409). Retry shortly.');
+    });
+    it('prints the server message of a 422 and does not tell the user to retry', async () => {
+      const text = 'The requested rule order cannot be kept. Contact support.';
+      const message = await failure({ status: 422, data: { error: 'rule_order', message: text } });
+      expect(message).to.equal(`Rules deployment failed (422): ${text}`);
+      expect(message).not.to.match(/retry/i);
+    });
+    it('prints the error text of a 422 when the body has no message', async () => {
+      expect(await failure({ status: 422, data: { error: 'The rule order cannot be kept.' } })).to.equal('Rules deployment failed (422): The rule order cannot be kept.');
+    });
+    it('keeps the generic text for a 422 without a body', async () => {
+      expect(await failure({ status: 422 })).to.equal('Rules deployment failed (422). Check portal URL, token scopes and project access.');
+    });
+    it('prints one line of a long or multi-line message', async () => {
+      const message = await failure({ status: 422, data: { message: `first\nsecond\u0007${'x'.repeat(600)}` } });
+      expect(message).not.to.match(/[\n\u0007]/);
+      expect(message.length).to.be.below(400);
+    });
+  });
 });
