@@ -59,20 +59,25 @@ describe('kv command', () => {
         asked.push({ kind, ...question });
         return answers.shift();
       };
-      return { asked, prompts: { select: next('select'), text: next('text'), confirm: next('confirm'), isCancel: (value) => value === CANCEL } };
+      return {
+        asked,
+        prompts: { select: next('select'), text: next('text'), password: next('password'), confirm: next('confirm'), isCancel: (value) => value === CANCEL }
+      };
     }
 
-    it('asks set --secret as a yes/no question, default no', async () => {
-      const fake = prompts(['set', 'orbit', 'api:token', '"x"', true]);
+    it('asks set --secret as a yes/no question, default no, then the value with hidden input', async () => {
+      const fake = prompts(['set', 'orbit', 'api:token', true, '"x"']);
       expect(await askKv(fake.prompts)).to.deep.equal({ local: true, action: 'set', store: 'orbit', key: 'api:token', value: '"x"', secret: true });
       const question = fake.asked.find((item) => item.kind === 'confirm');
       expect(question.initialValue).to.equal(false);
       expect(question.message).to.match(/secret/i);
+      expect(fake.asked[fake.asked.length - 1].kind).to.equal('password');
     });
 
-    it('gives secret false when the answer is no', async () => {
-      const fake = prompts(['set', 'orbit', 'a', '1', false]);
-      expect((await askKv(fake.prompts)).secret).to.equal(false);
+    it('gives secret false and a visible value prompt when the answer is no', async () => {
+      const fake = prompts(['set', 'orbit', 'a', false, '1']);
+      expect(await askKv(fake.prompts)).to.include({ secret: false, value: '1' });
+      expect(fake.asked[fake.asked.length - 1].kind).to.equal('text');
     });
 
     it('does not ask about a secret for get', async () => {
@@ -82,7 +87,8 @@ describe('kv command', () => {
     });
 
     it('returns null when the secret question is cancelled', async () => {
-      expect(await askKv(prompts(['set', 'orbit', 'a', '1', CANCEL]).prompts)).to.equal(null);
+      expect(await askKv(prompts(['set', 'orbit', 'a', CANCEL]).prompts)).to.equal(null);
+      expect(await askKv(prompts(['set', 'orbit', 'a', true, CANCEL]).prompts)).to.equal(null);
     });
   });
 
@@ -145,7 +151,10 @@ describe('kv command', () => {
   describe('set --secret', () => {
     it('stores the value encrypted: get reads it, list masks it, the state file does not hold it', async () => {
       expect(await run(['--local', 'set', 'orbit', 'api:token', '"s3cr3t-value"', '--secret'])).to.equal(0);
-      expect(lastJson()).to.include({ key: 'api:token', value: 's3cr3t-value', encrypted: true });
+      expect(lastJson()).to.include({ key: 'api:token', value: '[ENCRYPTED]', encrypted: true });
+      expect(out.join('\n')).not.to.include('s3cr3t-value');
+      expect(await run(['--local', 'get', 'orbit', 'api:token'])).to.equal(0);
+      expect(lastJson()).to.include({ value: 's3cr3t-value', encrypted: true });
       expect(await run(['--local', 'list', 'orbit', '--prefix', 'api:'])).to.equal(0);
       expect(lastJson()).to.have.length(1);
       expect(lastJson()[0]).to.include({ key: 'api:token', encrypted: true, value: '[ENCRYPTED]' });
@@ -162,7 +171,17 @@ describe('kv command', () => {
       await run(['--local', 'set', 'orbit', 'a', '1']);
       const { version } = lastJson();
       expect(await run(['--local', 'set', 'orbit', 'a', '2', '--secret', '--if-version', version])).to.equal(0);
-      expect(lastJson()).to.include({ value: 2, encrypted: true });
+      expect(lastJson()).to.include({ value: '[ENCRYPTED]', encrypted: true });
+    });
+
+    it('prints one notice that --secret is ignored on get, list and delete', async () => {
+      await run(['--local', 'set', 'orbit', 'a', '1']);
+      for (const action of ['get', 'list', 'delete']) {
+        err.length = 0;
+        const argv = action === 'list' ? ['--local', action, 'orbit', '--secret'] : ['--local', action, 'orbit', 'a', '--secret'];
+        expect(await run(argv)).to.equal(0);
+        expect(err).to.deep.equal([`--secret applies only to set. It is ignored for ${action}.`]);
+      }
     });
 
     it('refuses a secret in an indexed collection', async () => {

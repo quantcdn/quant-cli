@@ -6,7 +6,7 @@
 
 import fs from 'node:fs';
 import path from 'node:path';
-import { select, text, confirm, isCancel } from '@clack/prompts';
+import { select, text, password, confirm, isCancel } from '@clack/prompts';
 import { openLocalKv } from '../serve/kv/wire.js';
 import { pendingLedgerWarnings } from '../serve/kv/ledgers.js';
 import { DEFAULT_FILES } from '../serve/project.js';
@@ -16,6 +16,8 @@ import { resolveOptions } from './serve.js';
 const REMOTE_MESSAGE = 'Remote KV commands are not available yet. Use --local.';
 const ACTIONS = ['list', 'get', 'set', 'delete'];
 const MAX_PAGES = 100;
+// The mask of an encrypted value, the same as in a list.
+const ENCRYPTED = '[ENCRYPTED]';
 
 /** A failure with a message for the user and no stack. */
 class UsageError extends Error {}
@@ -106,7 +108,9 @@ const OPERATIONS = {
   async set(store, args) {
     const value = parseJson(need(args.value, 'The JSON value'));
     await store.set(need(args.key, 'The key'), value, setOptions(args));
-    return store.getEntry(args.key);
+    const entry = await store.getEntry(args.key);
+    // Never print a secret value after a write: it would go to logs and scrollback.
+    return entry && entry.encrypted ? { ...entry, value: ENCRYPTED } : entry;
   },
   async delete(store, args) {
     await store.delete(need(args.key, 'The key'));
@@ -121,6 +125,7 @@ function describeError(err) {
 
 async function execute(args, root, error) {
   if (!ACTIONS.includes(args.action)) throw new UsageError(`The action must be one of: ${ACTIONS.join(', ')}`);
+  if (args.secret === true && args.action !== 'set') error(`--secret applies only to set. It is ignored for ${args.action}.`);
   const options = resolveOptions({ org: args.org, project: args.project, meta: args.meta }, { root, gitUserName: () => null });
   const id = idOf(options, args.store);
   if (id === null) throw new UsageError(`FORBIDDEN: Access to KV store ${args.store} is not allowed`);
@@ -153,19 +158,21 @@ export async function runKv(args, { root = process.cwd(), print = console.log, e
   }
 }
 
-const PROMPTS = { select, text, confirm, isCancel };
+const PROMPTS = { select, text, password, confirm, isCancel };
 
-// set: the JSON value and the secret question (default no). Null on cancel.
+// set: the secret question (default no), then the JSON value. A secret
+// value is typed with hidden input. Null on cancel.
 async function askValue(prompts) {
-  const value = await prompts.text({ message: 'JSON value' });
-  if (prompts.isCancel(value)) return null;
   const secret = await prompts.confirm({ message: 'Store the value as a secret (encrypted)?', initialValue: false });
-  return prompts.isCancel(secret) ? null : { value, secret: secret === true };
+  if (prompts.isCancel(secret)) return null;
+  const ask = secret === true ? prompts.password : prompts.text;
+  const value = await ask({ message: 'JSON value' });
+  return prompts.isCancel(value) ? null : { value, secret: secret === true };
 }
 
 /**
  * The menu: ask for the action, the store and what the action needs.
- * @param {{ select, text, confirm, isCancel }} [prompts] The prompt functions (for tests).
+ * @param {{ select, text, password, confirm, isCancel }} [prompts] The prompt functions (for tests).
  * @returns {Promise<Object|null>} The args, or null on cancel.
  */
 export async function askKv(prompts = PROMPTS) {
