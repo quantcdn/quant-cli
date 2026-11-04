@@ -234,7 +234,9 @@ function ledgerLines(ledgers, clock) {
 }
 
 function pullLines(pull) {
-  return pull ? [`Pulled ${pull.count} portal rules (${pull.local} from quant/edge-rules.json).`] : [];
+  if (!pull) return [];
+  const headers = pull.headers ? [`Using ${pull.headers} portal global header${pull.headers === 1 ? '' : 's'}.`] : [];
+  return [`Pulled ${pull.count} portal rules (${pull.local} from quant/edge-rules.json).`, ...headers];
 }
 
 function clockLines(clock) {
@@ -484,7 +486,7 @@ async function pulledProject(options, { env = process.env, fetchImpl, budget } =
 
 // The start-up summary of a pull: the pulled rules and the local rules merged in.
 function pullSummary(pulled, server) {
-  return pulled ? { count: pulled.count, local: server.summary.localRules } : null;
+  return pulled ? { count: pulled.count, local: server.summary.localRules, headers: Object.keys(pulled.headers ?? {}).length } : null;
 }
 
 function withPull(options, pulled) {

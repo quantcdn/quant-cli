@@ -173,6 +173,7 @@ describe('quant serve phase 3 end to end', function () {
   it('prints no token or secret, and writes no snapshot value or token to the project', async () => {
     const printed = site.output();
     expect(printed).to.include('Pulled 9 portal rules (4 from quant/edge-rules.json).');
+    expect(printed).to.include('Using 1 portal global header.');
     for (const secret of [TOKEN, BASIC_PASSWORD, INJECT_SECRET, PORTAL_VALUE, LOCAL_WRITE]) expect(printed).to.not.include(secret);
     await site.stop();
     expect(fs.existsSync(path.join(root, '.quant'))).to.equal(true);

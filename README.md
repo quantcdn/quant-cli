@@ -493,7 +493,7 @@ quant serve dist --pull-rules --kv-remote sessions --org acme --project marketin
 
 The pulled rules run in the order of the edge, with the rules of `quant/edge-rules.json`. A local rule replaces the portal rule that a deploy of the same namespace and rule ID owns. All other portal rules stay in their order: also a deployed rule that the local file no longer lists, and the deployed rules of other namespaces. Each local rule then goes before the first portal rule with a higher weight. A deploy also creates or updates only the rules of its own namespace and removes no rule, so this is the order that the edge has after a deploy of the same file when the portal rules are in weight order. Without `quant/edge-rules.json`, the portal rules run unchanged.
 
-The start-up output shows `Pulled <n> portal rules (<m> from quant/edge-rules.json).`. `<m>` is the number of local rules that run with the portal rules.
+The start-up output shows `Pulled <n> portal rules (<m> from quant/edge-rules.json).`. `<m>` is the number of local rules that run with the portal rules. If the portal project has global headers, the next line is `Using <k> portal global headers.`. The line shows the count only, not the names or values.
 
 Actions that run locally: redirect (with `$1` to `$5`), headers, custom response, basic auth, error page, proxy, and edge function, auth function and filter rules. A rule with a cookie condition runs only when the request sends a cookie of exactly that name.
 
@@ -508,7 +508,8 @@ These do not run locally:
 Other points:
 
 - Some organisations (for example trial organisations) do not get every rule type in the portal list. `quant serve` then prints `Some rule types are not in the portal response for this organisation, so they do not run locally.`, and the missing rules do not run.
-- Basic authentication for the whole site and the trailing-slash setting have no portal read route. They come only from `quant/serve.json`.
+- Basic authentication for the whole site and the trailing-slash setting have no portal read route. They come only from `quant/serve.json`. For example, if the project redirects `/app/` to `/app` at the edge, set `"trailingSlash": "redirect"` in `quant/serve.json`.
+- Static responses from `quant serve` have `cache-control: no-store`. The edge cache settings are not pulled.
 - The `globalHeaders` of `quant/serve.json` replace a portal global header of the same name, with one warning for each name.
 - A pulled function rule runs only when its function uuid is in `quant/edge-functions.json`. The function code is not pulled.
 
