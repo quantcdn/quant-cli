@@ -6,11 +6,11 @@
  */
 
 import { createLocalKv } from '@quantcdn/edge-kv';
-import { createPortalClient, portalOptions } from '../portal/client.js';
+import { createPortalClient, portalOptions, requestBudget, START_REQUEST_LIMIT } from '../portal/client.js';
 import { findStore, readStore } from '../portal/kv-remote.js';
 
 export const REMOTE_MAX_KEYS = 10000;
-export const REMOTE_MAX_REQUESTS = 200;
+export const REMOTE_MAX_REQUESTS = START_REQUEST_LIMIT;
 const MASKED = '[ENCRYPTED]';
 // Portal index states that do not serve queries: they are not declared.
 const UNUSED_STATES = ['FAILED', 'DROPPING'];
@@ -35,18 +35,16 @@ export function toLocalIndex(def) {
 
 /**
  * Read the store from the portal: the store list, the index definitions,
- * the keys and their values. The request count includes 429 retries.
+ * the keys and their values. `budget` is the request budget of the start-up,
+ * shared with --pull-rules; each attempt (429 retries too) uses one request.
  * A PortalError stops the start-up with its one-line message.
  */
-export async function readRemoteStore({ name, org, project }, { env = process.env, fetchImpl } = {}) {
+export async function readRemoteStore({ name, org, project }, { env = process.env, fetchImpl, budget = requestBudget() } = {}) {
   const ids = portalOptions({ clientid: org, project }, env, '--kv-remote');
-  const counter = { count: 0 };
-  const client = createPortalClient({
-    base: ids.base, token: ids.token, onRequest: () => { counter.count += 1; }, ...(fetchImpl ? { fetchImpl } : {})
-  });
+  const client = createPortalClient({ base: ids.base, token: ids.token, budget, ...(fetchImpl ? { fetchImpl } : {}) });
   const ctx = { customer: ids.customer, project: ids.project, name };
   const store = await findStore(client, ctx);
-  const snapshot = await readStore(client, { ...ctx, counter }, store.id, { maxKeys: REMOTE_MAX_KEYS, maxRequests: REMOTE_MAX_REQUESTS });
+  const snapshot = await readStore(client, ctx, store.id, { maxKeys: REMOTE_MAX_KEYS });
   return { name, format: store.format ?? 2, ...snapshot };
 }
 

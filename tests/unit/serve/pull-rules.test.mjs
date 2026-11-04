@@ -5,7 +5,7 @@ import path from 'node:path';
 import { createPortalClient, PortalError } from '../../../src/serve/portal/client.js';
 import {
   fromPortalRule, mergeRules, pullGlobalHeaders, pullProject, pullRules,
-  HEADERS_SCOPE_WARNING, PARTIAL_WARNING
+  HEADERS_READ_WARNING, HEADERS_SCOPE_WARNING, PARTIAL_WARNING
 } from '../../../src/serve/portal/pull-rules.js';
 import { loadProject } from '../../../src/serve/project.js';
 import { resolveOptions, runServe } from '../../../src/commands/serve.js';
@@ -184,13 +184,20 @@ describe('serve --pull-rules', () => {
 
     it('makes booleans of boolean settings sent as text', () => {
       const rule = fromPortalRule(item(0, 'proxy', {
-        only_proxy_404: 'true', static_error_page: '', waf_enabled: '0', disable_ssl_verify: '1', failover_mode: 'false'
+        only_proxy_404: 'true', static_error_page: 'false', waf_enabled: '0', disable_ssl_verify: '1', failover_mode: 'false'
       }, { disabled: 'true' }));
       expect(rule.disabled).to.equal(true);
       expect(rule.config).to.include({
-        only_proxy_404: true, static_error_page: false, waf_enabled: false, disable_ssl_verify: true, failover_mode: false
+        only_proxy_404: true, static_error_page: true, waf_enabled: false, disable_ssl_verify: true, failover_mode: false
       });
       expect(fromPortalRule(item(0, 'redirect', {}, { disabled: '0' })).disabled).to.equal(false);
+    });
+
+    it('turns static error pages on for any value that is not empty', () => {
+      const staticPages = (value) => fromPortalRule(item(0, 'proxy', { static_error_page: value })).config.static_error_page;
+      for (const value of ['yes', 'true', '1', '0', 'off', true]) expect(staticPages(value), String(value)).to.equal(true);
+      for (const value of ['', false, null]) expect(staticPages(value), String(value)).to.equal(false);
+      expect(fromPortalRule(item(0, 'proxy', {})).config).to.not.have.property('static_error_page');
     });
 
     it('makes status_codes a list', () => {
@@ -279,7 +286,28 @@ describe('serve --pull-rules', () => {
       const { client } = fakePortal({ '/custom-headers': reply(403, {}) });
       expect(await pullGlobalHeaders(client, { ...IDS, warn: (line) => warnings.push(line) })).to.equal(null);
       expect(warnings).to.deep.equal([HEADERS_SCOPE_WARNING]);
-      expect(HEADERS_SCOPE_WARNING).to.equal('QUANT_API_TOKEN lacks projects:read, so the portal\'s global headers are not used.');
+      expect(HEADERS_SCOPE_WARNING).to.equal('QUANT_API_TOKEN cannot read project headers (projects:read), so the portal\'s global headers are not used.');
+    });
+
+    it('warns and gives null when the portal fails or does not answer', async () => {
+      expect(HEADERS_READ_WARNING).to.equal('The portal\'s global headers could not be read, so they are not used.');
+      for (const status of [500, 502, 503]) {
+        const warnings = [];
+        const { client } = fakePortal({ '/custom-headers': reply(status, { message: 'down' }) });
+        expect(await pullGlobalHeaders(client, { ...IDS, warn: (line) => warnings.push(line) }), String(status)).to.equal(null);
+        expect(warnings).to.deep.equal([HEADERS_READ_WARNING]);
+      }
+      const warnings = [];
+      const down = createPortalClient({ base: BASE, token: TOKEN, fetchImpl: async () => { throw new Error('offline'); } });
+      expect(await pullGlobalHeaders(down, { ...IDS, warn: (line) => warnings.push(line) })).to.equal(null);
+      expect(warnings).to.deep.equal([HEADERS_READ_WARNING]);
+    });
+
+    it('still stops on a refused token or a body that is not valid', async () => {
+      const refused = await failure(pullGlobalHeaders(fakePortal({ '/custom-headers': reply(401, {}) }).client, IDS));
+      expect(refused.status).to.equal(401);
+      const invalid = await failure(pullGlobalHeaders(fakePortal({ '/custom-headers': reply(200, 'x') }).client, IDS));
+      expect(invalid.message).to.equal('The portal sent project headers that are not valid.');
     });
 
     it('takes an empty list as no headers', async () => {

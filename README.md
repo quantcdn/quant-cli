@@ -481,7 +481,7 @@ quant serve dist --pull-rules --kv-remote sessions --org acme --project marketin
 - `QUANT_API_TOKEN` and `QUANT_BASE_URL` are the only source of the token and the portal URL. There is no flag for either, and `quant serve` never prints the token.
 - `QUANT_BASE_URL` must be an HTTPS portal `/api/v2` URL. Plain HTTP is allowed only for `localhost`, `127.0.0.1` and `[::1]`.
 - The organisation and project come from `--org` and `--project`, then `quant/serve.json`, then `quant.json`. If none sets them, the command stops with a message that names the flag.
-- Scopes: `rules:read` for the rules, `projects:read` for the global headers, and `kv:read` for the KV store. Without `rules:read` or `kv:read`, `quant serve` stops and the message names the scope. Without `projects:read`, `quant serve` prints one warning and uses only the local global headers.
+- Scopes: `rules:read` for the rules, `projects:read` for the global headers, and `kv:read` for the KV store. Without `rules:read` or `kv:read`, `quant serve` stops and the message names the scope. Without `projects:read`, `quant serve` prints one warning and uses only the local global headers. If the portal cannot give the global headers (a 5xx answer or no answer), `quant serve` also prints one warning and uses only the local global headers.
 
 ### What the snapshot is
 
@@ -516,7 +516,7 @@ Other points:
 
 `--kv-remote <name>` copies the KV store `<name>` into the local KV, in memory. The store must be linked to the portal project and listed in `quant/meta.json`, so that functions can open it. The `initial_values` and fixtures of that store are not seeded.
 
-- Caps: at most 10,000 keys and 200 portal requests. If a cap stops the read, `quant serve` prints `KV store <name>: copied the first <n> keys only (limit 10000). Writes stay local.`. For the request cap, the text in the brackets is `request limit 200`. If the portal ends the key list early, it is `the portal ended the list early`.
+- Caps: at most 10,000 keys and 200 portal requests. The 200 requests are for the full start-up: the `--pull-rules` requests and each 429 retry count too. If a cap stops the read, `quant serve` prints `KV store <name>: copied the first <n> keys only (limit 10000). Writes stay local.`. For the request cap, the text in the brackets is `request limit 200`. If the portal ends the key list early, it is `the portal ended the list early`.
 - The start-up output shows `KV store <name>: copied <n> keys from the portal (<m> encrypted values masked).` If the portal store has ledger entries, the line adds ` (<k> ledger entries not copied)` before the final full stop.
 - A secret value reads `[ENCRYPTED]`. The portal does not send the real value.
 - Index definitions are copied, so index lists and counts work. Expiry times are kept.

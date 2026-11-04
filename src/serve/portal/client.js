@@ -6,6 +6,8 @@ const MAX_WAIT_MS = 30000;
 const MIN_RETRY_MS = 250;
 const MAX_MESSAGE = 300;
 const LOCAL_HOSTS = ['localhost', '127.0.0.1', '[::1]'];
+// The most portal requests of one start-up (rules, headers and KV together).
+export const START_REQUEST_LIMIT = 200;
 
 export class PortalError extends Error {
   constructor(message, status) {
@@ -13,6 +15,25 @@ export class PortalError extends Error {
     this.name = 'PortalError';
     this.status = status;
   }
+}
+
+/** The portal refused no request: quant serve spent its request budget first. */
+export class RequestLimitError extends PortalError {
+  constructor(max) {
+    super(`quant serve reached its limit of ${max} portal requests at start.`);
+    this.name = 'RequestLimitError';
+  }
+}
+
+/** A request budget that clients can share: each HTTP attempt uses one. */
+export function requestBudget(max = START_REQUEST_LIMIT) {
+  return { max, used: 0 };
+}
+
+// Use one request of the budget, or refuse the attempt when it is spent.
+function spend(budget) {
+  if (budget.used >= budget.max) throw new RequestLimitError(budget.max);
+  budget.used += 1;
 }
 
 // A string as one short line, or null when it is not text.
@@ -121,13 +142,14 @@ async function settle(context, response, scopeInfo) {
   return { status, body: body ?? null };
 }
 
-// onRequest() is called once for each HTTP attempt, a 429 retry included.
-export function createPortalClient({ base, token, fetchImpl = fetch, sleep = ms => new Promise(resolve => setTimeout(resolve, ms)), onRequest = () => {} }) {
+// Each HTTP attempt, a 429 retry included, uses one request of `budget`.
+// Clients of one start-up share one budget.
+export function createPortalClient({ base, token, fetchImpl = fetch, sleep = ms => new Promise(resolve => setTimeout(resolve, ms)), budget = requestBudget() }) {
   const context = { base, token, fetchImpl };
   async function request(call, scopeInfo) {
     let waited = 0;
     for (;;) {
-      onRequest();
+      spend(budget);
       const response = await send(context, call);
       if (response.status !== 429) return settle(context, response, scopeInfo);
       const delay = retryDelayMs(response);

@@ -15,7 +15,7 @@ import { DEFAULT_FILES, loadProject } from '../serve/project.js';
 import { openLocalKv } from '../serve/kv/wire.js';
 import { LEDGERS_FILE, readLedgerFile } from '../serve/kv/ledgers.js';
 import { readServeConfig } from '../serve/project-config.js';
-import { createPortalClient, portalOptions } from '../serve/portal/client.js';
+import { createPortalClient, portalOptions, requestBudget } from '../serve/portal/client.js';
 import { pullProject } from '../serve/portal/pull-rules.js';
 import { readRemoteStore, remoteLines } from '../serve/kv/remote.js';
 
@@ -475,10 +475,10 @@ async function localKv(options, { log, print, portal }) {
 // --pull-rules: read the portal rules and global headers one time. They
 // stay in memory only. QUANT_API_TOKEN and QUANT_BASE_URL come from the
 // environment; the org and project are the serve identity.
-async function pulledProject(options, { env = process.env, fetchImpl } = {}) {
+async function pulledProject(options, { env = process.env, fetchImpl, budget } = {}) {
   if (!options.pullRules) return null;
   const { customer, project, token, base } = portalOptions({ clientid: options.org, project: options.project }, env, '--pull-rules');
-  const client = createPortalClient({ base, token, ...(fetchImpl ? { fetchImpl } : {}) });
+  const client = createPortalClient({ base, token, budget, ...(fetchImpl ? { fetchImpl } : {}) });
   return pullProject(client, { customer, project });
 }
 
@@ -564,8 +564,10 @@ function watchRun(server, child) {
  */
 export async function runServe(options, { stop, print = console.log, log, kvStore, onListening, env, fetchImpl } = {}) {
   if (options.build) runBuild(options.build, options.root);
-  const pulled = await pulledProject(options, { env, fetchImpl });
-  const kv = await kvFor(options, { kvStore, log, print, portal: { env, fetchImpl } });
+  // One request budget for every portal read of the start-up.
+  const budget = requestBudget();
+  const pulled = await pulledProject(options, { env, fetchImpl, budget });
+  const kv = await kvFor(options, { kvStore, log, print, portal: { env, fetchImpl, budget } });
   const server = await startOrShowKeys(serverOptions(withPull(options, pulled), { kvStore: kv.kvStore, backend: kv.backend, log }, print), kv, print);
   const pullWarnings = pulled ? pulled.warnings : [];
   const summary = { ...server.summary, warnings: [...(options.configWarnings || []), ...pullWarnings, ...server.summary.warnings] };

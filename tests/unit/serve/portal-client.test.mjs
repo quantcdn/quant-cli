@@ -1,7 +1,7 @@
 import { inspect } from 'node:util';
 import { expect } from 'chai';
 import { rulesOptions } from '../../../src/commands/rules.js';
-import { portalOptions, createPortalClient, PortalError } from '../../../src/serve/portal/client.js';
+import { portalOptions, createPortalClient, PortalError, RequestLimitError, requestBudget, START_REQUEST_LIMIT } from '../../../src/serve/portal/client.js';
 
 const TOKEN = 'test-token';
 const BASE = new URL('http://127.0.0.1:8080/api/v2');
@@ -263,33 +263,57 @@ describe('portal client', () => {
     });
   });
 
-  describe('onRequest', () => {
-    function counted(responses) {
+  describe('request budget', () => {
+    function counted(responses, budget = requestBudget()) {
       const queue = [...responses];
-      let count = 0;
+      let fetched = 0;
       const fetchImpl = async () => {
+        fetched += 1;
         const next = queue.shift();
         if (next instanceof Error) throw next;
         return next;
       };
-      const client = createPortalClient({ base: BASE, token: TOKEN, fetchImpl, sleep: async () => {}, onRequest: () => { count += 1; } });
-      return { client, count: () => count };
+      const client = createPortalClient({ base: BASE, token: TOKEN, fetchImpl, sleep: async () => {}, budget });
+      return { client, budget, fetched: () => fetched };
     }
 
-    it('is called once for each HTTP attempt, retries included', async () => {
+    it('counts each HTTP attempt, retries included', async () => {
       const get = counted([reply(429, {}, { 'retry-after': '1' }), reply(429, {}, { 'retry-after': '1' }), reply(200, {})]);
       await get.client.get('/x');
-      expect(get.count()).to.equal(3);
+      expect(get.budget.used).to.equal(3);
       const post = counted([reply(429, {}, { 'retry-after': '1' }), reply(200, {})]);
       await post.client.post('/x', {});
-      expect(post.count()).to.equal(2);
+      expect(post.budget.used).to.equal(2);
     });
 
-    it('counts a failed attempt and works without the hook', async () => {
+    it('counts a failed attempt and has a default cap of 200', async () => {
       const down = counted([new Error('boom')]);
       await failure(down.client.get('/x'));
-      expect(down.count()).to.equal(1);
-      expect(await setup([reply(200, { ok: 1 })]).client.get('/x')).to.deep.equal({ status: 200, body: { ok: 1 } });
+      expect(down.budget.used).to.equal(1);
+      expect(requestBudget()).to.deep.equal({ max: 200, used: 0 });
+      expect(START_REQUEST_LIMIT).to.equal(200);
+    });
+
+    it('stops 429 retries inside one call at the cap', async () => {
+      const limited = Array.from({ length: 10 }, () => reply(429, {}, { 'retry-after': '0' }));
+      const capped = counted(limited, requestBudget(3));
+      const error = await failure(capped.client.get('/x'));
+      expect(capped.fetched()).to.equal(3);
+      expect(error).to.be.instanceOf(RequestLimitError);
+      expect(error).to.be.instanceOf(PortalError);
+      expect(error.message).to.equal('quant serve reached its limit of 3 portal requests at start.');
+    });
+
+    it('shares one budget between clients', async () => {
+      const budget = requestBudget(2);
+      const one = counted([reply(200, {})], budget);
+      const two = counted([reply(200, {}), reply(200, {})], budget);
+      await one.client.get('/x');
+      await two.client.get('/x');
+      const error = await failure(two.client.get('/x'));
+      expect(error).to.be.instanceOf(RequestLimitError);
+      expect(two.fetched()).to.equal(1);
+      expect(budget.used).to.equal(2);
     });
   });
 });

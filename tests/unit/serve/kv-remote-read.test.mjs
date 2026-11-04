@@ -1,6 +1,7 @@
 import { expect } from 'chai';
 import { findStore, readStore } from '../../../src/serve/portal/kv-remote.js';
-import { createPortalClient } from '../../../src/serve/portal/client.js';
+import { createPortalClient, requestBudget } from '../../../src/serve/portal/client.js';
+import { pullProject } from '../../../src/serve/portal/pull-rules.js';
 
 const BASE = new URL('http://127.0.0.1:8080/api/v2');
 const CTX = { customer: 'org', project: 'proj', name: 'sessions' };
@@ -16,7 +17,7 @@ const reply = (status, body) => ({
 });
 
 // A fake portal: pages of keys, batch-get, indexes and the store list.
-function portal({ total = 0, pageSize = 1000, stores, indexes = [], status = {}, encrypted = [] } = {}) {
+function portal({ total = 0, pageSize = 1000, stores, indexes = [], status = {}, encrypted = [], budget } = {}) {
   const calls = [];
   const keys = Array.from({ length: total }, (_, i) => `k${String(i).padStart(5, '0')}`);
   const fetchImpl = async (url, init) => {
@@ -38,7 +39,7 @@ function portal({ total = 0, pageSize = 1000, stores, indexes = [], status = {},
     }
     return reply(404);
   };
-  return { calls, client: createPortalClient({ base: BASE, token: 'tok', fetchImpl, sleep: async () => {} }) };
+  return { calls, client: createPortalClient({ base: BASE, token: 'tok', fetchImpl, sleep: async () => {}, ...(budget ? { budget } : {}) }) };
 }
 
 const rejection = async (promise) => {
@@ -97,8 +98,8 @@ describe('remote KV read', () => {
       expect(batches.map(c => c.body.keys.length)).to.deep.equal([100, 100, 50]);
       expect(batches.every(c => c.method === 'POST')).to.equal(true);
       expect(result.entries[0]).to.deep.equal({ key: 'k00000', value: { n: 'k00000' }, metadata: { encrypted: false, version: 'V1', updated_at: 't' } });
-      expect(result.requests).to.equal(calls.length);
-      expect(result.requests).to.equal(1 + 3 + 1);
+      expect(calls).to.have.length(1 + 1 + 3);
+      expect(result).to.not.have.property('requests');
     });
 
     it('reads index definitions and counts them as a request', async () => {
@@ -135,12 +136,40 @@ describe('remote KV read', () => {
       expect(result.stoppedBy).to.equal('keys');
     });
 
-    it('stops at maxRequests and sets truncated', async () => {
-      const { client, calls } = portal({ total: 5000 });
-      const result = await readStore(client, CTX, 'abc', { maxRequests: 4 });
+    it('stops at the request budget of the client and sets truncated', async () => {
+      const { client, calls } = portal({ total: 5000, budget: requestBudget(4) });
+      const result = await readStore(client, CTX, 'abc');
       expect(calls).to.have.length(4);
-      expect(result.requests).to.equal(4);
+      expect(result.entries).to.have.length(200);
       expect(result.truncated).to.equal(true);
+      expect(result.stoppedBy).to.equal('requests');
+    });
+
+    it('keeps the indexes and no keys when the budget is spent before the keys', async () => {
+      const indexes = [{ name: 'byX', collection: 'c', fields: ['x'], state: 'ACTIVE' }];
+      const { client, calls } = portal({ total: 5, indexes, budget: requestBudget(1) });
+      const result = await readStore(client, CTX, 'abc');
+      expect(calls).to.have.length(1);
+      expect(result.indexes).to.deep.equal(indexes);
+      expect(result.entries).to.deep.equal([]);
+      expect(result.stoppedBy).to.equal('requests');
+      const spent = await readStore(portal({ total: 5, budget: { max: 1, used: 1 } }).client, CTX, 'abc');
+      expect(spent).to.include({ truncated: true, stoppedBy: 'requests' });
+      expect(spent.indexes).to.deep.equal([]);
+    });
+
+    it('counts the rules and headers requests toward the shared start-up budget', async () => {
+      const budget = requestBudget(5);
+      const rulesFetch = async (url) => (String(url).endsWith('/rules') ? reply(200, []) : reply(200, {}));
+      await pullProject(createPortalClient({ base: BASE, token: 'tok', fetchImpl: rulesFetch, budget }), { customer: 'org', project: 'proj' });
+      expect(budget.used).to.equal(2);
+      const { client, calls } = portal({ total: 300, budget });
+      await findStore(client, CTX);
+      const result = await readStore(client, CTX, 'abc');
+      // 2 rules and headers + 1 store list + 1 indexes + 1 keys page: no batch is left.
+      expect(calls).to.have.length(3);
+      expect(budget.used).to.equal(5);
+      expect(result.entries).to.deep.equal([]);
       expect(result.stoppedBy).to.equal('requests');
     });
 
@@ -174,7 +203,7 @@ describe('remote KV read', () => {
     });
 
     // A fake portal with one fixed keys page: `page` is the keys reply.
-    function onePage(page) {
+    function onePage(page, budget) {
       const calls = [];
       const fetchImpl = async (url, init) => {
         const route = new URL(String(url)).pathname.replace(PREFIX, '');
@@ -183,7 +212,7 @@ describe('remote KV read', () => {
         if (route === '/abc/batch-get') return reply(200, { items: JSON.parse(init.body).keys.map(key => ({ key, value: 1 })) });
         return reply(200, { indexes: [] });
       };
-      return { calls, client: createPortalClient({ base: BASE, token: 'tok', fetchImpl }) };
+      return { calls, client: createPortalClient({ base: BASE, token: 'tok', fetchImpl, ...(budget ? { budget } : {}) }) };
     }
 
     it('stops with truncated when has_more is true and next_cursor is missing or empty', async () => {
@@ -198,18 +227,19 @@ describe('remote KV read', () => {
     });
 
     it('stops a repeated cursor at the request cap', async () => {
-      const { client, calls } = onePage({ data: [{ key: 'a' }], has_more: true, next_cursor: 'same' });
-      const result = await readStore(client, CTX, 'abc', { maxRequests: 9 });
+      const { client, calls } = onePage({ data: [{ key: 'a' }], has_more: true, next_cursor: 'same' }, requestBudget(9));
+      const result = await readStore(client, CTX, 'abc');
       expect(calls).to.have.length(9);
-      expect(result.requests).to.equal(9);
       expect(result.truncated).to.equal(true);
       expect(result.stoppedBy).to.equal('requests');
     });
 
-    it('counts 429 retries in requests and in the cap through onRequest', async () => {
-      const counter = { count: 0 };
+    it('counts 429 retries in the request budget', async () => {
+      const budget = requestBudget(6);
+      let fetched = 0;
       let limited = 0;
       const fetchImpl = async (url, init) => {
+        fetched += 1;
         const route = new URL(String(url)).pathname.replace(PREFIX, '') || '/';
         if (route === '/') return reply(200, [{ id: 'abc', name: 'sessions' }]);
         if (route === '/abc/indexes' && limited++ < 2) return { status: 429, headers: { get: () => '0' }, json: async () => ({}) };
@@ -217,13 +247,27 @@ describe('remote KV read', () => {
         if (route === '/abc/keys') return reply(200, { data: [{ key: 'a' }], has_more: true, next_cursor: 'n' });
         return reply(200, { items: JSON.parse(init.body).keys.map(key => ({ key, value: 1 })) });
       };
-      const client = createPortalClient({ base: BASE, token: 'tok', fetchImpl, sleep: async () => {}, onRequest: () => { counter.count += 1; } });
+      const client = createPortalClient({ base: BASE, token: 'tok', fetchImpl, sleep: async () => {}, budget });
       await findStore(client, CTX);
-      const result = await readStore(client, { ...CTX, counter }, 'abc', { maxRequests: 6 });
+      const result = await readStore(client, CTX, 'abc');
       // 1 store list + 3 index attempts + 1 keys page + 1 batch: the cap of 6 stops the read.
-      expect(counter.count).to.equal(6);
-      expect(result.requests).to.equal(6);
+      expect(fetched).to.equal(6);
+      expect(budget.used).to.equal(6);
+      expect(result.entries).to.have.length(1);
       expect(result.truncated).to.equal(true);
+      expect(result.stoppedBy).to.equal('requests');
+    });
+
+    it('stops 429 retries inside one call at the cap', async () => {
+      let fetched = 0;
+      const fetchImpl = async () => {
+        fetched += 1;
+        return { status: 429, headers: { get: () => '0' }, json: async () => ({}) };
+      };
+      const client = createPortalClient({ base: BASE, token: 'tok', fetchImpl, sleep: async () => {}, budget: requestBudget(4) });
+      const result = await readStore(client, CTX, 'abc');
+      expect(fetched).to.equal(4);
+      expect(result).to.include({ truncated: true, stoppedBy: 'requests' });
     });
 
     it('names kv:read on 403 and never prints a value in errors', async () => {

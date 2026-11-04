@@ -7,15 +7,16 @@
  * settings can hold credentials, so no message prints a setting value.
  */
 
-import { PortalError } from './client.js';
+import { PortalError, RequestLimitError } from './client.js';
 import { orderRules } from '../rules.js';
 
 export const PARTIAL_WARNING = 'Some rule types are not in the portal response for this organisation, so they do not run locally.';
-export const HEADERS_SCOPE_WARNING = 'QUANT_API_TOKEN lacks projects:read, so the portal\'s global headers are not used.';
+export const HEADERS_SCOPE_WARNING = 'QUANT_API_TOKEN cannot read project headers (projects:read), so the portal\'s global headers are not used.';
+export const HEADERS_READ_WARNING = 'The portal\'s global headers could not be read, so they are not used.';
 
 // Action settings that are booleans, but can arrive as text.
 const BOOLEAN_SETTINGS = [
-  'only_proxy_404', 'static_error_page', 'waf_enabled', 'disable_ssl_verify', 'failover_mode',
+  'only_proxy_404', 'waf_enabled', 'disable_ssl_verify', 'failover_mode',
   'proxy_alert_enabled', 'proxy_inline_fn_enabled', 'application_proxy'
 ];
 // Action settings that are lists of status codes.
@@ -65,6 +66,8 @@ function normalConfig(value) {
   const config = isObject(value) ? { ...value } : {};
   for (const name of BOOLEAN_SETTINGS.filter((key) => key in config)) config[name] = toBoolean(config[name]);
   for (const name of STATUS_LISTS.filter((key) => key in config)) config[name] = toList(config[name]);
+  // Static error pages are on for any value that is not empty.
+  if ('static_error_page' in config) config.static_error_page = ![undefined, null, false, ''].includes(config.static_error_page);
   return config;
 }
 
@@ -175,24 +178,32 @@ export function mergeRules(pulled, localRules) {
   return merged;
 }
 
-function headersBody(body) {
+function headersBody(body, status) {
   if (Array.isArray(body) && body.length === 0) return {};
-  if (!isObject(body)) throw new PortalError('The portal sent project headers that are not valid.');
+  if (!isObject(body)) throw new PortalError('The portal sent project headers that are not valid.', status);
   return body;
 }
 
+// The warning when the headers cannot be read, or null when the error stops the start-up.
+function headersWarning(err) {
+  if (!(err instanceof PortalError) || err instanceof RequestLimitError) return null;
+  if (err.status === 403) return HEADERS_SCOPE_WARNING;
+  return err.status === undefined || err.status >= 500 ? HEADERS_READ_WARNING : null;
+}
+
 /**
- * Read the global headers of the project. A token without projects:read
- * gives a warning and null.
+ * Read the global headers of the project. A token without projects:read,
+ * a portal error (5xx) or no answer gives one warning and null.
  * @returns {Promise<Record<string, string>|null>}
  */
 export async function pullGlobalHeaders(client, { customer, project, warn = () => {} }) {
   try {
     const { status, body } = await client.get(projectPath({ customer, project }, 'custom-headers'), undefined, { scope: 'projects:read', what: 'project headers' });
-    return status === 404 ? null : headersBody(body);
+    return status === 404 ? null : headersBody(body, status);
   } catch (err) {
-    if (!(err instanceof PortalError) || err.status !== 403) throw err;
-    warn(HEADERS_SCOPE_WARNING);
+    const warning = headersWarning(err);
+    if (warning === null) throw err;
+    warn(warning);
     return null;
   }
 }
