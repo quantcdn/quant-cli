@@ -15,9 +15,12 @@ import { DEFAULT_FILES, loadProject } from '../serve/project.js';
 import { openLocalKv } from '../serve/kv/wire.js';
 import { LEDGERS_FILE, readLedgerFile } from '../serve/kv/ledgers.js';
 import { readServeConfig } from '../serve/project-config.js';
+import { createPortalClient, portalOptions } from '../serve/portal/client.js';
+import { pullProject } from '../serve/portal/pull-rules.js';
 
 const DEFAULTS = Object.freeze({ dir: 'dist', port: 8787, host: '127.0.0.1', org: 'local', project: 'dev', userName: 'Owner' });
-const LATER_RELEASE = ['pull-rules', 'kv-remote'];
+const LATER_RELEASE = ['kv-remote'];
+const PULL_IDENTITY = '--pull-rules needs the portal organisation and project: pass --org and --project, or set them in quant/serve.json or quant.json.';
 const CLOCKS = ['real', 'manual'];
 const LOOPBACK_HOSTS = ['127.0.0.1', '::1', 'localhost'];
 const POSIX = process.platform !== 'win32';
@@ -136,6 +139,17 @@ function identityOptions(args, root, gitUserName, local) {
   };
 }
 
+// --pull-rules reads the rules of a real project, so the org and project
+// must be named (the local defaults are not a portal project).
+function pullOptions(args, root, local) {
+  if (args['pull-rules'] !== true) return { pullRules: false };
+  const saved = readQuantJson(root);
+  const org = first([args.org, args.clientid, local.org, saved.clientid], undefined);
+  const project = first([args.project, local.project, saved.project], undefined);
+  if (org === undefined || project === undefined) throw new Error(PULL_IDENTITY);
+  return { pullRules: true };
+}
+
 function kvOptions(args) {
   return {
     reset: args.reset === true,
@@ -172,6 +186,7 @@ export function resolveOptions(args, { root = process.cwd(), gitUserName = readG
     root,
     ...siteOptions(args, local),
     ...identityOptions(args, root, gitUserName, local),
+    ...pullOptions(args, root, local),
     ...kvOptions(args),
     ...devOptions(args)
   };
@@ -208,6 +223,10 @@ function ledgerLines(ledgers, clock) {
   return section(title, ledgers.map(({ store, defs }) => `${store} → ${defs.map((def) => def.name).join(', ')}`));
 }
 
+function pullLines(pull) {
+  return pull ? [`Pulled ${pull.count} portal rules (${pull.managed} from quant/edge-rules.json).`] : [];
+}
+
 function clockLines(clock) {
   return clock === 'manual' ? ['Clock: manual. Time moves only with POST /_quant_serve/clock.'] : [];
 }
@@ -217,10 +236,11 @@ function clockLines(clock) {
  * rules, the edge libraries from the project, the warnings, then the
  * revealed keys in a box.
  */
-export function startupLines({ url, host, summary, keys = [], ledgers = [], clock = 'real' }) {
+export function startupLines({ url, host, summary, keys = [], ledgers = [], clock = 'real', pull = null }) {
   const libraries = summary.libraries.length > 0 ? summary.libraries.join(', ') : 'none';
   return [
     `quant serve is running at ${url}`,
+    ...pullLines(pull),
     ...section('KV stores:', summary.stores.map((store) => `${store.name} → ${store.location || store.id}`)),
     ...ledgerLines(ledgers, clock),
     ...clockLines(clock),
@@ -423,6 +443,20 @@ async function localKv(options, log, print) {
   };
 }
 
+// --pull-rules: read the portal rules and global headers one time. They
+// stay in memory only. QUANT_API_TOKEN and QUANT_BASE_URL come from the
+// environment; the org and project are the serve identity.
+async function pulledProject(options, { env = process.env, fetchImpl } = {}) {
+  if (!options.pullRules) return null;
+  const { customer, project, token, base } = portalOptions({ clientid: options.org, project: options.project }, env);
+  const client = createPortalClient({ base, token, ...(fetchImpl ? { fetchImpl } : {}) });
+  return pullProject(client, { customer, project });
+}
+
+function withPull(options, pulled) {
+  return pulled ? { ...options, pulledRules: pulled.rules, pulledHeaders: pulled.headers } : options;
+}
+
 function serverOptions(options, { kvStore, backend, log }, print) {
   return {
     ...options,
@@ -484,14 +518,17 @@ function watchRun(server, child) {
  * command, print the start-up output, then serve until `stop` resolves
  * (default: SIGINT, SIGTERM or SIGHUP).
  * @param {Object} options From resolveOptions().
- * @param {Object} [deps] stop, print, log, kvStore (replaces the local KV), onListening.
+ * @param {Object} [deps] stop, print, log, kvStore (replaces the local KV), onListening,
+ *   env (QUANT_API_TOKEN and QUANT_BASE_URL for --pull-rules) and fetchImpl (the portal fetch).
  */
-export async function runServe(options, { stop, print = console.log, log, kvStore, onListening } = {}) {
+export async function runServe(options, { stop, print = console.log, log, kvStore, onListening, env, fetchImpl } = {}) {
   if (options.build) runBuild(options.build, options.root);
+  const pulled = await pulledProject(options, { env, fetchImpl });
   const kv = await kvFor(options, kvStore, log, print);
-  const server = await startOrShowKeys(serverOptions(options, { kvStore: kv.kvStore, backend: kv.backend, log }, print), kv, print);
-  const summary = { ...server.summary, warnings: [...(options.configWarnings || []), ...server.summary.warnings] };
-  const lines = startupLines({ url: server.url, host: options.host, clock: options.clock, ...startupSummary(summary, kv) });
+  const server = await startOrShowKeys(serverOptions(withPull(options, pulled), { kvStore: kv.kvStore, backend: kv.backend, log }, print), kv, print);
+  const pullWarnings = pulled ? pulled.warnings : [];
+  const summary = { ...server.summary, warnings: [...(options.configWarnings || []), ...pullWarnings, ...server.summary.warnings] };
+  const lines = startupLines({ url: server.url, host: options.host, clock: options.clock, pull: pulled, ...startupSummary(summary, kv) });
   for (const line of lines) print(line);
   const child = options.run ? startRun(options.run, options.root, print, options.proxy) : null;
   watchRun(server, child);
@@ -576,7 +613,7 @@ export default {
     .option('watch', { type: 'boolean', describe: 'Reload on changes; run --build again on changes under src/ and public/' })
     .option('run', { type: 'string', describe: 'Long-running command (a dev server) to start beside the server' })
     .option('proxy', { type: 'string', describe: 'Dev server URL for requests that no rule ends' })
-    .option('pull-rules', { type: 'boolean', describe: 'Read portal-managed rules (a later release)' })
+    .option('pull-rules', { type: 'boolean', describe: 'Read the portal rules at start and run them with the local rules (needs QUANT_API_TOKEN and QUANT_BASE_URL)' })
     .option('kv-remote', { type: 'string', describe: 'Read-only remote KV store (a later release)' })
     .option('version-info', { type: 'boolean', describe: 'Print the versions and exit' }),
   promptArgs: async () => {

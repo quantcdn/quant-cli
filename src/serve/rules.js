@@ -49,9 +49,14 @@ function hostMatches(domains, host) {
   return domains.some(domain => domain === 'any' || domain === bare);
 }
 
+function methodAllowed(rule, method) {
+  if (rule.methods && !rule.methods.includes(method)) return false;
+  return !(rule.methodsNot && rule.methodsNot.includes(method));
+}
+
 function ruleMatches(rule, ctx) {
   if (rule.disabled) return false;
-  if (rule.methods && !rule.methods.includes(ctx.method)) return false;
+  if (!methodAllowed(rule, ctx.method)) return false;
   if (!hostMatches(rule.domain, ctx.host)) return false;
   return rule.url.some(pattern => urlMatches(pattern, ctx.pathname, ctx.search || ''));
 }
@@ -78,7 +83,11 @@ export function matchFilter(rules, ctx) {
   return rules.find(rule => rule.action === 'edge_filter' && ruleMatches(rule, ctx)) || null;
 }
 
-const listsStatus = (rule, status) => (rule.config?.status_codes || []).map(String).includes(String(status));
+// A status_codes value that is not a list lists no status.
+function listsStatus(rule, status) {
+  const codes = rule.config?.status_codes;
+  return Array.isArray(codes) && codes.map(String).includes(String(status));
+}
 
 /** The first enabled error page rule for the status that matches, or null. */
 export function matchErrorPage(rules, ctx, status) {

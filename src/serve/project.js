@@ -11,7 +11,8 @@ import { assertManifest } from '../helper/functions-manifest.js';
 import { resolveRules, ruleErrors, toRuntimeRule } from '../helper/edge-rules-manifest.js';
 import { parseMeta } from '../helper/quant-meta.js';
 import { readInlineSetting } from './inline.js';
-import { readServeConfig, SERVE_CONFIG } from './project-config.js';
+import { readServeConfig, SERVE_CONFIG, withPulledHeaders } from './project-config.js';
+import { mergeRules } from './portal/pull-rules.js';
 import { actionWarnings } from './rule-actions.js';
 import { orderRules } from './rules.js';
 
@@ -92,18 +93,21 @@ function ruleWarning(rule, fn, source) {
  * Load and check the project files. A missing file counts as empty.
  * @param {Object} options
  * @param {string} options.root The project directory. File paths resolve from it.
- * @param {Object[]} [options.runtimeRules] Runtime rules (with action and config) that run with
- *   the rules of the rules manifest, ordered by weight.
+ * @param {Object[]|null} [options.pulledRules] --pull-rules: the portal rules in edge order. The
+ *   rules of the rules manifest replace the managed ones (see mergeRules). Kept in memory only.
+ * @param {Record<string, string>|null} [options.pulledHeaders] --pull-rules: the portal global
+ *   headers. The globalHeaders of quant/serve.json override them.
  * @returns {{ functions: Map<string, Object>, rules: Object[], stores: Object[], fixtures: string, inlineFunctions: boolean, warnings: string[] }}
  *   functions is keyed by lowercase uuid; rules are runtime rules in run order.
  *   inlineFunctions: project_settings.enable_inline_fn in meta.json.
  *   settings: the local project settings from serve.json (see project-config.js).
  */
-export function loadProject({ root, functions = DEFAULT_FILES.functions, rules = DEFAULT_FILES.rules, meta = DEFAULT_FILES.meta, fixtures = DEFAULT_FILES.fixtures, serve = DEFAULT_FILES.serve, runtimeRules: extraRules = [] }) {
+export function loadProject({ root, functions = DEFAULT_FILES.functions, rules = DEFAULT_FILES.rules, meta = DEFAULT_FILES.meta, fixtures = DEFAULT_FILES.fixtures, serve = DEFAULT_FILES.serve, pulledRules = null, pulledHeaders = null }) {
   const manifest = readFunctions(root, functions);
-  const runtimeRules = orderRules([...readRules(root, rules, manifest), ...extraRules]);
+  const localRules = readRules(root, rules, manifest);
+  const runtimeRules = pulledRules ? mergeRules(pulledRules, localRules) : localRules;
   const map = functionMap(root, manifest);
-  const settings = readServeConfig(root, serve);
+  const settings = withPulledHeaders(readServeConfig(root, serve), pulledHeaders, serve);
   const warnings = [
     ...runtimeRules.map((rule) => ruleWarning(rule, map.get(rule.fnUuid), functions)).filter(Boolean),
     ...actionWarnings(runtimeRules)

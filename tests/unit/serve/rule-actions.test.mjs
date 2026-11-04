@@ -29,10 +29,10 @@ function project(files = {}) {
   return root;
 }
 
-async function start(runtimeRules, files = {}) {
+async function start(pulledRules, files = {}) {
   const server = await startServer({
     root: project(files), dir: 'dist', port: 0, host: '127.0.0.1', org: 'acme', project: 'site',
-    runtimeRules, log: (line) => lines.push(line)
+    pulledRules, log: (line) => lines.push(line)
   });
   servers.push(server);
   return server;
@@ -275,6 +275,22 @@ describe('serve rule actions', () => {
       expect(seen['x-keep']).to.equal('1');
     });
 
+    it('does not inject hop-by-hop or length headers', async () => {
+      const up = await origin(echo);
+      const inject = {
+        'content-length': '999', 'transfer-encoding': 'chunked', connection: 'x-keep', 'keep-alive': '5',
+        upgrade: 'websocket', te: 'trailers', trailer: 'x-t', host: 'evil.test', 'x-ok': 'yes'
+      };
+      const server = await start([rule('proxy', ['*'], { to: `${up.url}$*`, inject_headers: inject })]);
+      const res = await get(server, '/p');
+      expect(res.status).to.equal(201);
+      const seen = up.seen[0].headers;
+      expect(seen['x-ok']).to.equal('yes');
+      expect(seen.host).to.equal(new URL(up.url).host);
+      for (const name of ['transfer-encoding', 'keep-alive', 'upgrade', 'te', 'trailer']) expect(seen[name], name).to.equal(undefined);
+      expect(seen['content-length']).to.not.equal('999');
+    });
+
     it('sets cache-control from cache_lifetime', async () => {
       const up = await origin(echo);
       const server = await start([
@@ -350,6 +366,19 @@ describe('serve rule actions', () => {
       expect(server.summary.warnings.join('\n')).to.not.include('origin.example.com');
       await get(server, '/x');
       expect(up.seen[0].headers.host).to.equal(new URL(up.url).host);
+    });
+
+    it('warns once, with no value, about failover and TLS verification settings', () => {
+      const text = 'Rule API: failover and TLS verification settings work differently in quant serve.';
+      const tls = rule('proxy', ['*'], { to: 'https://o.test', disable_ssl_verify: true }, { id: 'a', name: 'API' });
+      const failover = rule('proxy', ['*'], { to: 'https://o.test', failover_mode: true, failover_origin_ttfb: '2000' }, { id: 'b', name: 'API' });
+      const quiet = rule('proxy', ['*'], {
+        to: 'https://o.test', disable_ssl_verify: false, failover_mode: false, failover_lifetime: null, failover_origin_status_codes: [],
+        notify_config: { slack_webhook: 'https://hooks.test/x' }, proxy_alert_enabled: true, application_proxy: true, application_name: 'app'
+      }, { id: 'c', name: 'Quiet' });
+      expect(actionWarnings([tls])).to.deep.equal([text]);
+      expect(actionWarnings([failover])).to.deep.equal([text]);
+      expect(actionWarnings([quiet])).to.deep.equal([]);
     });
 
     it('gives one warning for each rule id', () => {

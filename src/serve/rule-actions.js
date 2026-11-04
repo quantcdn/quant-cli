@@ -13,6 +13,8 @@ import { ruleCaptures } from './rules.js';
 const SUPPORTED = new Set(['edge_fn', 'edge_auth', 'edge_filter', 'redirect', 'headers', 'custom_response', 'auth', 'error_page', 'proxy']);
 // Headers that a headers rule cannot set.
 const PROTECTED = new Set(['quant-server', 'age', 'quant-project', 'quant-url-hash', 'quant-orig-host']);
+// Headers that a proxy rule cannot inject: hop-by-hop and length headers.
+const NOT_INJECTED = new Set(['content-length', 'transfer-encoding', 'connection', 'keep-alive', 'upgrade', 'te', 'trailer', 'host']);
 const REDIRECT_CODES = [301, 302, 303, 307, 308];
 const NULL_BODY = [204, 205, 304];
 const DEFAULT_ORIGIN_TIMEOUT_MS = 30000;
@@ -130,7 +132,9 @@ function proxyTarget(rule, ctx) {
 // setting is not used (start-up warns).
 function originRequestHeaders(ctx, config) {
   const headers = withoutHeaders(proxyRequestHeaders(ctx.req), nameList(config.proxy_strip_request_headers));
-  for (const [name, value] of headerEntries(config.inject_headers)) headers.set(name, value);
+  for (const [name, value] of headerEntries(config.inject_headers)) {
+    if (!NOT_INJECTED.has(name)) headers.set(name, value);
+  }
   if (config.auth_user) headers.set('authorization', basicCredentials(config.auth_user, config.auth_pass));
   return headers;
 }
@@ -228,11 +232,21 @@ export async function runAction(state, ctx, rule) {
   return action ? action(state, ctx, rule) : null;
 }
 
+// A setting that is on: true, a number, or text or a list that is not empty.
+const isOn = (value) => value === true || typeof value === 'number' || (typeof value === 'string' && value !== '') ||
+  (Array.isArray(value) && value.length > 0);
+
+// TLS verification and failover work differently on this machine. Notification,
+// alert and application settings have no local effect and get no warning.
+const changesOriginTrust = (config) => config.disable_ssl_verify === true ||
+  Object.keys(config).some((name) => name.startsWith('failover_') && isOn(config[name]));
+
 function proxyWarnings(rule) {
   const config = configOf(rule);
   return [
     ...(config.waf_enabled ? [`Rule ${ruleLabel(rule)}: WAF settings are ignored in quant serve.`] : []),
-    ...(config.host ? [`Rule ${ruleLabel(rule)}: the host setting is ignored in quant serve. The origin gets the host of the to URL.`] : [])
+    ...(config.host ? [`Rule ${ruleLabel(rule)}: the host setting is ignored in quant serve. The origin gets the host of the to URL.`] : []),
+    ...(changesOriginTrust(config) ? [`Rule ${ruleLabel(rule)}: failover and TLS verification settings work differently in quant serve.`] : [])
   ];
 }
 

@@ -565,8 +565,8 @@ async function handleUpgrade(state, req, socket, head) {
 // --- Start-up -------------------------------------------------------------------
 
 function projectFiles(state) {
-  const { functions, rules, meta, fixtures, runtimeRules } = state.options;
-  return { root: state.root, functions, rules, meta, fixtures, runtimeRules };
+  const { functions, rules, meta, fixtures, pulledRules, pulledHeaders } = state.options;
+  return { root: state.root, functions, rules, meta, fixtures, pulledRules, pulledHeaders };
 }
 
 function siteIndex(state) {
@@ -710,7 +710,8 @@ function closer(state, server, cleanups) {
  *   root, dir, port, host, functions, rules, meta, fixtures, org, project,
  *   domain, proxy, watch, geo, clientIp, timeoutMs, kvStore, log, onSourceChange,
  *   backend (the local KV backend, for the control route), clock ('real' or 'manual')
- *   and runtimeRules (runtime rules that run with the rules of the rules manifest, by weight).
+ *   pulledRules (--pull-rules: the portal rules in edge order, merged with the rules manifest)
+ *   and pulledHeaders (--pull-rules: the portal global headers, or null).
  * @returns {Promise<{ url: string, close: () => Promise<void>, setRunPid: (pid: number) => void, summary: Object }>}
  *   setRunPid: the --run process group that the watchdog ends when a function blocks the server.
  *   summary: { stores, rules, libraries, warnings } for the start-up output.

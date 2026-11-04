@@ -67,6 +67,12 @@ describe('serve rules', () => {
       expect(matchRule([r], ctx({ method: 'POST' }))).to.equal(r);
     });
 
+    it('refuses a method in the methodsNot list', () => {
+      const r = rule({ methodsNot: ['DELETE'] });
+      expect(matchRule([r], ctx({ method: 'DELETE' }))).to.equal(null);
+      expect(matchRule([r], ctx({ method: 'GET' }))).to.equal(r);
+    });
+
     it('skips disabled rules', () => {
       expect(matchRule([rule({ disabled: true })], ctx())).to.equal(null);
     });
@@ -105,6 +111,12 @@ describe('serve rules', () => {
       expect(matchErrorPage([e], ctx(), 404)).to.equal(e);
       expect(matchErrorPage([e], ctx(), 500)).to.equal(null);
       expect(matchErrorPage([page({ disabled: true })], ctx(), 404)).to.equal(null);
+    });
+
+    it('do not throw when status_codes is not a list', () => {
+      for (const codes of ['404', 404, { a: 1 }, null]) {
+        expect(matchErrorPage([page({ config: { status_codes: codes } })], ctx(), 404)).to.equal(null);
+      }
     });
   });
 

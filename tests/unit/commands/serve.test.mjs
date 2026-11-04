@@ -197,7 +197,7 @@ describe('serve command', () => {
     expect(() => resolveOptions({ clock: 'fast' }, { root: tmp, gitUserName: noGit })).to.throw('--clock must be real or manual');
   });
 
-  for (const flag of [['--pull-rules'], ['--kv-remote', 'orbit']]) {
+  for (const flag of [['--kv-remote', 'orbit']]) {
     it(`stops for ${flag[0]}, which is available in a later release`, () => {
       expect(() => resolveOptions(parse(flag), { root: tmp, gitUserName: noGit }))
         .to.throw(`${flag[0]} is available in a later release`);
