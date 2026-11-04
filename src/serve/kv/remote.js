@@ -8,6 +8,7 @@
 import { createLocalKv } from '@quantcdn/edge-kv';
 import { createPortalClient, portalOptions, requestBudget, START_REQUEST_LIMIT } from '../portal/client.js';
 import { findStore, readStore } from '../portal/kv-remote.js';
+import { isObject } from '../../helper/is-object.js';
 
 export const REMOTE_MAX_KEYS = 10000;
 export const REMOTE_MAX_REQUESTS = START_REQUEST_LIMIT;
@@ -21,7 +22,7 @@ const UNUSED_STATES = ['FAILED', 'DROPPING'];
  * error, conflicts, job) are dropped.
  */
 export function toLocalIndex(def) {
-  if (def === null || typeof def !== 'object' || Array.isArray(def)) return null;
+  if (!isObject(def)) return null;
   const out = {
     name: def.name,
     collection: def.collection,

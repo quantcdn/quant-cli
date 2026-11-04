@@ -14,6 +14,7 @@
 import crypto from 'node:crypto';
 import fs from 'node:fs';
 import path from 'node:path';
+import { isObject } from '../helper/is-object.js';
 
 export const SERVE_CONFIG = 'quant/serve.json';
 
@@ -28,7 +29,6 @@ const PROTECTED = ['quant-server', 'age'];
 const AUTH_BODY = 'Authentication required';
 const REDIRECT_CACHE = 'public, max-age=300, s-maxage=86400';
 
-const isObject = (value) => value !== null && typeof value === 'object' && !Array.isArray(value);
 const isText = (value) => typeof value === 'string' && value !== '';
 
 function globalHeaders(value, source, warnings) {

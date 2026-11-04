@@ -8,6 +8,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import mime from 'mime-types';
+import { isObject } from '../helper/is-object.js';
 
 const TOKEN = /{{QUANT_FN:(.*?)}}/gi;
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -26,7 +27,6 @@ const REFUSALS = {
   filter: 'Direct execution of filter function is disallowed.'
 };
 
-const isObject = (value) => value !== null && typeof value === 'object' && !Array.isArray(value);
 
 function settingsObject(settings, source) {
   if (Array.isArray(settings) && settings.length === 0) return {};

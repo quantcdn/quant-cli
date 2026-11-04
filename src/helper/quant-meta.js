@@ -1,3 +1,5 @@
+import { isObject } from './is-object.js';
+
 // Validation of the kv_stores section of quant/meta.json. The messages match
 // the ones the Quant portal shows, so a local run and a deploy agree.
 
@@ -8,7 +10,6 @@ const INDEX_KEYS = ['name', 'collection', 'fields', 'sortBy', 'unique', 'count']
 const RESERVED_FIELDS = ['__proto__', 'constructor', 'prototype'];
 const SHA256 = '{sha256}';
 
-const isObject = value => value !== null && typeof value === 'object' && !Array.isArray(value);
 const bytesOf = value => Buffer.byteLength(JSON.stringify(value));
 const fail = message => { throw new Error(message); };
 const onlyKeys = (value, allowed) => Object.keys(value).every(key => allowed.includes(key));

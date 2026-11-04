@@ -11,10 +11,10 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { storeId } from '../../helper/quant-meta.js';
+import { isObject } from '../../helper/is-object.js';
 
 export const LEDGERS_FILE = 'quant/kv-ledgers.json';
 
-const isObject = (value) => value !== null && typeof value === 'object' && !Array.isArray(value);
 
 function readText(file) {
   try {

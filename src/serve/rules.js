@@ -89,15 +89,12 @@ export function matchFilter(rules, ctx) {
   return rules.find(rule => rule.action === 'edge_filter' && ruleMatches(rule, ctx)) || null;
 }
 
-// A status_codes value that is not a list lists no status.
-function listsStatus(rule, status) {
-  const codes = rule.config?.status_codes;
-  return Array.isArray(codes) && codes.map(String).includes(String(status));
-}
+/** True when `list` is a list of status codes that holds `status`. A value that is not a list lists no status. */
+export const listsStatus = (list, status) => Array.isArray(list) && list.map(String).includes(String(status));
 
 /** The first enabled error page rule for the status that matches, or null. */
 export function matchErrorPage(rules, ctx, status) {
-  return rules.find(rule => rule.action === 'error_page' && listsStatus(rule, status) && ruleMatches(rule, ctx)) || null;
+  return rules.find(rule => rule.action === 'error_page' && listsStatus(rule.config?.status_codes, status) && ruleMatches(rule, ctx)) || null;
 }
 
 /**

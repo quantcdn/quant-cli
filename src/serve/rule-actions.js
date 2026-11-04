@@ -8,7 +8,7 @@
 
 import { basicAuthResponse } from './project-config.js';
 import { PROXY_RESPONSE_DROP, proxyBody, proxyRequestHeaders, withoutHeaders } from './forward.js';
-import { ruleCaptures } from './rules.js';
+import { listsStatus, ruleCaptures } from './rules.js';
 
 const SUPPORTED = new Set(['edge_fn', 'edge_auth', 'edge_filter', 'redirect', 'headers', 'custom_response', 'auth', 'error_page', 'proxy']);
 // Headers that a headers rule cannot set.
@@ -176,8 +176,6 @@ async function forward(ctx, config, target) {
   if (config.only_proxy_404) result.set('quant-404-proxied', 'true');
   return new Response(upstream.body, { status: upstream.status, statusText: upstream.statusText, headers: result });
 }
-
-const listsStatus = (list, status) => Array.isArray(list) && list.map(String).includes(String(status));
 
 // With static error pages on, a listed origin status gets the published error page.
 function withErrorPage(state, ctx, config, response) {

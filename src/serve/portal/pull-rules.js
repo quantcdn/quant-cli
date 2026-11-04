@@ -9,6 +9,8 @@
 
 import { PortalError, RequestLimitError } from './client.js';
 import { orderRules } from '../rules.js';
+import { ruleLabel } from '../rule-actions.js';
+import { isObject } from '../../helper/is-object.js';
 
 export const PARTIAL_WARNING = 'Some rule types are not in the portal response for this organisation, so they do not run locally.';
 export const HEADERS_SCOPE_WARNING = 'QUANT_API_TOKEN cannot read project headers (projects:read), so the portal\'s global headers are not used.';
@@ -29,7 +31,6 @@ const TRUE_TEXT = ['true', '1'];
 const NUMERIC_TEXT = /^[ \t\n\r\v\f]*[+-]?(\d+(\.\d*)?|\.\d+)([eE][+-]?\d+)?[ \t\n\r\v\f]*$/;
 const INT_LIMIT = 2 ** 63;
 
-const isObject = (value) => value !== null && typeof value === 'object' && !Array.isArray(value);
 const projectPath = ({ customer, project }, leaf) =>
   `/organizations/${encodeURIComponent(customer)}/projects/${encodeURIComponent(project)}/${leaf}`;
 
@@ -207,8 +208,6 @@ export async function pullGlobalHeaders(client, { customer, project, warn = () =
     return null;
   }
 }
-
-const ruleLabel = (rule) => rule.name || rule.id;
 
 function conditionWarning(rule) {
   const names = rule.unchecked.join(', ');

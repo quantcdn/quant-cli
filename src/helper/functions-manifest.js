@@ -6,6 +6,8 @@
  * its function by an explicit uuid: no tool derives one.
  */
 
+import { isObject } from './is-object.js';
+
 /**
  * UUID shape only (8-4-4-4-12 hex). The version and variant digits are not
  * checked: deployed manifests hold UUIDs with other version digits, and the
@@ -19,10 +21,6 @@ export const RULE_UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-
 export const FUNCTION_ID = /^[a-z][a-z0-9-]{0,47}$/;
 
 export const FUNCTION_TYPES = ['function', 'edge', 'auth', 'filter'];
-
-function isObject(value) {
-  return value !== null && typeof value === 'object' && !Array.isArray(value);
-}
 
 function normalisePath(path) {
   return path.replace(/^(\.\/)+/, '');
