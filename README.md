@@ -263,15 +263,15 @@ Flags:
 - `--host` - Address to listen on (default: `127.0.0.1`). Any other address makes the site and its KV data reachable on the network.
 - `--functions` - Functions manifest (default: `quant/edge-functions.json`).
 - `--rules` - Rules manifest (default: `quant/edge-rules.json`).
-- `--meta` - Template metadata with the KV stores (default: `quant/meta.json`).
+- `--meta` - Template metadata with the KV stores (default: `meta` in `quant/serve.json`, then `quant/meta.json`).
 - `--fixtures` - Directory of KV fixtures (default: `quant/kv-fixtures`).
-- `--org` - Organisation (default: the `quant.json` clientid, then `local`).
-- `--project` - Project (default: the `quant.json` project, then `dev`).
+- `--org` - Organisation (default: `org` in `quant/serve.json`, the `quant.json` clientid, then `local`).
+- `--project` - Project (default: `project` in `quant/serve.json`, the `quant.json` project, then `dev`). `quant serve` has no `--project` option of its own: it uses the global `--project` option of the CLI, so `quant serve --help` lists it with the global options.
 - `--domain` - Host for the domain match of rules (default: the Host of the request).
 - `--user-name` - Value for `{user_name}` in KV seed values (default: `git config user.name`, then `Owner`).
 - `--build` - Command to run once before the server starts.
 - `--watch` - Reload when files change. With `--build`, run the build again when files under `src/` or `public/` change.
-- `--run` - Long-running command, for example a dev server, to start beside the server. Quant serve stops it when it stops.
+- `--run` - Long-running command, for example a dev server, to start beside the server. Quant serve stops it when it stops. On macOS and Linux the command runs in its own process group, and quant serve stops the whole group. Some dev servers move to the background and the command exits 0 at once. If the process group is still alive, quant serve prints one notice, keeps serving and stops the group when it stops. If only the `--proxy` URL still answers (the dev server left the process group), quant serve says that it cannot stop that dev server. On Windows there is no process group: quant serve stops only the command, and it cannot stop a dev server that moved to the background.
 - `--proxy` - Dev server URL. Requests that no rule ends go to this URL. WebSocket upgrades (for example, HMR) also go to this URL, after the auth rules of the path. Function rules do not run for an upgrade.
 - `--geo` - Geolocation fields for functions, as a JSON object.
 - `--client-ip` - Client address for functions.
@@ -299,6 +299,7 @@ quant kv list notes --local --index by_author --equals author=ana
 quant kv get notes post:1 --local
 quant kv set notes post:1 '{"title":"Hello"}' --local
 quant kv set notes post:1 '{"title":"New"}' --local --if-version 3
+quant kv set notes api:token '"abc123"' --local --secret
 quant kv delete notes post:1 --local
 ```
 
@@ -310,9 +311,12 @@ Flags:
 - `--index` - `list`: index name.
 - `--equals` - `list`: `field=value` for the index. Repeat the flag for more fields.
 - `--if-version` - `set`: write only if the key has this version.
-- `--org` - Organisation (default: the `quant.json` clientid, then `local`).
-- `--project` - Project (default: the `quant.json` project, then `dev`).
-- `--meta` - Template metadata with the KV stores (default: `quant/meta.json`).
+- `--secret` - `set`: store the value encrypted, as `set(key, value, { secret: true })` in a function does. A function reads the value as usual. `list` shows `encrypted: true` and the value `[ENCRYPTED]`. `set` prints the entry with the value `[ENCRYPTED]`, so the value does not go into the terminal output or CI logs. `get --local` shows the value, because the local store is yours. The value is a command argument, so it goes into your shell history; the interactive menu asks for a secret value with hidden input. With `get`, `list` or `delete`, `--secret` is ignored and the command prints one notice. A key in an indexed collection cannot hold a secret (`INDEX_FIELD_ENCRYPTED`). The local store uses local keys only: do not put production secrets in it.
+- `--org` - Organisation (default: `org` in `quant/serve.json`, the `quant.json` clientid, then `local`).
+- `--project` - Project (default: `project` in `quant/serve.json`, the `quant.json` project, then `dev`).
+- `--meta` - Template metadata with the KV stores (default: `meta` in `quant/serve.json`, then `quant/meta.json`).
+
+To set these defaults one time for a project, put them in `quant/serve.json` (see [Local project settings](#local-project-settings-quantservejson)).
 
 ## Local ledgers
 
@@ -446,10 +450,20 @@ Each field is optional.
 - `globalHeaders` - Headers for every response from the site: pages, files, function responses, the 404 page and the basic authentication 401. A header that a function sets replaces the global header of the same name. `quant-server` and `age` cannot be set.
 - `basicAuth` - With a username and a password, every path needs these credentials. A request without them gets 401 with `WWW-Authenticate: Basic`. The check applies before the rules, so functions and redirects need the credentials too. WebSocket upgrades also need them. The `/_quant_serve/` control routes do not need them: they are local only and need the `x-quant-serve: 1` header (see [Safety](#safety)).
 - `trailingSlash` - `"redirect"`: a path that ends with `/` (except `/`) gets a 301 to the path without the trailing slashes, with the query string. A path that a rule answers is not redirected. `"none"` (the default): no redirect.
+- `org`, `project` - The organisation and the project for the local KV store ids, for `quant serve` and `quant kv --local`. Use them when the project has no `quant.json`. Each value is 1 to 100 letters, digits, `.`, `_` or `-`.
+- `meta` - The template metadata file with the KV stores (default: `quant/meta.json`). The path is relative to the project directory and must stay in it.
+
+For `org`, `project` and `meta`, the order is: the flag, then `quant/serve.json`, then `quant.json` (org and project only), then the default (`local`, `dev`, `quant/meta.json`). `quant serve` reads these three fields only at start-up, also with `--watch`. If `quant/serve.json` and `quant.json` set a different org (or project) and no flag chooses, `quant serve` and `quant kv --local` print one warning line that names the value they use.
+
+The local store ids contain the org and the project (for example `local-dev-orbit`). If you add or change `org` or `project` in `quant/serve.json`, the store ids change (for example to `acme-dev-orbit`), and the local data that you wrote before seems to be missing. The data is still in `.quant/kv/`. Set the old values again to see it.
+
+```json
+{ "org": "acme", "project": "marketing-site" }
+```
 
 The order is the order of the edge: global headers, basic authentication, rules, the trailing-slash redirect, then static content.
 
-`quant/serve.json` is local only. No deploy command reads it, and `quant deploy` never uploads it. `quant serve` never prints the password. Do not put a production password in the file. A file with the wrong shape stops `quant serve` at start-up, with a message that names the field. With `--watch`, `quant serve` reads the file again when it changes. If the new file has the wrong shape, `quant serve` prints the message and keeps the last valid settings.
+`quant/serve.json` is local only. No deploy command reads it, and `quant deploy` never uploads it. `quant serve` never prints the password. Do not put a production password in the file. A file with the wrong shape stops `quant serve` at start-up, with a message that names the field. It also stops `quant kv --local` (exit code 1), because that command reads the `org`, `project` and `meta` defaults from the same file. With `--watch`, `quant serve` reads the file again when it changes. If the new file has the wrong shape, `quant serve` prints the message and keeps the last valid settings.
 
 ## Edge libraries in quant serve
 
@@ -596,6 +610,14 @@ them read-only. If one was changed outside code anyway, the deploy writes nothin
 exits non-zero and lists each changed field (values only for matchers and weight).
 Re-run with `--force` to overwrite those rules with the manifest. `--force` never
 takes over a rule this manifest did not create (a rule ID collision).
+
+When the rules API refuses a deploy with 409 or 422 and gives a message, `quant rules`
+prints that message and exits non-zero. Examples:
+
+- 409: the change may already be live. Reload the rules and check them. A retry is safe.
+- 422: the requested rule order cannot be kept. A retry does not help. Contact support.
+
+Without a message, a 409 means another request is changing the rules (retry shortly).
 
 Portal-issued template tokens expire after one year; rotate the token and update
 `QUANT_API_TOKEN` before expiry.

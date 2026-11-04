@@ -6,6 +6,9 @@
  *
  * The request order is the order of the Quant edge: global headers, basic
  * authentication, rules, the trailing-slash redirect, then static content.
+ *
+ * The file can also give the defaults of org, project and meta for
+ * `quant serve` and `quant kv --local`. A flag wins over the file.
  */
 
 import crypto from 'node:crypto';
@@ -14,7 +17,9 @@ import path from 'node:path';
 
 export const SERVE_CONFIG = 'quant/serve.json';
 
-const FIELDS = ['globalHeaders', 'basicAuth', 'trailingSlash'];
+const IDENTITY_FIELDS = ['org', 'project', 'meta'];
+const FIELDS = ['globalHeaders', 'basicAuth', 'trailingSlash', ...IDENTITY_FIELDS];
+const SLUG = /^[A-Za-z0-9._-]{1,100}$/;
 const TRAILING_SLASH = ['redirect', 'none'];
 const HEADER_NAME = /^[!#$%&'*+\-.^_`|~0-9A-Za-z]+$/;
 const HEADER_VALUE = /^[\t\x20-\x7e]*$/;
@@ -55,9 +60,34 @@ function trailingSlash(value, source) {
   return value;
 }
 
+function slug(name, value, source) {
+  if (typeof value !== 'string' || !SLUG.test(value)) {
+    throw new Error(`${source}: ${name} must be letters, digits, ".", "_" or "-" (1 to 100 characters).`);
+  }
+  return value;
+}
+
+function metaFile(_name, value, source) {
+  const inside = isText(value) && !path.isAbsolute(value) && !path.normalize(value).startsWith('..');
+  if (!inside) throw new Error(`${source}: meta must be a path to a file in the project, relative to the project directory.`);
+  return value;
+}
+
+const IDENTITY_CHECKS = { org: slug, project: slug, meta: metaFile };
+
+// The org, project and meta defaults that the document gives.
+function identityDefaults(document, source) {
+  const defaults = {};
+  for (const name of IDENTITY_FIELDS.filter((field) => field in document)) {
+    defaults[name] = IDENTITY_CHECKS[name](name, document[name], source);
+  }
+  return defaults;
+}
+
 /**
  * Check a parsed quant/serve.json document.
- * @returns {{ globalHeaders: Array<[string, string]>, basicAuth: string|null, trailingSlash: string, warnings: string[] }}
+ * @returns {{ globalHeaders: Array<[string, string]>, basicAuth: string|null, trailingSlash: string,
+ *   defaults: { org?: string, project?: string, meta?: string }, warnings: string[] }}
  */
 export function parseServeConfig(document, source = SERVE_CONFIG) {
   if (!isObject(document)) throw new Error(`${source} must be a JSON object.`);
@@ -68,6 +98,7 @@ export function parseServeConfig(document, source = SERVE_CONFIG) {
     globalHeaders: 'globalHeaders' in document ? globalHeaders(document.globalHeaders, source, warnings) : [],
     basicAuth: 'basicAuth' in document ? basicAuth(document.basicAuth, source) : null,
     trailingSlash: 'trailingSlash' in document ? trailingSlash(document.trailingSlash, source) : 'none',
+    defaults: identityDefaults(document, source),
     warnings
   };
 }

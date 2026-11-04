@@ -14,6 +14,7 @@ import { startServer } from '../serve/server.js';
 import { DEFAULT_FILES, loadProject } from '../serve/project.js';
 import { openLocalKv } from '../serve/kv/wire.js';
 import { LEDGERS_FILE, readLedgerFile } from '../serve/kv/ledgers.js';
+import { readServeConfig } from '../serve/project-config.js';
 
 const DEFAULTS = Object.freeze({ dir: 'dist', port: 8787, host: '127.0.0.1', org: 'local', project: 'dev', userName: 'Owner' });
 const LATER_RELEASE = ['pull-rules', 'kv-remote'];
@@ -23,6 +24,8 @@ const POSIX = process.platform !== 'win32';
 /** The signals that stop quant serve. SIGHUP comes when the terminal closes. */
 export const STOP_SIGNALS = Object.freeze(['SIGINT', 'SIGTERM', 'SIGHUP']);
 export const RUN_GRACE_MS = 2000;
+/** How long to wait for the --proxy URL after the --run command exits 0. */
+export const RUN_BACKGROUND_WAIT_MS = 5000;
 
 /** The first value that is set (not undefined, null or ''), else the fallback. */
 function first(values, fallback) {
@@ -96,23 +99,38 @@ function clockOf(value) {
   return clock;
 }
 
-function siteOptions(args) {
+function siteOptions(args, local) {
   return {
     dir: first([args.dir], DEFAULTS.dir),
     port: portOf(args.port),
     host: first([args.host], DEFAULTS.host),
     functions: first([args.functions], DEFAULT_FILES.functions),
     rules: first([args.rules], DEFAULT_FILES.rules),
-    meta: first([args.meta], DEFAULT_FILES.meta),
+    meta: first([args.meta, local.meta], DEFAULT_FILES.meta),
     fixtures: first([args.fixtures], DEFAULT_FILES.fixtures)
   };
 }
 
-function identityOptions(args, root, gitUserName) {
+// A warning for each of org and project that quant/serve.json and quant.json
+// set to different values, when no flag chooses: quant/serve.json wins.
+function precedenceWarnings(args, local, saved) {
+  const fields = [
+    { name: 'org', flag: first([args.org, args.clientid], undefined), saved: saved.clientid, field: 'clientid' },
+    { name: 'project', flag: first([args.project], undefined), saved: saved.project, field: 'project' }
+  ];
+  return fields
+    .filter((item) => item.flag === undefined && local[item.name] !== undefined && first([item.saved], undefined) !== undefined &&
+      String(item.saved) !== local[item.name])
+    .map((item) => `quant/serve.json ${item.name} "${local[item.name]}" is used, not quant.json ${item.field} "${item.saved}": ` +
+      `quant/serve.json wins over quant.json. Pass --${item.name} to choose.`);
+}
+
+function identityOptions(args, root, gitUserName, local) {
   const saved = readQuantJson(root);
   return {
-    org: first([args.org, args.clientid, saved.clientid], DEFAULTS.org),
-    project: first([args.project, saved.project], DEFAULTS.project),
+    configWarnings: precedenceWarnings(args, local, saved),
+    org: first([args.org, args.clientid, local.org, saved.clientid], DEFAULTS.org),
+    project: first([args.project, local.project, saved.project], DEFAULTS.project),
     domain: first([args.domain], undefined),
     userName: first([args['user-name'], gitUserName(root)], DEFAULTS.userName)
   };
@@ -148,10 +166,12 @@ function devOptions(args) {
  */
 export function resolveOptions(args, { root = process.cwd(), gitUserName = readGitUserName } = {}) {
   refuseLaterFlags(args);
+  // The org, project and meta defaults of quant/serve.json (a flag wins).
+  const local = readServeConfig(root).defaults;
   return {
     root,
-    ...siteOptions(args),
-    ...identityOptions(args, root, gitUserName),
+    ...siteOptions(args, local),
+    ...identityOptions(args, root, gitUserName, local),
     ...kvOptions(args),
     ...devOptions(args)
   };
@@ -229,7 +249,7 @@ function rebuild(options, print) {
 // On POSIX the --run command gets its own process group, so that a stop
 // also ends the processes that the shell starts. Its stdin is not the
 // terminal, because a background process group cannot read the terminal.
-function startRun(command, root, print) {
+function startRun(command, root, print, proxy) {
   const child = spawn(command, {
     shell: true,
     cwd: root,
@@ -237,19 +257,83 @@ function startRun(command, root, print) {
     stdio: POSIX ? ['ignore', 'inherit', 'inherit'] : 'inherit'
   });
   child.on('error', (err) => print(`The --run command could not start: ${err.message}`));
+  // stopRun aborts the wait for the --proxy URL, so that it never keeps Node alive.
+  child.runAbort = new AbortController();
   child.on('exit', (code, signal) => {
-    if (!child.stopping) print(`The --run command stopped (${signal || `exit code ${code}`}).`);
+    if (child.stopping) return;
+    runExitLine(child, { code, signal, proxy, abort: child.runAbort.signal }).then((line) => {
+      if (!child.stopping) print(line);
+    });
   });
   return child;
 }
 
 function groupAlive(pid) {
+  if (!POSIX) return false;
   try {
     process.kill(-pid, 0);
     return true;
   } catch (_err) {
     return false;
   }
+}
+
+function requestSignal(abort) {
+  const timeout = AbortSignal.timeout(500);
+  return abort && AbortSignal.any ? AbortSignal.any([timeout, abort]) : timeout;
+}
+
+async function answers(url, abort) {
+  try {
+    await fetch(url, { redirect: 'manual', signal: requestSignal(abort) });
+    return true;
+  } catch (_err) {
+    return false;
+  }
+}
+
+// A delay that ends at once when abort fires.
+function pause(ms, abort) {
+  return new Promise((resolve) => {
+    const timer = setTimeout(done, ms);
+    function done() {
+      clearTimeout(timer);
+      if (abort) abort.removeEventListener('abort', done);
+      resolve();
+    }
+    if (abort) abort.addEventListener('abort', done, { once: true });
+  });
+}
+
+// True when the dev server answers within waitMs (it can still be starting).
+// False at once when abort fires.
+async function reachable(url, waitMs, abort) {
+  const deadline = Date.now() + waitMs;
+  while (!(abort && abort.aborted)) {
+    if (await answers(url, abort)) return true;
+    if (Date.now() >= deadline) return false;
+    await pause(200, abort);
+  }
+  return false;
+}
+
+/**
+ * The line to print when the --run command exits by itself. Some dev servers
+ * move to the background and the command exits 0. When its process group is
+ * still alive, quant serve stops that group on exit. When only the --proxy
+ * URL still answers (the dev server left the group, or on Windows), quant
+ * serve cannot stop it.
+ */
+export async function runExitLine(child, { code, signal, proxy, waitMs = RUN_BACKGROUND_WAIT_MS, abort }) {
+  const stopped = `The --run command stopped (${signal || `exit code ${code}`}).`;
+  if (signal || code !== 0) return stopped;
+  if (groupAlive(child.pid)) {
+    return 'The --run command moved to the background (exit code 0). quant serve keeps serving and stops its process group when quant serve stops.';
+  }
+  if (proxy && await reachable(proxy, waitMs, abort)) {
+    return `The --run command exited (exit code 0), but the dev server at ${proxy} still answers. quant serve keeps serving, but it cannot stop that dev server. Stop it yourself.`;
+  }
+  return stopped;
 }
 
 function signalGroup(child, signal) {
@@ -273,11 +357,16 @@ async function waitForGroupEnd(pid, graceMs) {
   return !groupAlive(pid);
 }
 
+function abortExitWait(child) {
+  if (child && child.runAbort) child.runAbort.abort();
+}
+
 /**
  * Stop the --run command: SIGTERM to its process group, then SIGKILL when
  * the group is still alive after the grace period.
  */
 export async function stopRun(child, { graceMs = RUN_GRACE_MS } = {}) {
+  abortExitWait(child);
   if (!child || !child.pid || (!POSIX && !running(child))) return;
   child.stopping = true;
   signalGroup(child, 'SIGTERM');
@@ -401,9 +490,10 @@ export async function runServe(options, { stop, print = console.log, log, kvStor
   if (options.build) runBuild(options.build, options.root);
   const kv = await kvFor(options, kvStore, log, print);
   const server = await startOrShowKeys(serverOptions(options, { kvStore: kv.kvStore, backend: kv.backend, log }, print), kv, print);
-  const lines = startupLines({ url: server.url, host: options.host, clock: options.clock, ...startupSummary(server.summary, kv) });
+  const summary = { ...server.summary, warnings: [...(options.configWarnings || []), ...server.summary.warnings] };
+  const lines = startupLines({ url: server.url, host: options.host, clock: options.clock, ...startupSummary(summary, kv) });
   for (const line of lines) print(line);
-  const child = options.run ? startRun(options.run, options.root, print) : null;
+  const child = options.run ? startRun(options.run, options.root, print, options.proxy) : null;
   watchRun(server, child);
   const onExit = () => killRun(child);
   process.once('exit', onExit);
@@ -469,9 +559,9 @@ export default {
     .option('host', { type: 'string', default: DEFAULTS.host, describe: 'Address to listen on' })
     .option('functions', { type: 'string', default: DEFAULT_FILES.functions, describe: 'Functions manifest' })
     .option('rules', { type: 'string', default: DEFAULT_FILES.rules, describe: 'Rules manifest' })
-    .option('meta', { type: 'string', default: DEFAULT_FILES.meta, describe: 'Template metadata with KV stores' })
+    .option('meta', { type: 'string', describe: `Template metadata with KV stores (default: quant/serve.json meta, then ${DEFAULT_FILES.meta})` })
     .option('fixtures', { type: 'string', default: DEFAULT_FILES.fixtures, describe: 'KV fixtures directory' })
-    .option('org', { type: 'string', describe: 'Organisation (default: quant.json clientid, then local)' })
+    .option('org', { type: 'string', describe: 'Organisation (default: quant/serve.json org, quant.json clientid, then local)' })
     .option('domain', { type: 'string', describe: 'Host for rule domain matching (default: the request Host)' })
     .option('user-name', { type: 'string', describe: '{user_name} value (default: git config user.name, then Owner)' })
     .option('reset', { type: 'boolean', describe: 'Delete the local KV state and seed again' })

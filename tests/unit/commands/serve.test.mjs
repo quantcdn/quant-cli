@@ -11,6 +11,7 @@ import serve, {
   runServe,
   startupLines,
   stopRun,
+  runExitLine,
   versionInfo,
   STOP_SIGNALS
 } from '../../../src/commands/serve.js';
@@ -104,6 +105,66 @@ describe('serve command', () => {
     const options = resolveOptions(parse([]), { root: tmp, gitUserName: noGit });
     expect(options).to.include({ org: 'acme', project: 'site' });
     expect(JSON.stringify(options)).not.to.include('secret');
+  });
+
+  describe('defaults from quant/serve.json', () => {
+    function serveJson(document) {
+      fs.mkdirSync(path.join(tmp, 'quant'), { recursive: true });
+      fs.writeFileSync(path.join(tmp, 'quant', 'serve.json'), JSON.stringify(document));
+    }
+
+    it('reads org, project and meta from quant/serve.json', () => {
+      serveJson({ org: 'acme', project: 'site', meta: 'config/meta.json' });
+      expect(resolveOptions(parse([]), { root: tmp, gitUserName: noGit })).to.include({ org: 'acme', project: 'site', meta: 'config/meta.json' });
+    });
+
+    it('lets the flags win', () => {
+      serveJson({ org: 'acme', project: 'site', meta: 'config/meta.json' });
+      const options = resolveOptions(parse(['--org', 'flag-org', '--project', 'flag-project', '--meta', 'flag/meta.json']), { root: tmp, gitUserName: noGit });
+      expect(options).to.include({ org: 'flag-org', project: 'flag-project', meta: 'flag/meta.json' });
+    });
+
+    it('wins over quant.json', () => {
+      fs.writeFileSync(path.join(tmp, 'quant.json'), JSON.stringify({ clientid: 'saved', project: 'saved-project' }));
+      serveJson({ org: 'acme' });
+      expect(resolveOptions(parse([]), { root: tmp, gitUserName: noGit })).to.include({ org: 'acme', project: 'saved-project' });
+    });
+
+    it('warns when quant/serve.json and quant.json set a different org or project', () => {
+      fs.writeFileSync(path.join(tmp, 'quant.json'), JSON.stringify({ clientid: 'saved', project: 'saved-project' }));
+      serveJson({ org: 'acme', project: 'saved-project' });
+      expect(resolveOptions(parse([]), { root: tmp, gitUserName: noGit }).configWarnings).to.deep.equal([
+        'quant/serve.json org "acme" is used, not quant.json clientid "saved": quant/serve.json wins over quant.json. Pass --org to choose.'
+      ]);
+      serveJson({ project: 'site' });
+      expect(resolveOptions(parse([]), { root: tmp, gitUserName: noGit }).configWarnings).to.deep.equal([
+        'quant/serve.json project "site" is used, not quant.json project "saved-project": quant/serve.json wins over quant.json. Pass --project to choose.'
+      ]);
+    });
+
+    it('does not warn when a flag chooses, or when the values are the same', () => {
+      fs.writeFileSync(path.join(tmp, 'quant.json'), JSON.stringify({ clientid: 'saved', project: 'p' }));
+      serveJson({ org: 'acme', project: 'p' });
+      expect(resolveOptions(parse(['--org', 'x']), { root: tmp, gitUserName: noGit }).configWarnings).to.deep.equal([]);
+      serveJson({ org: 'saved' });
+      expect(resolveOptions(parse([]), { root: tmp, gitUserName: noGit }).configWarnings).to.deep.equal([]);
+    });
+
+    it('prints the warning in the start-up output', async () => {
+      const root = path.join(tmp, 'project');
+      fs.cpSync(ORBIT, root, { recursive: true, filter: (src) => !src.includes(`${path.sep}.quant`) });
+      fs.writeFileSync(path.join(root, 'quant.json'), JSON.stringify({ clientid: 'saved' }));
+      fs.writeFileSync(path.join(root, 'quant', 'serve.json'), JSON.stringify({ org: 'acme' }));
+      const opts = resolveOptions({ dir: 'dist', port: 0, memory: true }, { root, gitUserName: noGit });
+      await runServe(opts, { stop: Promise.resolve(), print: (line) => output.push(line), log: () => {} });
+      const warnings = output.filter((line) => line.includes('wins over quant.json'));
+      expect(warnings).to.have.length(1);
+    });
+
+    it('refuses an invalid value', () => {
+      serveJson({ org: 'a b' });
+      expect(() => resolveOptions(parse([]), { root: tmp, gitUserName: noGit })).to.throw('quant/serve.json: org must be');
+    });
   });
 
   it('reads quant.json softly', () => {
@@ -301,6 +362,126 @@ describe('serve command', () => {
       expect(stderr).to.include(`A function (${uuid}) blocked quant serve for more than 0.3 s. quant serve stops.`);
       expect(stderr).to.include('Make the function return within 15 s.');
       expect(await gone(pid)).to.equal(true);
+    });
+  });
+
+  describe('--run command that exits', function () {
+    this.timeout(15000);
+    const RUN_FIXTURES = path.join(HERE, '..', '..', 'fixtures', 'serve-run');
+
+    function freePort() {
+      return new Promise((resolve) => {
+        const probe = net.createServer().listen(0, '127.0.0.1', () => {
+          const { port } = probe.address();
+          probe.close(() => resolve(port));
+        });
+      });
+    }
+
+    async function until(check, what, timeoutMs = 8000) {
+      const started = Date.now();
+      while (!check()) {
+        if (Date.now() - started > timeoutMs) throw new Error(`timed out: ${what}`);
+        await new Promise((resolve) => setTimeout(resolve, 50));
+      }
+    }
+
+    function alive(pid) {
+      try {
+        process.kill(pid, 0);
+        return true;
+      } catch (_err) {
+        return false;
+      }
+    }
+
+    // Serve the Orbit fixture with the --run command until the returned stop() is called.
+    function serveWith(run, proxy) {
+      const lines = [];
+      let stop;
+      const stopped = new Promise((resolve) => { stop = resolve; });
+      const opts = resolveOptions({ dir: 'dist', port: 0, memory: true, run, proxy }, { root: ORBIT, gitUserName: noGit });
+      const running = runServe(opts, { stop: stopped, print: (line) => lines.push(line), log: () => {} });
+      return { lines, stop: async () => { stop(); await running; } };
+    }
+
+    function fixture(name, ...args) {
+      return [process.execPath, path.join(RUN_FIXTURES, name), ...args].map((part) => JSON.stringify(String(part))).join(' ');
+    }
+
+    it('keeps serving when the command moves the dev server to the background, and stops it on exit', async function () {
+      if (process.platform === 'win32') this.skip();
+      const port = await freePort();
+      const pidFile = path.join(tmp, 'pid');
+      const served = serveWith(fixture('background.mjs', port, pidFile), `http://127.0.0.1:${port}`);
+      let pid = null;
+      try {
+        await until(() => served.lines.some((line) => line.includes('moved to the background')), 'the background notice');
+        await until(() => fs.existsSync(pidFile) && fs.readFileSync(pidFile, 'utf8') !== '', 'the dev server');
+        pid = Number(fs.readFileSync(pidFile, 'utf8'));
+        const response = await fetch(`http://127.0.0.1:${port}/`);
+        expect(await response.text()).to.equal('dev');
+      } finally {
+        await served.stop();
+      }
+      await until(() => !alive(pid), 'the dev server to stop', 4000);
+      const notices = served.lines.filter((line) => line.startsWith('The --run command'));
+      expect(notices).to.have.length(1);
+      expect(notices[0]).to.include('moved to the background').and.not.to.include('stopped (exit code 0)');
+    });
+
+    it('says so when the background dev server left the process group', async function () {
+      if (process.platform === 'win32') this.skip();
+      const port = await freePort();
+      const pidFile = path.join(tmp, 'pid');
+      const served = serveWith(fixture('background.mjs', port, pidFile, 'own-group'), `http://127.0.0.1:${port}`);
+      let pid = null;
+      try {
+        await until(() => served.lines.some((line) => line.includes('cannot stop')), 'the notice');
+        pid = Number(fs.readFileSync(pidFile, 'utf8'));
+        const notice = served.lines.find((line) => line.includes('cannot stop'));
+        expect(notice).to.include(`http://127.0.0.1:${port}`);
+      } finally {
+        await served.stop();
+        if (pid === null && fs.existsSync(pidFile)) pid = Number(fs.readFileSync(pidFile, 'utf8'));
+        if (pid) process.kill(pid, 'SIGKILL');
+      }
+    });
+
+    it('stops the wait for the --proxy URL at once when it is aborted', async () => {
+      const port = await freePort();
+      const abort = new AbortController();
+      const started = Date.now();
+      setTimeout(() => abort.abort(), 100);
+      const line = await runExitLine({ pid: 999999 }, { code: 0, signal: null, proxy: `http://127.0.0.1:${port}`, waitMs: 5000, abort: abort.signal });
+      expect(Date.now() - started).to.be.below(1000);
+      expect(line).to.equal('The --run command stopped (exit code 0).');
+    });
+
+    it('aborts the wait for the --proxy URL when quant serve stops', async function () {
+      if (process.platform === 'win32') this.skip();
+      const port = await freePort();
+      const served = serveWith(`${JSON.stringify(process.execPath)} -e "process.exit(0)"`, `http://127.0.0.1:${port}`);
+      await new Promise((resolve) => setTimeout(resolve, 400));
+      const started = Date.now();
+      await served.stop();
+      await new Promise((resolve) => setTimeout(resolve, 100));
+      expect(Date.now() - started).to.be.below(1500);
+      expect(served.lines.filter((line) => line.startsWith('The --run command'))).to.deep.equal([]);
+    });
+
+    it('reports a failed command as before', async () => {
+      const served = serveWith(fixture('fail.mjs'), undefined);
+      await until(() => served.lines.some((line) => line.startsWith('The --run command')), 'the exit notice');
+      await served.stop();
+      expect(served.lines.filter((line) => line.startsWith('The --run command'))).to.deep.equal(['The --run command stopped (exit code 1).']);
+    });
+
+    it('reports a command that exits 0 and leaves nothing behind as stopped', async () => {
+      const served = serveWith(`${JSON.stringify(process.execPath)} -e "process.exit(0)"`, undefined);
+      await until(() => served.lines.some((line) => line.startsWith('The --run command')), 'the exit notice');
+      await served.stop();
+      expect(served.lines.filter((line) => line.startsWith('The --run command'))).to.deep.equal(['The --run command stopped (exit code 0).']);
     });
   });
 

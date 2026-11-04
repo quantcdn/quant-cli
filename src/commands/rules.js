@@ -59,12 +59,38 @@ function refusalError(rules) {
   return new Error('Managed rules were changed outside code; nothing was written. Re-run with --force to overwrite them with this manifest.');
 }
 
+const MESSAGE_STATUSES = [409, 422];
+const MAX_MESSAGE = 300;
+
+// A string as one short line, or null when it is not text.
+function oneLine(value) {
+  if (typeof value !== 'string' || value.trim() === '') return null;
+  const line = value.replace(/[\u0000-\u001f\u007f-\u009f]+/g, ' ').replace(/\s+/g, ' ').trim();
+  return line.length > MAX_MESSAGE ? `${line.slice(0, MAX_MESSAGE - 3)}...` : line;
+}
+
+function adviceText(status, code) {
+  if (status === 409) return 'Rules are being changed by another request (409). Retry shortly.';
+  return `Rules deployment failed (${status || code || 'network error'}). Check portal URL, token scopes and project access.`;
+}
+
+// A 409 or 422 `message` replaces the advice: the API writes it for the user
+// (for example, that the change may already be live, or that the rule order
+// cannot be kept). A string `error` alone is printed above the advice.
+function statusText(status, data, code) {
+  const advice = adviceText(status, code);
+  if (!MESSAGE_STATUSES.includes(status)) return advice;
+  const message = oneLine(data?.message);
+  if (message) return `Rules deployment failed (${status}): ${message}`;
+  const errorText = oneLine(data?.error);
+  return errorText ? `Rules deployment failed (${status}): ${errorText}\n${advice}` : advice;
+}
+
 // Never print Axios config/headers or an arbitrary upstream body containing credentials.
 function deployError(error) {
-  const status = error.response?.status;
-  if (status === 409 && Array.isArray(error.response?.data?.rules)) return refusalError(error.response.data.rules);
-  if (status === 409) return new Error('Rules are being changed by another request (409). Retry shortly.');
-  return new Error(`Rules deployment failed (${status || error.code || 'network error'}). Check portal URL, token scopes and project access.`);
+  const { status, data } = error.response || {};
+  if (status === 409 && Array.isArray(data?.rules)) return refusalError(data.rules);
+  return new Error(statusText(status, data, error.code));
 }
 
 export default {

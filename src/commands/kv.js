@@ -6,7 +6,7 @@
 
 import fs from 'node:fs';
 import path from 'node:path';
-import { select, text, isCancel } from '@clack/prompts';
+import { select, text, password, confirm, isCancel } from '@clack/prompts';
 import { openLocalKv } from '../serve/kv/wire.js';
 import { pendingLedgerWarnings } from '../serve/kv/ledgers.js';
 import { DEFAULT_FILES } from '../serve/project.js';
@@ -16,6 +16,8 @@ import { resolveOptions } from './serve.js';
 const REMOTE_MESSAGE = 'Remote KV commands are not available yet. Use --local.';
 const ACTIONS = ['list', 'get', 'set', 'delete'];
 const MAX_PAGES = 100;
+// The mask of an encrypted value, the same as in a list.
+const ENCRYPTED = '[ENCRYPTED]';
 
 /** A failure with a message for the user and no stack. */
 class UsageError extends Error {}
@@ -91,14 +93,24 @@ function need(value, label) {
   return value;
 }
 
+// The set options: ifVersion, and secret (the value is stored encrypted, as
+// with `secret: true` in a function: a function reads it, a list shows it masked).
+function setOptions(args) {
+  const options = {};
+  if (args['if-version'] !== undefined) options.ifVersion = args['if-version'];
+  if (args.secret === true) options.secret = true;
+  return Object.keys(options).length > 0 ? options : undefined;
+}
+
 const OPERATIONS = {
   list: (store, args) => listAll(store, args),
   get: (store, args) => store.getEntry(need(args.key, 'The key')),
   async set(store, args) {
     const value = parseJson(need(args.value, 'The JSON value'));
-    const ifVersion = args['if-version'];
-    await store.set(need(args.key, 'The key'), value, ifVersion === undefined ? undefined : { ifVersion });
-    return store.getEntry(args.key);
+    await store.set(need(args.key, 'The key'), value, setOptions(args));
+    const entry = await store.getEntry(args.key);
+    // Never print a secret value after a write: it would go to logs and scrollback.
+    return entry && entry.encrypted ? { ...entry, value: ENCRYPTED } : entry;
   },
   async delete(store, args) {
     await store.delete(need(args.key, 'The key'));
@@ -113,6 +125,7 @@ function describeError(err) {
 
 async function execute(args, root, error) {
   if (!ACTIONS.includes(args.action)) throw new UsageError(`The action must be one of: ${ACTIONS.join(', ')}`);
+  if (args.secret === true && args.action !== 'set') error(`--secret applies only to set. It is ignored for ${args.action}.`);
   const options = resolveOptions({ org: args.org, project: args.project, meta: args.meta }, { root, gitUserName: () => null });
   const id = idOf(options, args.store);
   if (id === null) throw new UsageError(`FORBIDDEN: Access to KV store ${args.store} is not allowed`);
@@ -120,7 +133,8 @@ async function execute(args, root, error) {
   const stores = readStores(root, options.meta).map((store) => ({ ...store, indexes: [] }));
   const local = await openLocalKv({ root, org: options.org, project: options.project, stores });
   // The warnings come before the operation, so a failed operation keeps them.
-  for (const warning of [...local.warnings, ...pendingLedgerWarnings(local.backend, local.backend.storeIds())]) error(warning);
+  const warnings = [...options.configWarnings, ...local.warnings, ...pendingLedgerWarnings(local.backend, local.backend.storeIds())];
+  for (const warning of warnings) error(warning);
   return OPERATIONS[args.action](local.kvStore.open(id), args);
 }
 
@@ -144,18 +158,35 @@ export async function runKv(args, { root = process.cwd(), print = console.log, e
   }
 }
 
-// Ask for the action, the store and what the action needs. Null on cancel.
-async function promptArgs() {
-  const action = await select({ message: 'Operation', options: ACTIONS.map((value) => ({ value, label: value })) });
-  if (isCancel(action)) return null;
-  const store = await text({ message: 'Store name (from quant/meta.json)' });
-  if (isCancel(store)) return null;
+const PROMPTS = { select, text, password, confirm, isCancel };
+
+// set: the secret question (default no), then the JSON value. A secret
+// value is typed with hidden input. Null on cancel.
+async function askValue(prompts) {
+  const secret = await prompts.confirm({ message: 'Store the value as a secret (encrypted)?', initialValue: false });
+  if (prompts.isCancel(secret)) return null;
+  const ask = secret === true ? prompts.password : prompts.text;
+  const value = await ask({ message: 'JSON value' });
+  return prompts.isCancel(value) ? null : { value, secret: secret === true };
+}
+
+/**
+ * The menu: ask for the action, the store and what the action needs.
+ * @param {{ select, text, password, confirm, isCancel }} [prompts] The prompt functions (for tests).
+ * @returns {Promise<Object|null>} The args, or null on cancel.
+ */
+export async function askKv(prompts = PROMPTS) {
+  const action = await prompts.select({ message: 'Operation', options: ACTIONS.map((value) => ({ value, label: value })) });
+  if (prompts.isCancel(action)) return null;
+  const store = await prompts.text({ message: 'Store name (from quant/meta.json)' });
+  if (prompts.isCancel(store)) return null;
   const args = { local: true, action, store };
   if (action === 'list') return args;
-  const key = await text({ message: 'Key' });
-  if (isCancel(key)) return null;
-  const value = action === 'set' ? await text({ message: 'JSON value' }) : undefined;
-  return isCancel(value) ? null : { ...args, key, value };
+  const key = await prompts.text({ message: 'Key' });
+  if (prompts.isCancel(key)) return null;
+  if (action !== 'set') return { ...args, key, value: undefined };
+  const answers = await askValue(prompts);
+  return answers === null ? null : { ...args, key, ...answers };
 }
 
 export default {
@@ -172,10 +203,11 @@ export default {
     .option('index', { type: 'string', describe: 'list: index name' })
     .option('equals', { type: 'string', array: true, describe: 'list: field=value for the index (repeat)' })
     .option('if-version', { type: 'string', describe: 'set: write only if the key has this version' })
-    .option('org', { type: 'string', describe: 'Organisation (default: quant.json clientid, then local)' })
-    .option('project', { type: 'string', describe: 'Project (default: quant.json project, then dev)' })
-    .option('meta', { type: 'string', default: DEFAULT_FILES.meta, describe: 'Template metadata with KV stores' }),
-  promptArgs,
+    .option('secret', { type: 'boolean', describe: 'set: store the value encrypted (a list shows it masked)' })
+    .option('org', { type: 'string', describe: 'Organisation (default: quant/serve.json org, quant.json clientid, then local)' })
+    .option('project', { type: 'string', describe: 'Project (default: quant/serve.json project, quant.json project, then dev)' })
+    .option('meta', { type: 'string', describe: `Template metadata with KV stores (default: quant/serve.json meta, then ${DEFAULT_FILES.meta})` }),
+  promptArgs: () => askKv(),
   async handler(args) {
     const code = await runKv(args);
     if (code !== 0) process.exit(code);

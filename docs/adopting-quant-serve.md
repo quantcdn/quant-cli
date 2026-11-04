@@ -49,6 +49,13 @@ bundles function sources into the committed function bodies.
    Give the dev server `--host 127.0.0.1` when it listens only on IPv6 by
    default, or the proxy cannot reach it.
 
+   In some environments the dev server moves to the background and the `--run`
+   command exits 0 at once. quant serve then prints that the command moved to the
+   background and keeps serving. On macOS and Linux, it stops the dev server when
+   it stops, but only while the dev server stays in the process group of the
+   `--run` command. On Windows, quant serve cannot stop a dev server that moved to
+   the background. See the `--run` flag in the README.
+
 3. Move the seed data into fixtures. Each store gets one file,
    `quant/kv-fixtures/<store-name>.json`, with a JSON array of entries:
 

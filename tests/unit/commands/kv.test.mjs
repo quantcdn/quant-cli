@@ -8,7 +8,7 @@ import yargs from 'yargs';
 import { createVirtualClock } from '@quantcdn/edge-kv';
 import { openLocalKv } from '../../../src/serve/kv/wire.js';
 import { loadProject } from '../../../src/serve/project.js';
-import kv, { runKv } from '../../../src/commands/kv.js';
+import kv, { runKv, askKv } from '../../../src/commands/kv.js';
 import { runServe, resolveOptions } from '../../../src/commands/serve.js';
 import { getCommand, getCommandOptions } from '../../../src/commandLoader.js';
 
@@ -49,6 +49,47 @@ describe('kv command', () => {
   it('is registered with the menu label', async () => {
     expect(await getCommand('kv')).to.equal(kv);
     expect(getCommandOptions()).to.deep.include({ value: 'kv', label: 'Read and write the local KV store' });
+  });
+
+  describe('menu', () => {
+    const CANCEL = Symbol('cancel');
+    function prompts(answers) {
+      const asked = [];
+      const next = (kind) => async (question) => {
+        asked.push({ kind, ...question });
+        return answers.shift();
+      };
+      return {
+        asked,
+        prompts: { select: next('select'), text: next('text'), password: next('password'), confirm: next('confirm'), isCancel: (value) => value === CANCEL }
+      };
+    }
+
+    it('asks set --secret as a yes/no question, default no, then the value with hidden input', async () => {
+      const fake = prompts(['set', 'orbit', 'api:token', true, '"x"']);
+      expect(await askKv(fake.prompts)).to.deep.equal({ local: true, action: 'set', store: 'orbit', key: 'api:token', value: '"x"', secret: true });
+      const question = fake.asked.find((item) => item.kind === 'confirm');
+      expect(question.initialValue).to.equal(false);
+      expect(question.message).to.match(/secret/i);
+      expect(fake.asked[fake.asked.length - 1].kind).to.equal('password');
+    });
+
+    it('gives secret false and a visible value prompt when the answer is no', async () => {
+      const fake = prompts(['set', 'orbit', 'a', false, '1']);
+      expect(await askKv(fake.prompts)).to.include({ secret: false, value: '1' });
+      expect(fake.asked[fake.asked.length - 1].kind).to.equal('text');
+    });
+
+    it('does not ask about a secret for get', async () => {
+      const fake = prompts(['get', 'orbit', 'a']);
+      expect(await askKv(fake.prompts)).to.deep.equal({ local: true, action: 'get', store: 'orbit', key: 'a', value: undefined });
+      expect(fake.asked.some((item) => item.kind === 'confirm')).to.equal(false);
+    });
+
+    it('returns null when the secret question is cancelled', async () => {
+      expect(await askKv(prompts(['set', 'orbit', 'a', CANCEL]).prompts)).to.equal(null);
+      expect(await askKv(prompts(['set', 'orbit', 'a', true, CANCEL]).prompts)).to.equal(null);
+    });
   });
 
   it('refuses a run without --local', async () => {
@@ -107,6 +148,70 @@ describe('kv command', () => {
     expect(lastJson().map((item) => item.key)).to.deep.equal(['workspace:w1:project:p1']);
   });
 
+  describe('set --secret', () => {
+    it('stores the value encrypted: get reads it, list masks it, the state file does not hold it', async () => {
+      expect(await run(['--local', 'set', 'orbit', 'api:token', '"s3cr3t-value"', '--secret'])).to.equal(0);
+      expect(lastJson()).to.include({ key: 'api:token', value: '[ENCRYPTED]', encrypted: true });
+      expect(out.join('\n')).not.to.include('s3cr3t-value');
+      expect(await run(['--local', 'get', 'orbit', 'api:token'])).to.equal(0);
+      expect(lastJson()).to.include({ value: 's3cr3t-value', encrypted: true });
+      expect(await run(['--local', 'list', 'orbit', '--prefix', 'api:'])).to.equal(0);
+      expect(lastJson()).to.have.length(1);
+      expect(lastJson()[0]).to.include({ key: 'api:token', encrypted: true, value: '[ENCRYPTED]' });
+      const state = fs.readFileSync(path.join(root, '.quant', 'kv', 'state.json'), 'utf8');
+      expect(state).not.to.include('s3cr3t-value');
+    });
+
+    it('stores a plain value without --secret', async () => {
+      expect(await run(['--local', 'set', 'orbit', 'plain', '1'])).to.equal(0);
+      expect(lastJson().encrypted).to.equal(false);
+    });
+
+    it('works with --if-version', async () => {
+      await run(['--local', 'set', 'orbit', 'a', '1']);
+      const { version } = lastJson();
+      expect(await run(['--local', 'set', 'orbit', 'a', '2', '--secret', '--if-version', version])).to.equal(0);
+      expect(lastJson()).to.include({ value: '[ENCRYPTED]', encrypted: true });
+    });
+
+    it('prints one notice that --secret is ignored on get, list and delete', async () => {
+      await run(['--local', 'set', 'orbit', 'a', '1']);
+      for (const action of ['get', 'list', 'delete']) {
+        err.length = 0;
+        const argv = action === 'list' ? ['--local', action, 'orbit', '--secret'] : ['--local', action, 'orbit', 'a', '--secret'];
+        expect(await run(argv)).to.equal(0);
+        expect(err).to.deep.equal([`--secret applies only to set. It is ignored for ${action}.`]);
+      }
+    });
+
+    it('refuses a secret in an indexed collection', async () => {
+      const { stores } = loadProject({ root });
+      await openLocalKv({ root, org: 'local', project: 'dev', stores, indexState: 'active' });
+      expect(await run(['--local', 'set', 'orbit', 'workspace:w1:project:p1', '{"workspace":"w1"}', '--secret'])).to.equal(1);
+      expect(err[err.length - 1]).to.match(/^INDEX_FIELD_ENCRYPTED: /);
+    });
+
+    it('a function on a running server reads the secret value', async () => {
+      let stop;
+      const stopped = new Promise((resolve) => { stop = resolve; });
+      let url;
+      const options = resolveOptions({ dir: 'dist', port: 0 }, { root, gitUserName: () => null });
+      const running = runServe(options, { stop: stopped, print: () => {}, log: () => {}, onListening: (server) => { url = server.url; } });
+      await new Promise((resolve) => {
+        const check = () => (url ? resolve() : setTimeout(check, 20));
+        check();
+      });
+      try {
+        expect(await run(['--local', 'set', 'orbit', 'workspace:studio:settings', '{"name":"Secret name"}', '--secret'])).to.equal(0);
+        const res = await fetch(`${url}/api/workspace`);
+        expect((await res.json()).settings.name).to.equal('Secret name');
+      } finally {
+        stop();
+        await running;
+      }
+    });
+  });
+
   it('refuses an undeclared store', async () => {
     expect(await run(['--local', 'get', 'ghost', 'a'])).to.equal(1);
     expect(err).to.deep.equal(['FORBIDDEN: Access to KV store local-dev-ghost is not allowed']);
@@ -116,6 +221,39 @@ describe('kv command', () => {
     expect(await run(['--local', '--org', 'acme', '--project', 'site', 'set', 'orbit', 'a', '1'])).to.equal(0);
     const state = JSON.parse(fs.readFileSync(path.join(root, '.quant', 'kv', 'state.json'), 'utf8'));
     expect(JSON.stringify(state)).to.include('acme-site-orbit');
+  });
+
+  describe('defaults from quant/serve.json', () => {
+    const serveJson = (document) => fs.writeFileSync(path.join(root, 'quant', 'serve.json'), JSON.stringify(document));
+    const state = () => fs.readFileSync(path.join(root, '.quant', 'kv', 'state.json'), 'utf8');
+
+    it('uses org, project and meta from quant/serve.json', async () => {
+      fs.mkdirSync(path.join(root, 'config'));
+      fs.renameSync(path.join(root, 'quant', 'meta.json'), path.join(root, 'config', 'meta.json'));
+      serveJson({ org: 'acme', project: 'site', meta: 'config/meta.json' });
+      expect(await run(['--local', 'set', 'orbit', 'a', '1'])).to.equal(0);
+      expect(state()).to.include('acme-site-orbit');
+    });
+
+    it('lets the flags win', async () => {
+      serveJson({ org: 'acme', project: 'site', meta: 'missing.json' });
+      expect(await run(['--local', '--org', 'other', '--project', 'web', '--meta', 'quant/meta.json', 'set', 'orbit', 'a', '1'])).to.equal(0);
+      expect(state()).to.include('other-web-orbit').and.not.to.include('acme-site-orbit');
+    });
+
+    it('warns once when quant/serve.json and quant.json name a different org', async () => {
+      fs.writeFileSync(path.join(root, 'quant.json'), JSON.stringify({ clientid: 'saved', project: 'dev' }));
+      serveJson({ org: 'acme' });
+      expect(await run(['--local', 'set', 'orbit', 'a', '1'])).to.equal(0);
+      expect(err).to.deep.equal(['quant/serve.json org "acme" is used, not quant.json clientid "saved": quant/serve.json wins over quant.json. Pass --org to choose.']);
+      expect(state()).to.include('acme-dev-orbit');
+    });
+
+    it('refuses an invalid quant/serve.json', async () => {
+      serveJson({ project: '' });
+      expect(await run(['--local', 'get', 'orbit', 'a'])).to.equal(1);
+      expect(err[0]).to.match(/^quant\/serve\.json: project must be/);
+    });
   });
 
   it('leaves a BUILDING index BUILDING', async () => {
