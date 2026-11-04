@@ -1,7 +1,7 @@
 /**
  * The edge function manifest schema (quant/edge-functions.json).
  *
- * The same rules as the Quant portal (App\Helpers\TemplateManifestPaths), so a
+ * The same rules as the Quant portal, so a
  * manifest that passes here passes there, and the reverse. Every entry names
  * its function by an explicit uuid: no tool derives one.
  */
