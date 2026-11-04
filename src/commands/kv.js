@@ -6,7 +6,7 @@
 
 import fs from 'node:fs';
 import path from 'node:path';
-import { select, text, isCancel } from '@clack/prompts';
+import { select, text, confirm, isCancel } from '@clack/prompts';
 import { openLocalKv } from '../serve/kv/wire.js';
 import { pendingLedgerWarnings } from '../serve/kv/ledgers.js';
 import { DEFAULT_FILES } from '../serve/project.js';
@@ -153,18 +153,33 @@ export async function runKv(args, { root = process.cwd(), print = console.log, e
   }
 }
 
-// Ask for the action, the store and what the action needs. Null on cancel.
-async function promptArgs() {
-  const action = await select({ message: 'Operation', options: ACTIONS.map((value) => ({ value, label: value })) });
-  if (isCancel(action)) return null;
-  const store = await text({ message: 'Store name (from quant/meta.json)' });
-  if (isCancel(store)) return null;
+const PROMPTS = { select, text, confirm, isCancel };
+
+// set: the JSON value and the secret question (default no). Null on cancel.
+async function askValue(prompts) {
+  const value = await prompts.text({ message: 'JSON value' });
+  if (prompts.isCancel(value)) return null;
+  const secret = await prompts.confirm({ message: 'Store the value as a secret (encrypted)?', initialValue: false });
+  return prompts.isCancel(secret) ? null : { value, secret: secret === true };
+}
+
+/**
+ * The menu: ask for the action, the store and what the action needs.
+ * @param {{ select, text, confirm, isCancel }} [prompts] The prompt functions (for tests).
+ * @returns {Promise<Object|null>} The args, or null on cancel.
+ */
+export async function askKv(prompts = PROMPTS) {
+  const action = await prompts.select({ message: 'Operation', options: ACTIONS.map((value) => ({ value, label: value })) });
+  if (prompts.isCancel(action)) return null;
+  const store = await prompts.text({ message: 'Store name (from quant/meta.json)' });
+  if (prompts.isCancel(store)) return null;
   const args = { local: true, action, store };
   if (action === 'list') return args;
-  const key = await text({ message: 'Key' });
-  if (isCancel(key)) return null;
-  const value = action === 'set' ? await text({ message: 'JSON value' }) : undefined;
-  return isCancel(value) ? null : { ...args, key, value };
+  const key = await prompts.text({ message: 'Key' });
+  if (prompts.isCancel(key)) return null;
+  if (action !== 'set') return { ...args, key, value: undefined };
+  const answers = await askValue(prompts);
+  return answers === null ? null : { ...args, key, ...answers };
 }
 
 export default {
@@ -185,7 +200,7 @@ export default {
     .option('org', { type: 'string', describe: 'Organisation (default: quant/serve.json org, quant.json clientid, then local)' })
     .option('project', { type: 'string', describe: 'Project (default: quant/serve.json project, quant.json project, then dev)' })
     .option('meta', { type: 'string', describe: `Template metadata with KV stores (default: quant/serve.json meta, then ${DEFAULT_FILES.meta})` }),
-  promptArgs,
+  promptArgs: () => askKv(),
   async handler(args) {
     const code = await runKv(args);
     if (code !== 0) process.exit(code);

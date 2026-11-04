@@ -8,7 +8,7 @@ import yargs from 'yargs';
 import { createVirtualClock } from '@quantcdn/edge-kv';
 import { openLocalKv } from '../../../src/serve/kv/wire.js';
 import { loadProject } from '../../../src/serve/project.js';
-import kv, { runKv } from '../../../src/commands/kv.js';
+import kv, { runKv, askKv } from '../../../src/commands/kv.js';
 import { runServe, resolveOptions } from '../../../src/commands/serve.js';
 import { getCommand, getCommandOptions } from '../../../src/commandLoader.js';
 
@@ -49,6 +49,41 @@ describe('kv command', () => {
   it('is registered with the menu label', async () => {
     expect(await getCommand('kv')).to.equal(kv);
     expect(getCommandOptions()).to.deep.include({ value: 'kv', label: 'Read and write the local KV store' });
+  });
+
+  describe('menu', () => {
+    const CANCEL = Symbol('cancel');
+    function prompts(answers) {
+      const asked = [];
+      const next = (kind) => async (question) => {
+        asked.push({ kind, ...question });
+        return answers.shift();
+      };
+      return { asked, prompts: { select: next('select'), text: next('text'), confirm: next('confirm'), isCancel: (value) => value === CANCEL } };
+    }
+
+    it('asks set --secret as a yes/no question, default no', async () => {
+      const fake = prompts(['set', 'orbit', 'api:token', '"x"', true]);
+      expect(await askKv(fake.prompts)).to.deep.equal({ local: true, action: 'set', store: 'orbit', key: 'api:token', value: '"x"', secret: true });
+      const question = fake.asked.find((item) => item.kind === 'confirm');
+      expect(question.initialValue).to.equal(false);
+      expect(question.message).to.match(/secret/i);
+    });
+
+    it('gives secret false when the answer is no', async () => {
+      const fake = prompts(['set', 'orbit', 'a', '1', false]);
+      expect((await askKv(fake.prompts)).secret).to.equal(false);
+    });
+
+    it('does not ask about a secret for get', async () => {
+      const fake = prompts(['get', 'orbit', 'a']);
+      expect(await askKv(fake.prompts)).to.deep.equal({ local: true, action: 'get', store: 'orbit', key: 'a', value: undefined });
+      expect(fake.asked.some((item) => item.kind === 'confirm')).to.equal(false);
+    });
+
+    it('returns null when the secret question is cancelled', async () => {
+      expect(await askKv(prompts(['set', 'orbit', 'a', '1', CANCEL]).prompts)).to.equal(null);
+    });
   });
 
   it('refuses a run without --local', async () => {
