@@ -124,6 +124,15 @@ bundles function sources into the committed function bodies.
 - `quant serve --indexes building` and `--kv-lag 1000` show the not-ready and
   list-lag states that production can have, so you can test the messages for them.
 
+## Use the rules and data of the portal project
+
+To run the site against the rules and a KV store of the real project, start
+with `quant serve --pull-rules --kv-remote <store>`. Both flags read the portal
+once at start, keep the data in memory and never write it to `.quant/`. They
+need `QUANT_API_TOKEN` and `QUANT_BASE_URL`. See
+[Portal rules and remote KV](../README.md#portal-rules-and-remote-kv) for the
+scopes, the caps and the rule actions that do not run locally.
+
 ## Limits
 
 quant serve runs documented edge behaviour. It does not run scheduled
