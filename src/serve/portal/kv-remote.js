@@ -19,15 +19,20 @@ export async function findStore(client, { customer, project, name }) {
   return { id: found.id, name: found.name };
 }
 
-// Counts every request. `full` is true once the request cap is reached.
-function budget(max, used) {
-  const state = { requests: used, max };
+// Counts every request. With a counter (the onRequest hook of the client:
+// { count }), the count is the counter, so 429 retries count too; else each
+// call counts one, from `used`. `full` is true once the request cap is reached.
+function budget(max, used, counter) {
+  const own = { count: used };
+  const source = counter || own;
+  const state = { max, tick: () => { own.count += 1; } };
+  Object.defineProperty(state, 'requests', { get: () => source.count });
   state.full = () => state.requests >= state.max;
   return state;
 }
 
 async function fetchOk(state, name, send) {
-  state.requests += 1;
+  state.tick();
   const { status, body } = await send(scopeInfo(name));
   if (status === 404) throw notLinked(name);
   return body;
@@ -67,13 +72,16 @@ async function readPage(client, state, ctx, id, { cursor, room }) {
   const page = await readKeysPage(client, state, ctx, id, cursor);
   const all = pageKeys(page);
   const values = await readValues(client, state, ctx, id, all.slice(0, room));
-  const more = page?.has_more === true && Boolean(page.next_cursor);
-  const cut = !values.complete || room < all.length || (more && room <= all.length);
+  const hasMore = page?.has_more === true;
+  const more = hasMore && Boolean(page.next_cursor);
+  // has_more with no cursor: the rest cannot be read.
+  const lost = hasMore && !more;
+  const cut = !values.complete || room < all.length || (more && room <= all.length) || lost;
   return { entries: values.entries, next: more ? page.next_cursor : null, cut };
 }
 
 export async function readStore(client, ctx, id, { maxKeys = 10000, maxRequests = 200 } = {}) {
-  const state = budget(maxRequests, ctx.requestsUsed ?? 0);
+  const state = budget(maxRequests, ctx.requestsUsed ?? 0, ctx.counter);
   const entries = [];
   const indexes = state.full() ? [] : await readIndexes(client, state, ctx, id);
   let cursor;

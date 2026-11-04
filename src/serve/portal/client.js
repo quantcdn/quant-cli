@@ -112,11 +112,13 @@ async function settle(context, response, scopeInfo) {
   return { status, body: body ?? null };
 }
 
-export function createPortalClient({ base, token, fetchImpl = fetch, sleep = ms => new Promise(resolve => setTimeout(resolve, ms)) }) {
+// onRequest() is called once for each HTTP attempt, a 429 retry included.
+export function createPortalClient({ base, token, fetchImpl = fetch, sleep = ms => new Promise(resolve => setTimeout(resolve, ms)), onRequest = () => {} }) {
   const context = { base, token, fetchImpl };
   async function request(call, scopeInfo) {
     let waited = 0;
     for (;;) {
+      onRequest();
       const response = await send(context, call);
       if (response.status !== 429) return settle(context, response, scopeInfo);
       const delay = retryDelayMs(response);

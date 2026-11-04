@@ -142,6 +142,78 @@ describe('remote KV read', () => {
       expect(error.message).to.equal('The KV store sessions is not linked to this project.');
     });
 
+    it('reads one batch at exactly 100 keys and two at 101', async () => {
+      for (const [total, sizes] of [[100, [100]], [101, [100, 1]]]) {
+        const { client, calls } = portal({ total });
+        const result = await readStore(client, CTX, 'abc');
+        expect(calls.filter(c => c.route === '/abc/batch-get').map(c => c.body.keys.length)).to.deep.equal(sizes);
+        expect(result.entries).to.have.length(total);
+        expect(result.truncated).to.equal(false);
+      }
+    });
+
+    it('sets truncated when maxKeys ends on a page boundary and more pages exist', async () => {
+      const more = portal({ total: 2000 });
+      const cut = await readStore(more.client, CTX, 'abc', { maxKeys: 1000 });
+      expect(cut.entries).to.have.length(1000);
+      expect(cut.truncated).to.equal(true);
+      expect(more.calls.filter(c => c.route === '/abc/keys')).to.have.length(1);
+      const exact = await readStore(portal({ total: 1000 }).client, CTX, 'abc', { maxKeys: 1000 });
+      expect(exact.entries).to.have.length(1000);
+      expect(exact.truncated).to.equal(false);
+    });
+
+    // A fake portal with one fixed keys page: `page` is the keys reply.
+    function onePage(page) {
+      const calls = [];
+      const fetchImpl = async (url, init) => {
+        const route = new URL(String(url)).pathname.replace(PREFIX, '');
+        calls.push(route);
+        if (route === '/abc/keys') return reply(200, page);
+        if (route === '/abc/batch-get') return reply(200, { items: JSON.parse(init.body).keys.map(key => ({ key, value: 1 })) });
+        return reply(200, { indexes: [] });
+      };
+      return { calls, client: createPortalClient({ base: BASE, token: 'tok', fetchImpl }) };
+    }
+
+    it('stops with truncated when has_more is true and next_cursor is missing or empty', async () => {
+      for (const next of [undefined, null, '']) {
+        const { client, calls } = onePage({ data: [{ key: 'a' }], has_more: true, ...(next === undefined ? {} : { next_cursor: next }) });
+        const result = await readStore(client, CTX, 'abc');
+        expect(result.entries).to.have.length(1);
+        expect(result.truncated).to.equal(true);
+        expect(calls.filter(route => route === '/abc/keys')).to.have.length(1);
+      }
+    });
+
+    it('stops a repeated cursor at the request cap', async () => {
+      const { client, calls } = onePage({ data: [{ key: 'a' }], has_more: true, next_cursor: 'same' });
+      const result = await readStore(client, CTX, 'abc', { maxRequests: 9 });
+      expect(calls).to.have.length(9);
+      expect(result.requests).to.equal(9);
+      expect(result.truncated).to.equal(true);
+    });
+
+    it('counts 429 retries in requests and in the cap through onRequest', async () => {
+      const counter = { count: 0 };
+      let limited = 0;
+      const fetchImpl = async (url, init) => {
+        const route = new URL(String(url)).pathname.replace(PREFIX, '') || '/';
+        if (route === '/') return reply(200, [{ id: 'abc', name: 'sessions' }]);
+        if (route === '/abc/indexes' && limited++ < 2) return { status: 429, headers: { get: () => '0' }, json: async () => ({}) };
+        if (route === '/abc/indexes') return reply(200, { indexes: [] });
+        if (route === '/abc/keys') return reply(200, { data: [{ key: 'a' }], has_more: true, next_cursor: 'n' });
+        return reply(200, { items: JSON.parse(init.body).keys.map(key => ({ key, value: 1 })) });
+      };
+      const client = createPortalClient({ base: BASE, token: 'tok', fetchImpl, sleep: async () => {}, onRequest: () => { counter.count += 1; } });
+      await findStore(client, CTX);
+      const result = await readStore(client, { ...CTX, counter }, 'abc', { maxRequests: 6 });
+      // 1 store list + 3 index attempts + 1 keys page + 1 batch: the cap of 6 stops the read.
+      expect(counter.count).to.equal(6);
+      expect(result.requests).to.equal(6);
+      expect(result.truncated).to.equal(true);
+    });
+
     it('names kv:read on 403 and never prints a value in errors', async () => {
       const { client } = portal({ total: 1, status: { '/abc/batch-get': 403 } });
       const error = await rejection(readStore(client, CTX, 'abc'));

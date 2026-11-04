@@ -251,4 +251,34 @@ describe('portal client', () => {
       expect(down.message).to.not.include(TOKEN);
     });
   });
+
+  describe('onRequest', () => {
+    function counted(responses) {
+      const queue = [...responses];
+      let count = 0;
+      const fetchImpl = async () => {
+        const next = queue.shift();
+        if (next instanceof Error) throw next;
+        return next;
+      };
+      const client = createPortalClient({ base: BASE, token: TOKEN, fetchImpl, sleep: async () => {}, onRequest: () => { count += 1; } });
+      return { client, count: () => count };
+    }
+
+    it('is called once for each HTTP attempt, retries included', async () => {
+      const get = counted([reply(429, {}, { 'retry-after': '1' }), reply(429, {}, { 'retry-after': '1' }), reply(200, {})]);
+      await get.client.get('/x');
+      expect(get.count()).to.equal(3);
+      const post = counted([reply(429, {}, { 'retry-after': '1' }), reply(200, {})]);
+      await post.client.post('/x', {});
+      expect(post.count()).to.equal(2);
+    });
+
+    it('counts a failed attempt and works without the hook', async () => {
+      const down = counted([new Error('boom')]);
+      await failure(down.client.get('/x'));
+      expect(down.count()).to.equal(1);
+      expect(await setup([reply(200, { ok: 1 })]).client.get('/x')).to.deep.equal({ status: 200, body: { ok: 1 } });
+    });
+  });
 });
