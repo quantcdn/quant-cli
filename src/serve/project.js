@@ -11,7 +11,9 @@ import { assertManifest } from '../helper/functions-manifest.js';
 import { resolveRules, ruleErrors, toRuntimeRule } from '../helper/edge-rules-manifest.js';
 import { parseMeta } from '../helper/quant-meta.js';
 import { readInlineSetting } from './inline.js';
-import { readServeConfig, SERVE_CONFIG } from './project-config.js';
+import { readServeConfig, SERVE_CONFIG, withPulledHeaders } from './project-config.js';
+import { mergeRules } from './portal/pull-rules.js';
+import { actionWarnings } from './rule-actions.js';
 import { orderRules } from './rules.js';
 
 export const DEFAULT_FILES = Object.freeze({
@@ -56,7 +58,8 @@ function readRules(root, source, functions) {
   const errors = ruleErrors(manifest);
   if (errors.length > 0) throw new Error(`${source} is not a valid rules manifest:\n  ${errors.join('\n  ')}`);
   try {
-    return orderRules(resolveRules(manifest, functions).rules.map(toRuntimeRule));
+    const resolved = resolveRules(manifest, functions);
+    return orderRules(resolved.rules.map((rule) => ({ ...toRuntimeRule(rule), namespace: resolved.namespace })));
   } catch (err) {
     throw new Error(`${source}: ${err.message}`);
   }
@@ -76,9 +79,12 @@ function functionMap(root, manifest) {
   }]));
 }
 
+const FUNCTION_ACTIONS = new Set(['edge_fn', 'edge_auth', 'edge_filter']);
+
 function ruleWarning(rule, fn, source) {
+  if (!FUNCTION_ACTIONS.has(rule.action)) return null;
   if (!fn) {
-    const effect = rule.type === 'filter' ? ' The filter is skipped.' : '';
+    const effect = rule.action === 'edge_filter' ? ' The filter is skipped.' : '';
     return `Rule ${rule.id}: function ${rule.fnUuid} is not in ${source}.${effect}`;
   }
   return fs.existsSync(fn.path) ? null : `Rule ${rule.id}: the function file ${fn.path} was not found.`;
@@ -88,20 +94,30 @@ function ruleWarning(rule, fn, source) {
  * Load and check the project files. A missing file counts as empty.
  * @param {Object} options
  * @param {string} options.root The project directory. File paths resolve from it.
+ * @param {Object[]|null} [options.pulledRules] --pull-rules: the portal rules in edge order. A
+ *   rule of the rules manifest replaces the managed rule of the same namespace and id (see mergeRules). Kept in memory only.
+ * @param {Record<string, string>|null} [options.pulledHeaders] --pull-rules: the portal global
+ *   headers. The globalHeaders of quant/serve.json override them.
  * @returns {{ functions: Map<string, Object>, rules: Object[], stores: Object[], fixtures: string, inlineFunctions: boolean, warnings: string[] }}
  *   functions is keyed by lowercase uuid; rules are runtime rules in run order.
+ *   localRules: the number of rules from the rules manifest.
  *   inlineFunctions: project_settings.enable_inline_fn in meta.json.
  *   settings: the local project settings from serve.json (see project-config.js).
  */
-export function loadProject({ root, functions = DEFAULT_FILES.functions, rules = DEFAULT_FILES.rules, meta = DEFAULT_FILES.meta, fixtures = DEFAULT_FILES.fixtures, serve = DEFAULT_FILES.serve }) {
+export function loadProject({ root, functions = DEFAULT_FILES.functions, rules = DEFAULT_FILES.rules, meta = DEFAULT_FILES.meta, fixtures = DEFAULT_FILES.fixtures, serve = DEFAULT_FILES.serve, pulledRules = null, pulledHeaders = null }) {
   const manifest = readFunctions(root, functions);
-  const runtimeRules = readRules(root, rules, manifest);
+  const localRules = readRules(root, rules, manifest);
+  const runtimeRules = pulledRules ? mergeRules(pulledRules, localRules) : localRules;
   const map = functionMap(root, manifest);
-  const settings = readServeConfig(root, serve);
-  const warnings = runtimeRules.map((rule) => ruleWarning(rule, map.get(rule.fnUuid), functions)).filter(Boolean);
+  const settings = withPulledHeaders(readServeConfig(root, serve), pulledHeaders, serve);
+  const warnings = [
+    ...runtimeRules.map((rule) => ruleWarning(rule, map.get(rule.fnUuid), functions)).filter(Boolean),
+    ...actionWarnings(runtimeRules)
+  ];
   return {
     functions: map,
     rules: runtimeRules,
+    localRules: localRules.length,
     stores: readStores(root, meta),
     fixtures: path.resolve(root, fixtures),
     inlineFunctions: readInlineSetting(root, meta),

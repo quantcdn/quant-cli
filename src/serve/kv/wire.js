@@ -9,6 +9,7 @@ import { createLocalKv } from '@quantcdn/edge-kv';
 import { storeId } from '../../helper/quant-meta.js';
 import { seedStore } from '../seed.js';
 import { declareLedgers, retiredLedgerWarnings } from './ledgers.js';
+import { buildRemoteStore, remoteOverlay, withStore } from './remote.js';
 import path from 'node:path';
 import {
   statePaths, ensureQuantDir, fileStorage, readBackendKeys, replaceState, writeBackendKeys, resetState
@@ -111,6 +112,8 @@ async function seedInMemory(ctx, seedOptions) {
 }
 
 function seedAll(ctx, seedOptions) {
+  // The seed copies the disk state (no remote store) and allows it: it must run before loadRemote.
+  if (ctx.remoteLoaded) return Promise.reject(new Error('The --kv-remote store is loaded: the seed must run before it.'));
   return ctx.paths ? seedOnFile(ctx, seedOptions) : seedInMemory(ctx, seedOptions);
 }
 
@@ -143,10 +146,12 @@ async function seedStores(ctx, { fixtures, userName, seedKey, now }) {
 }
 
 // The meta.json stores and indexes, then the quant/kv-ledgers.json ledgers.
+// The remote store (--kv-remote) is left out: loadRemote declares it.
 async function declareAll(ctx, { stores = [], ledgers = [], ledgerWait = true }) {
-  for (const definition of stores) await declareStore(ctx, definition);
+  const local = (name) => !ctx.remote || name !== ctx.remote.name;
+  for (const definition of stores.filter((store) => local(store.name))) await declareStore(ctx, definition);
   await declareLedgers(ctx.backend, {
-    org: ctx.org, project: ctx.project, ledgers, wait: ledgerWait, warnings: ctx.warnings
+    org: ctx.org, project: ctx.project, ledgers: ledgers.filter((entry) => local(entry.store)), wait: ledgerWait, warnings: ctx.warnings
   });
   ctx.warnings.push(...retiredLedgerWarnings(ctx.backend, [...ctx.allowed.keys()]));
 }
@@ -182,6 +187,44 @@ function backendOptions(paths, storage, options) {
   };
 }
 
+// The remote store of the session (--kv-remote), or null.
+function remoteOf({ remote, stores = [], ledgers = [], org, project }) {
+  if (!remote) return null;
+  return {
+    name: remote,
+    id: storeId(org, project, remote),
+    definition: stores.find((store) => store.name === remote),
+    ledgers: ledgers.filter((entry) => entry.store === remote)
+  };
+}
+
+// --kv-remote: put the snapshot store in the backend (in memory only), allow
+// it, then declare its local ledgers. The seed has run already and skipped it.
+async function loadRemote(ctx, snapshot) {
+  const { id, definition, ledgers } = ctx.remote;
+  const built = await buildRemoteStore({
+    base: ctx.backend.snapshot(), id, snapshot,
+    backendOptions: backendOptions(null, undefined, ctx.options), building: ctx.indexState === 'BUILDING'
+  });
+  if (ctx.overlay) ctx.overlay.setRemote(built.data);
+  ctx.remoteLoaded = true;
+  ctx.backend.restore(withStore(ctx.backend.snapshot(), built.data));
+  ctx.allowed.set(id, definition);
+  await declareLedgers(ctx.backend, {
+    org: ctx.org, project: ctx.project, ledgers, wait: ctx.options.ledgerWait !== false, warnings: ctx.warnings
+  });
+  ctx.warnings.push(...built.warnings);
+  return built;
+}
+
+// The file storage; with a remote store, the overlay that keeps it in memory.
+function storageOf(paths, remote) {
+  if (!paths) return { storage: undefined, overlay: null };
+  if (!remote) return { storage: fileStorage(paths), overlay: null };
+  const overlay = remoteOverlay(fileStorage(paths), remote.id);
+  return { storage: overlay.storage, overlay };
+}
+
 /**
  * Open the local KV of a project.
  * @param {Object} options
@@ -198,18 +241,22 @@ function backendOptions(paths, storage, options) {
  * @param {boolean} [options.realTime] Clear a stored clock offset before the declarations (--clock real).
  * @param {Object} [options.clock] The clock of the backend (`{ now() }`). Default: the real clock.
  * @param {(message: string) => void} [options.warn] Unknown set and delete options.
+ * @param {string} [options.remote] The --kv-remote store name: it is not declared or seeded here,
+ *   and loadRemote(snapshot) puts it in memory only.
  * @returns {Promise<{ kvStore, backend, warnings: string[], paths: Object|null, offsetCleared: boolean,
- *   declare: (store: Object) => Promise<string>, seed: (options: Object) => Promise<Object> }>}
+ *   declare: (store: Object) => Promise<string>, seed: (options: Object) => Promise<Object>,
+ *   loadRemote: (snapshot: Object) => Promise<Object> }>}
  */
 export async function openLocalKv(options) {
   const { root, org, project, memory = false, reset = false, warn } = options;
   const paths = memory ? null : await prepareFiles(root, reset);
   const allowed = new Map();
-  const storage = paths ? fileStorage(paths) : undefined;
+  const remote = remoteOf(options);
+  const { storage, overlay } = storageOf(paths, remote);
   const { kvStore, backend } = createLocalKv({ ...backendOptions(paths, storage, options), isAllowed: (id) => allowed.has(id), warn });
   if (paths && readBackendKeys(paths) === undefined) writeBackendKeys(paths, backend.snapshot().keys);
   const ctx = {
-    org, project, backend, kvStore, paths, allowed, options, warn,
+    org, project, backend, kvStore, paths, allowed, options, warn, remote, overlay,
     indexState: options.indexState === undefined ? null : indexState(options.indexState), warnings: [], seededInMemory: {}
   };
   const offsetCleared = await clearClockOffset(backend, options.realTime === true);
@@ -221,6 +268,7 @@ export async function openLocalKv(options) {
     offsetCleared,
     warnings: ctx.warnings,
     declare: (definition) => declareStore(ctx, definition),
-    seed: (seedOptions = {}) => seedAll(ctx, seedOptions)
+    seed: (seedOptions = {}) => seedAll(ctx, seedOptions),
+    loadRemote: (snapshot) => loadRemote(ctx, snapshot)
   };
 }

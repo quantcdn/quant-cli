@@ -1,0 +1,195 @@
+{
+  "organization": "acme",
+  "project": "site",
+  "rules": [
+    {
+      "uuid": "r-redirect",
+      "name": "Old to new",
+      "action": "redirect",
+      "url": [
+        "/old/*"
+      ],
+      "method": "any",
+      "weight": 10,
+      "position": 0,
+      "managed": false,
+      "disabled": false,
+      "action_config": {
+        "to": "/new/$1",
+        "status_code": 301
+      }
+    },
+    {
+      "uuid": "r-header",
+      "name": "Page header",
+      "action": "headers",
+      "url": [
+        "/page.html"
+      ],
+      "method": "any",
+      "weight": 20,
+      "position": 1,
+      "managed": false,
+      "disabled": false,
+      "action_config": {
+        "headers": {
+          "x-pulled-rule": "applied"
+        }
+      }
+    },
+    {
+      "uuid": "r-early-pulled",
+      "name": "Early pulled",
+      "action": "custom_response",
+      "url": [
+        "/early"
+      ],
+      "method": "any",
+      "weight": 100,
+      "position": 2,
+      "managed": false,
+      "disabled": false,
+      "action_config": {
+        "custom_response_status_code": 200,
+        "custom_response_body": "pulled-100"
+      }
+    },
+    {
+      "uuid": "r-order-first",
+      "name": "Order header",
+      "action": "headers",
+      "url": [
+        "/order"
+      ],
+      "method": "any",
+      "weight": 150,
+      "position": 3,
+      "managed": false,
+      "disabled": false,
+      "action_config": {
+        "headers": {
+          "x-before-local": "yes"
+        }
+      }
+    },
+    {
+      "uuid": "r-late-pulled",
+      "name": "Late pulled",
+      "action": "custom_response",
+      "url": [
+        "/late"
+      ],
+      "method": "any",
+      "weight": 150,
+      "position": 4,
+      "managed": false,
+      "disabled": false,
+      "action_config": {
+        "custom_response_status_code": 200,
+        "custom_response_body": "pulled-150"
+      }
+    },
+    {
+      "uuid": "r-order-last",
+      "name": "Order last",
+      "action": "custom_response",
+      "url": [
+        "/order"
+      ],
+      "method": "any",
+      "weight": 300,
+      "position": 5,
+      "managed": false,
+      "disabled": false,
+      "action_config": {
+        "custom_response_status_code": 200,
+        "custom_response_body": "pulled-300"
+      }
+    },
+    {
+      "uuid": "r-cookie",
+      "name": "Preview cookie",
+      "action": "custom_response",
+      "url": [
+        "/cookie"
+      ],
+      "method": "any",
+      "weight": 310,
+      "position": 6,
+      "managed": false,
+      "disabled": false,
+      "only_with_cookie": "preview",
+      "action_config": {
+        "custom_response_status_code": 200,
+        "custom_response_body": "cookie-rule"
+      }
+    },
+    {
+      "uuid": "r-auth",
+      "name": "Private area",
+      "action": "auth",
+      "url": [
+        "/private/*"
+      ],
+      "method": "any",
+      "weight": 320,
+      "position": 7,
+      "managed": false,
+      "disabled": false,
+      "action_config": {
+        "auth_user": "editor",
+        "auth_pass": "basic-auth-secret-e2e"
+      }
+    },
+    {
+      "uuid": "r-proxy",
+      "name": "Backend",
+      "action": "proxy",
+      "url": [
+        "/backend/*"
+      ],
+      "method": "any",
+      "weight": 330,
+      "position": 8,
+      "managed": false,
+      "disabled": false,
+      "action_config": {
+        "to": "http://127.0.0.1:1/",
+        "inject_headers": {
+          "x-origin-key": "inject-secret-e2e"
+        }
+      }
+    }
+  ],
+  "customHeaders": {
+    "x-global": "from-portal"
+  },
+  "stores": [
+    {
+      "id": "acme-site-cache",
+      "name": "acme/site: cache",
+      "user_name": "cache",
+      "linked": false
+    }
+  ],
+  "indexes": [],
+  "items": [
+    {
+      "key": "greeting",
+      "value": "hello from the portal",
+      "encrypted": false,
+      "version": "V1"
+    },
+    {
+      "key": "events:1",
+      "value": {
+        "a": 1
+      },
+      "encrypted": false,
+      "version": "V1",
+      "ledger": {
+        "chain": 0
+      }
+    }
+  ]
+}

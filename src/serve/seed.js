@@ -9,6 +9,7 @@
 import crypto from 'node:crypto';
 import fs from 'node:fs';
 import { appendRevealedKey } from './kv/state.js';
+import { isObject } from '../helper/is-object.js';
 
 export const MAX_FIXTURE_BYTES = 1024 * 1024;
 export const MAX_FIXTURE_ENTRIES = 5000;
@@ -17,7 +18,6 @@ const USER_NAME = /\{user_name\}/g;
 const DATE_OFFSET = /^(now|[+-]\d+[mhd])$/;
 const UNIT_MS = { m: 60 * 1000, h: 60 * 60 * 1000, d: 24 * 60 * 60 * 1000 };
 
-const isObject = (value) => value !== null && typeof value === 'object' && !Array.isArray(value);
 const digest = (value) => crypto.createHash('sha256').update(value).digest('hex');
 const randomHex = (bytes) => crypto.randomBytes(bytes).toString('hex');
 

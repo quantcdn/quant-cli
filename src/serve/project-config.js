@@ -14,6 +14,7 @@
 import crypto from 'node:crypto';
 import fs from 'node:fs';
 import path from 'node:path';
+import { isObject } from '../helper/is-object.js';
 
 export const SERVE_CONFIG = 'quant/serve.json';
 
@@ -28,7 +29,6 @@ const PROTECTED = ['quant-server', 'age'];
 const AUTH_BODY = 'Authentication required';
 const REDIRECT_CACHE = 'public, max-age=300, s-maxage=86400';
 
-const isObject = (value) => value !== null && typeof value === 'object' && !Array.isArray(value);
 const isText = (value) => typeof value === 'string' && value !== '';
 
 function globalHeaders(value, source, warnings) {
@@ -126,6 +126,37 @@ function parseJson(text, source) {
 export function readServeConfig(root, source = SERVE_CONFIG) {
   const text = readText(path.resolve(root, source));
   return parseServeConfig(text === null ? {} : parseJson(text, source), source);
+}
+
+// The pulled headers that are valid, in lowercase. A header that is not
+// valid is skipped with a warning that does not print its value.
+function pulledEntries(pulled, warnings) {
+  const entries = [];
+  for (const [name, raw] of Object.entries(pulled)) {
+    const value = raw === null || raw === undefined ? '' : String(raw);
+    const lower = name.toLowerCase();
+    if (!HEADER_NAME.test(name) || !HEADER_VALUE.test(value)) warnings.push('A portal global header is not valid and is not used.');
+    else if (PROTECTED.includes(lower)) warnings.push(`The portal global header ${lower} is not applied. A project cannot set the ${lower} header.`);
+    else entries.push([lower, value]);
+  }
+  return entries;
+}
+
+/**
+ * The settings with the pulled (portal) global headers as the base. A
+ * globalHeaders name of quant/serve.json overrides the pulled header of the
+ * same name, with one warning for each name. Null `pulled` changes nothing.
+ */
+export function withPulledHeaders(settings, pulled, source = SERVE_CONFIG) {
+  if (!pulled) return settings;
+  const local = new Map(settings.globalHeaders);
+  const warnings = [];
+  const base = pulledEntries(pulled, warnings).filter(([name]) => {
+    if (!local.has(name)) return true;
+    warnings.push(`${source} globalHeaders.${name} replaces the portal global header of the same name.`);
+    return false;
+  });
+  return { ...settings, globalHeaders: [...base, ...local], warnings: [...settings.warnings, ...warnings] };
 }
 
 /** The global headers as an object, for a function response to start from. */

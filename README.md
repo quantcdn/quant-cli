@@ -282,7 +282,8 @@ Flags:
 - `--indexes` - Index state for the session: `active` or `building` (default: `active`). With `building`, the indexes of the stores stay in the building state.
 - `--clock` - `real` or `manual` (default: `real`). With `manual`, the time of the local KV stops at the start time and, in a session, moves only with `POST /_quant_serve/clock`. See [Local ledgers](#local-ledgers).
 - `--version-info` - Print the versions of the CLI and its KV and test packages, then exit.
-- `--pull-rules`, `--kv-remote` - Not available yet. The command stops with a message.
+- `--pull-rules` - Read the rules and global headers of the portal project once at start, and run them with the rules of `quant/edge-rules.json`. See [Portal rules and remote KV](#portal-rules-and-remote-kv).
+- `--kv-remote <name>` - Read the KV store `<name>` of the portal project once at start (at most 10,000 keys) and serve it from memory. Writes stay local. See [Portal rules and remote KV](#portal-rules-and-remote-kv).
 
 A key that `initial_values` reveals once is shown in a box when the store is first seeded. Save the key then. Quant serve also writes it to a file under `.quant/kv/`.
 
@@ -464,6 +465,64 @@ The local store ids contain the org and the project (for example `local-dev-orbi
 The order is the order of the edge: global headers, basic authentication, rules, the trailing-slash redirect, then static content.
 
 `quant/serve.json` is local only. No deploy command reads it, and `quant deploy` never uploads it. `quant serve` never prints the password. Do not put a production password in the file. A file with the wrong shape stops `quant serve` at start-up, with a message that names the field. It also stops `quant kv --local` (exit code 1), because that command reads the `org`, `project` and `meta` defaults from the same file. With `--watch`, `quant serve` reads the file again when it changes. If the new file has the wrong shape, `quant serve` prints the message and keeps the last valid settings.
+
+## Portal rules and remote KV
+
+Two flags read data from the portal project when `quant serve` starts: `--pull-rules` for the rules and global headers, and `--kv-remote <name>` for one KV store. Use them to run the site locally against the rules and data of a real project. Both flags only read. Neither flag changes anything on the portal.
+
+```bash
+export QUANT_API_TOKEN=...   # a portal token with the scopes below
+export QUANT_BASE_URL=https://dashboard.quantcdn.io/api/v2
+quant serve dist --pull-rules --kv-remote sessions --org acme --project marketing-site
+```
+
+### Token, URL and project
+
+- `QUANT_API_TOKEN` and `QUANT_BASE_URL` are the only source of the token and the portal URL. There is no flag for either, and `quant serve` never prints the token.
+- `QUANT_BASE_URL` must be an HTTPS portal `/api/v2` URL. Plain HTTP is allowed only for `localhost`, `127.0.0.1` and `[::1]`.
+- The organisation and project come from `--org` and `--project`, then `quant/serve.json`, then `quant.json`. If none sets them, the command stops with a message that names the flag.
+- Scopes: `rules:read` for the rules, `projects:read` for the global headers, and `kv:read` for the KV store. Without `rules:read` or `kv:read`, `quant serve` stops and the message names the scope. Without `projects:read`, `quant serve` prints one warning and uses only the local global headers. If the portal cannot give the global headers (a 5xx answer or no answer), `quant serve` also prints one warning and uses only the local global headers.
+
+### What the snapshot is
+
+- The portal is read once, at start. Nothing is read again while `quant serve` runs. With `--watch`, a reload merges the local files again with the data in memory and makes no portal request.
+- The rules, the headers and the KV entries stay in memory. `quant serve` does not write them to `.quant/` or to any other file, and it does not print a rule setting or a KV value.
+- Writes to the remote store stay local. They last for the session and they are lost when `quant serve` stops. A restart reads the portal again.
+
+### Rules (--pull-rules)
+
+The pulled rules run in the order of the edge, with the rules of `quant/edge-rules.json`. A local rule replaces the portal rule that a deploy of the same namespace and rule ID owns. All other portal rules stay in their order: also a deployed rule that the local file no longer lists, and the deployed rules of other namespaces. Each local rule then goes before the first portal rule with a higher weight. A deploy also creates or updates only the rules of its own namespace and removes no rule, so this is the order that the edge has after a deploy of the same file when the portal rules are in weight order. Without `quant/edge-rules.json`, the portal rules run unchanged.
+
+The start-up output shows `Pulled <n> portal rules (<m> from quant/edge-rules.json).`. `<m>` is the number of local rules that run with the portal rules. If the portal project has global headers, the next line is `Using <k> portal global headers.`. The line shows the count only, not the names or values.
+
+Actions that run locally: redirect (with `$1` to `$5`), headers, custom response, basic auth, error page, proxy, and edge function, auth function and filter rules. A rule with a cookie condition runs only when the request sends a cookie of exactly that name.
+
+These do not run locally:
+
+- A rule action that quant serve does not have (for example a bot challenge or serve-static). `quant serve` skips the rule and prints `Rule <name> (<action>) is not available in quant serve and is skipped.`
+- A rule with a country, IP, ASN, user agent or traffic source condition. `quant serve` skips the rule and prints `Rule <name>: the <condition> condition is not checked in quant serve, so the rule is skipped.` (one condition) or `Rule <name>: the <condition>, <condition> conditions are not checked in quant serve, so the rule is skipped.` (more than one).
+- The WAF settings of a proxy rule. `quant serve` prints `Rule <name>: WAF settings are ignored in quant serve.`
+- The host setting of a proxy rule. The origin gets the host of the `to` URL, and `quant serve` prints `Rule <name>: the host setting is ignored in quant serve. The origin gets the host of the to URL.`
+- The failover mode and TLS verification settings of a proxy rule. `quant serve` prints `Rule <name>: failover and TLS verification settings work differently in quant serve.`
+
+Other points:
+
+- Some organisations (for example trial organisations) do not get every rule type in the portal list. `quant serve` then prints `Some rule types are not in the portal response for this organisation, so they do not run locally.`, and the missing rules do not run.
+- Basic authentication for the whole site and the trailing-slash setting have no portal read route. They come only from `quant/serve.json`. For example, if the project redirects `/app/` to `/app` at the edge, set `"trailingSlash": "redirect"` in `quant/serve.json`.
+- Static responses from `quant serve` have `cache-control: no-store`. The edge cache settings are not pulled.
+- The `globalHeaders` of `quant/serve.json` replace a portal global header of the same name, with one warning for each name.
+- A pulled function rule runs only when its function uuid is in `quant/edge-functions.json`. The function code is not pulled.
+
+### Remote KV (--kv-remote)
+
+`--kv-remote <name>` copies the KV store `<name>` into the local KV, in memory. The store must be linked to the portal project and listed in `quant/meta.json`, so that functions can open it. The `initial_values` and fixtures of that store are not seeded.
+
+- Caps: at most 10,000 keys and 200 portal requests. The 200 requests are for the full start-up: the `--pull-rules` requests and each 429 retry count too. If a cap stops the read, `quant serve` prints `KV store <name>: copied the first <n> keys only (limit 10000). Writes stay local.`. For the request cap, the text in the brackets is `request limit 200`. If the portal ends the key list early, it is `the portal ended the list early`.
+- The start-up output shows `KV store <name>: copied <n> keys from the portal (<m> encrypted values masked).` If the portal store has ledger entries, the line adds ` (<k> ledger entries not copied)` before the final full stop.
+- A secret value reads `[ENCRYPTED]`. The portal does not send the real value.
+- Index definitions are copied, so index lists and counts work. Expiry times are kept.
+- Ledger entries are not copied. If `quant/kv-ledgers.json` declares ledgers for the store, those ledgers run locally and start empty, and `quant serve` prints `Ledgers of <name> are not copied from the portal; declare local ledgers in quant/kv-ledgers.json.`
+- `quant kv --local` in a second process does not see the snapshot. It sees only the state on disk.
 
 ## Edge libraries in quant serve
 

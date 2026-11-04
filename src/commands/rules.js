@@ -3,24 +3,19 @@ import axios from 'axios';
 import { text, isCancel } from '@clack/prompts';
 import { assertManifest } from '../helper/functions-manifest.js';
 import { resolveRules } from '../helper/edge-rules-manifest.js';
+import { portalOptions, oneLine } from '../serve/portal/client.js';
 
 export { resolveRules };
 
 export function rulesOptions(args, env = process.env) {
-  let saved = {};
-  try { saved = JSON.parse(fs.readFileSync('quant.json', 'utf8')); } catch { /* Optional project selection only. */ }
-  const customer = args.clientid || args.c || env.QUANT_CLIENT_ID || env.QUANT_CUSTOMER || saved.clientid;
-  const project = args.project || args.p || env.QUANT_PROJECT || saved.project;
-  // Deliberately never read QUANT_TOKEN, -t, saved.token, or upload endpoint.
-  const token = args['api-token'] || env.QUANT_API_TOKEN;
-  const base = args['api-base-url'] || env.QUANT_BASE_URL;
-  if (!customer || !project || !token || !base) throw new Error('Rules require customer, project, QUANT_API_TOKEN and QUANT_BASE_URL (portal /api/v2 URL)');
-  const url = new URL(base);
-  if (url.username || url.password || url.search || url.hash || !/\/api\/v2\/?$/.test(url.pathname) ||
-      (url.protocol !== 'https:' && !(url.protocol === 'http:' && ['localhost', '127.0.0.1', '[::1]'].includes(url.hostname)))) {
-    throw new Error('Rules require an HTTPS portal /api/v2 URL (HTTP is allowed only for localhost)');
-  }
-  return { customer, project, token, base: base.replace(/\/$/, '') };
+  // Rules keep the token and base flags that the serve command does not have.
+  const merged = {
+    ...env,
+    QUANT_API_TOKEN: args['api-token'] || env.QUANT_API_TOKEN,
+    QUANT_BASE_URL: args['api-base-url'] || env.QUANT_BASE_URL
+  };
+  const { customer, project, token } = portalOptions(args, merged);
+  return { customer, project, token, base: merged.QUANT_BASE_URL.replace(/\/$/, '') };
 }
 
 // Drift values printed in CI logs: matchers and placement only. Anything else
@@ -60,14 +55,6 @@ function refusalError(rules) {
 }
 
 const MESSAGE_STATUSES = [409, 422];
-const MAX_MESSAGE = 300;
-
-// A string as one short line, or null when it is not text.
-function oneLine(value) {
-  if (typeof value !== 'string' || value.trim() === '') return null;
-  const line = value.replace(/[\u0000-\u001f\u007f-\u009f]+/g, ' ').replace(/\s+/g, ' ').trim();
-  return line.length > MAX_MESSAGE ? `${line.slice(0, MAX_MESSAGE - 3)}...` : line;
-}
 
 function adviceText(status, code) {
   if (status === 409) return 'Rules are being changed by another request (409). Retry shortly.';

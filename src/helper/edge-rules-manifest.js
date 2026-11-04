@@ -87,11 +87,20 @@ export function ruleErrors(manifest) {
   })];
 }
 
-/** The rule as the local runtime matches it. `rule` is resolved (function_uuid set). */
+// The runtime action of each manifest rule type.
+const RUNTIME_ACTION = { function: 'edge_fn', auth: 'edge_auth', filter: 'edge_filter' };
+
+/**
+ * The rule as the local runtime matches it. `rule` is resolved (function_uuid set).
+ * `action` names what the rule does; `config` holds its action settings.
+ */
 export function toRuntimeRule(rule) {
   return {
     id: rule.id,
+    name: rule.name ?? null,
     type: rule.type,
+    action: RUNTIME_ACTION[rule.type],
+    config: {},
     url: rule.urls,
     domain: rule.domains?.length ? rule.domains.map(d => d.toLowerCase()) : ['any'],
     methods: rule.methods?.length ? rule.methods : null,
