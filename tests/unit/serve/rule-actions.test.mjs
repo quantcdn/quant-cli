@@ -371,7 +371,7 @@ describe('serve rule actions', () => {
     it('warns once, with no value, about failover and TLS verification settings', () => {
       const text = 'Rule API: failover and TLS verification settings work differently in quant serve.';
       const tls = rule('proxy', ['*'], { to: 'https://o.test', disable_ssl_verify: true }, { id: 'a', name: 'API' });
-      const failover = rule('proxy', ['*'], { to: 'https://o.test', failover_mode: true, failover_origin_ttfb: '2000' }, { id: 'b', name: 'API' });
+      const failover = rule('proxy', ['*'], { to: 'https://o.test', failover_mode: true }, { id: 'b', name: 'API' });
       const quiet = rule('proxy', ['*'], {
         to: 'https://o.test', disable_ssl_verify: false, failover_mode: false, failover_lifetime: null, failover_origin_status_codes: [],
         notify_config: { slack_webhook: 'https://hooks.test/x' }, proxy_alert_enabled: true, application_proxy: true, application_name: 'app'
@@ -379,6 +379,10 @@ describe('serve rule actions', () => {
       expect(actionWarnings([tls])).to.deep.equal([text]);
       expect(actionWarnings([failover])).to.deep.equal([text]);
       expect(actionWarnings([quiet])).to.deep.equal([]);
+      const portalDefault = rule('proxy', ['*'], {
+        to: 'https://o.test', failover_mode: false, failover_lifetime: '300', failover_origin_ttfb: '5000', disable_ssl_verify: false
+      }, { id: 'd', name: 'Default' });
+      expect(actionWarnings([portalDefault])).to.deep.equal([]);
     });
 
     it('gives one warning for each rule id', () => {

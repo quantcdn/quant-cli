@@ -67,6 +67,16 @@ describe('serve rules', () => {
       expect(matchRule([r], ctx({ method: 'POST' }))).to.equal(r);
     });
 
+    it('needs the cookie of a cookie rule, by its exact name', () => {
+      const r = rule({ cookie: 'session' });
+      expect(matchRule([r], ctx())).to.equal(null);
+      expect(matchRule([r], ctx({ cookie: 'a=1; session=x' }))).to.equal(r);
+      expect(matchRule([r], ctx({ cookie: ' session = x ;b=2' }))).to.equal(r);
+      expect(matchRule([r], ctx({ cookie: 'session_id=x; sessionx=1' }))).to.equal(null);
+      expect(matchRule([r], ctx({ cookie: 'Session=x' }))).to.equal(null);
+      expect(matchRule([rule({ cookie: null })], ctx())).to.not.equal(null);
+    });
+
     it('refuses a method in the methodsNot list', () => {
       const r = rule({ methodsNot: ['DELETE'] });
       expect(matchRule([r], ctx({ method: 'DELETE' }))).to.equal(null);

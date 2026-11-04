@@ -125,6 +125,34 @@ describe('serve --pull-rules', () => {
       expect(fromPortalRule(item(0, 'redirect', {}, { domain: [] })).domain).to.deep.equal(['any']);
     });
 
+    it('takes the effective weight of the portal order', () => {
+      const weightOf = (weight) => fromPortalRule(item(0, 'redirect', {}, { weight })).weight;
+      expect(weightOf(25)).to.equal(25);
+      expect(weightOf(-7)).to.equal(-7);
+      expect(weightOf('42')).to.equal(42);
+      expect(weightOf('-3')).to.equal(-3);
+      expect(weightOf('1.0')).to.equal(1);
+      expect(weightOf('1e3')).to.equal(1000);
+      for (const value of [1.5, '1.5', true, false, 'abc', '', null, undefined, [], {}, Infinity]) {
+        expect(weightOf(value), String(value)).to.equal(0);
+      }
+    });
+
+    it('reads the cookie condition', () => {
+      expect(fromPortalRule(item(0, 'redirect', {}, { only_with_cookie: 'session' })).cookie).to.equal('session');
+      for (const value of ['', null, undefined, 5]) {
+        expect(fromPortalRule(item(0, 'redirect', {}, { only_with_cookie: value })).cookie).to.equal(null);
+      }
+    });
+
+    it('takes an empty method list as all methods', () => {
+      const only = fromPortalRule(item(0, 'redirect', {}, { method: 'method_is', method_is: [] }));
+      expect(only.methods).to.equal(null);
+      const not = fromPortalRule(item(0, 'redirect', {}, { method: 'method_is_not', method_is_not: [] }));
+      expect(not.methodsNot).to.equal(null);
+      expect(fromPortalRule(item(0, 'redirect', {}, { method: 'ANY', method_is: ['GET'] })).methods).to.equal(null);
+    });
+
     it('reads the method condition', () => {
       const only = fromPortalRule(item(0, 'redirect', {}, { method: 'method_is', method_is: ['get', 'POST'] }));
       expect(only.methods).to.deep.equal(['GET', 'POST']);
@@ -138,6 +166,16 @@ describe('serve --pull-rules', () => {
       expect(rule.disabled).to.equal(true);
       expect(rule.unchecked).to.deep.equal(['country']);
       expect(fromPortalRule(item(0, 'redirect')).unchecked).to.deep.equal([]);
+    });
+
+    it('takes an empty, any or empty-list condition as no condition', () => {
+      for (const over of [{ country: '' }, { country: null }, { country: undefined }, { country: 'ANY' }, { country: 'Any' },
+        { country: 'country_is', country_is: [] }, { ip: 'ip_is_not', ip_is_not: [] }, { asn: 'asn_is' }]) {
+        const rule = fromPortalRule(item(0, 'redirect', {}, over));
+        expect(rule.unchecked, JSON.stringify(over)).to.deep.equal([]);
+        expect(rule.disabled).to.equal(false);
+      }
+      expect(fromPortalRule(item(0, 'redirect', {}, { ua: 'ua_is_not', ua_is_not: ['bot'] })).unchecked).to.deep.equal(['ua']);
     });
 
     it('makes booleans of boolean settings sent as text', () => {
@@ -223,7 +261,7 @@ describe('serve --pull-rules', () => {
       const { calls, client } = fakePortal({ '/rules': reply(200, list), '/custom-headers': reply(200, { 'x-a': '1' }) });
       const pulled = await pullProject(client, IDS);
       expect(calls).to.have.length(2);
-      expect(pulled).to.include({ count: 3, managed: 1 });
+      expect(pulled.count).to.equal(3);
       expect(pulled.headers).to.deep.equal({ 'x-a': '1' });
       expect(pulled.rules.map((rule) => rule.id)).to.deep.equal(['rule-0', 'rule-2', 'rule-4']);
       expect(pulled.warnings.filter((line) => line === PARTIAL_WARNING)).to.have.length(1);
@@ -269,7 +307,10 @@ describe('serve --pull-rules', () => {
     }
 
     function localRules(url) {
-      return { version: 1, namespace: 'test', rules: [{ id: 'local-m', name: 'Local M', type: 'function', urls: [url], weight: 150, function_uuid: FN }] };
+      return { version: 1, namespace: 'test', rules: [
+        { id: 'local-m', name: 'Local M', type: 'function', urls: [url], weight: 150, function_uuid: FN },
+        { id: 'local-z', name: 'Local Z', type: 'function', urls: ['/z'], weight: 900, function_uuid: FN }
+      ] };
     }
 
     function projectRoot() {
@@ -288,7 +329,8 @@ describe('serve --pull-rules', () => {
       item(1, 'auth', { auth_user: 'ada', auth_pass: PASSWORD }, { uuid: 'b', name: 'B', url: ['/staff'], weight: 100 }),
       item(2, 'edge_fn', { fn_uuid: FN }, { uuid: 'old', name: 'Old', url: ['/m'], weight: 150, managed: true }),
       item(4, 'proxy', { to: 'http://127.0.0.1:1$*', inject_headers: { 'x-shared': SECRET }, disable_ssl_verify: 'true' }, { uuid: 'p', name: 'P', url: ['/api/*'], weight: 160 }),
-      item(5, 'custom_response', { custom_response_status_code: '200', custom_response_body: 'pulled C' }, { uuid: 'c', name: 'C', url: ['/m', '/n'], weight: 200 })
+      item(5, 'custom_response', { custom_response_status_code: '200', custom_response_body: 'pulled C' }, { uuid: 'c', name: 'C', url: ['/m', '/n'], weight: 200 }),
+      item(6, 'custom_response', { custom_response_status_code: '200', custom_response_body: 'with cookie' }, { uuid: 'k', name: 'K', url: ['/cookie'], weight: 300, only_with_cookie: 'preview' })
     ];
 
     function portalFetch(calls) {
@@ -335,7 +377,7 @@ describe('serve --pull-rules', () => {
       await until(() => url);
       try {
         expect(calls).to.have.length(2);
-        expect(output).to.include('Pulled 5 portal rules (1 from quant/edge-rules.json).');
+        expect(output).to.include('Pulled 6 portal rules (2 from quant/edge-rules.json).');
         expect(output.filter((line) => line.includes(PARTIAL_WARNING))).to.have.length(1);
         expect(output.join('\n')).to.include('Rule P: failover and TLS verification settings work differently in quant serve.');
         expect((await fetch(`${url}/a`, { redirect: 'manual' })).headers.get('location')).to.equal('/moved');
@@ -343,6 +385,9 @@ describe('serve --pull-rules', () => {
         expect(await (await fetch(`${url}/m`)).text()).to.equal('local M');
         expect(await (await fetch(`${url}/n`)).text()).to.equal('pulled C');
         expect((await fetch(`${url}/`)).headers.get('x-portal')).to.equal(HEADER_SECRET);
+        expect((await fetch(`${url}/cookie`)).status).to.equal(404);
+        expect(await (await fetch(`${url}/cookie`, { headers: { cookie: 'preview=1' } })).text()).to.equal('with cookie');
+        expect((await fetch(`${url}/cookie`, { headers: { cookie: 'preview_mode=1' } })).status).to.equal(404);
 
         // --watch: a change to quant/edge-rules.json merges again, with no new pull.
         await new Promise((resolve) => setTimeout(resolve, 300));

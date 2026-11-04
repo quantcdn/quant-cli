@@ -224,7 +224,7 @@ function ledgerLines(ledgers, clock) {
 }
 
 function pullLines(pull) {
-  return pull ? [`Pulled ${pull.count} portal rules (${pull.managed} from quant/edge-rules.json).`] : [];
+  return pull ? [`Pulled ${pull.count} portal rules (${pull.local} from quant/edge-rules.json).`] : [];
 }
 
 function clockLines(clock) {
@@ -453,6 +453,11 @@ async function pulledProject(options, { env = process.env, fetchImpl } = {}) {
   return pullProject(client, { customer, project });
 }
 
+// The start-up summary of a pull: the pulled rules and the local rules merged in.
+function pullSummary(pulled, server) {
+  return pulled ? { count: pulled.count, local: server.summary.localRules } : null;
+}
+
 function withPull(options, pulled) {
   return pulled ? { ...options, pulledRules: pulled.rules, pulledHeaders: pulled.headers } : options;
 }
@@ -528,7 +533,7 @@ export async function runServe(options, { stop, print = console.log, log, kvStor
   const server = await startOrShowKeys(serverOptions(withPull(options, pulled), { kvStore: kv.kvStore, backend: kv.backend, log }, print), kv, print);
   const pullWarnings = pulled ? pulled.warnings : [];
   const summary = { ...server.summary, warnings: [...(options.configWarnings || []), ...pullWarnings, ...server.summary.warnings] };
-  const lines = startupLines({ url: server.url, host: options.host, clock: options.clock, pull: pulled, ...startupSummary(summary, kv) });
+  const lines = startupLines({ url: server.url, host: options.host, clock: options.clock, pull: pullSummary(pulled, server), ...startupSummary(summary, kv) });
   for (const line of lines) print(line);
   const child = options.run ? startRun(options.run, options.root, print, options.proxy) : null;
   watchRun(server, child);

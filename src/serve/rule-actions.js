@@ -232,14 +232,10 @@ export async function runAction(state, ctx, rule) {
   return action ? action(state, ctx, rule) : null;
 }
 
-// A setting that is on: true, a number, or text or a list that is not empty.
-const isOn = (value) => value === true || typeof value === 'number' || (typeof value === 'string' && value !== '') ||
-  (Array.isArray(value) && value.length > 0);
-
-// TLS verification and failover work differently on this machine. Notification,
+// TLS verification and failover work differently on this machine. The other
+// failover settings have an effect only with failover_mode on. Notification,
 // alert and application settings have no local effect and get no warning.
-const changesOriginTrust = (config) => config.disable_ssl_verify === true ||
-  Object.keys(config).some((name) => name.startsWith('failover_') && isOn(config[name]));
+const changesOriginTrust = (config) => config.disable_ssl_verify === true || config.failover_mode === true;
 
 function proxyWarnings(rule) {
   const config = configOf(rule);

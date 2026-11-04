@@ -479,10 +479,11 @@ quant serve dist --pull-rules --org acme --project marketing-site
 - The token and the portal URL come only from `QUANT_API_TOKEN` and `QUANT_BASE_URL`. The organisation and the project come from `--org` and `--project`, then `quant/serve.json`, then `quant.json`. `--pull-rules` stops if no organisation or project is set.
 - The token needs the `rules:read` scope. Without it, `quant serve` stops with a message that names the scope.
 - The rules that a deploy of `quant/edge-rules.json` owns on the portal are replaced by the rules of the local file. Each local rule goes before the first portal rule with a higher weight. This is the order that the edge has after a rules deploy of the same file.
-- The start-up output shows `Pulled <n> portal rules (<m> from quant/edge-rules.json).`. `<m>` is the number of portal rules that the local file replaces.
+- The start-up output shows `Pulled <n> portal rules (<m> from quant/edge-rules.json).`. `<m>` is the number of local rules from `quant/edge-rules.json` that run with the portal rules.
 - With `--watch`, a change to `quant/edge-rules.json` merges the local rules again with the portal rules in memory. `quant serve` does not read the portal again.
 - A rule type that quant serve does not run (for example a bot challenge) is skipped, with one warning at start-up. A rule with a country, IP, ASN, user agent or traffic source condition is skipped, with one warning.
-- A proxy rule with failover settings or with TLS verification off gets one warning: these settings work differently in quant serve.
+- A proxy rule with failover mode on or with TLS verification off gets one warning: these settings work differently in quant serve.
+- A rule with a cookie condition runs only when the request sends a cookie of exactly that name.
 - For some organisations the portal leaves some rule types out of the list. Then `quant serve` prints one warning, and those rules do not run locally.
 - With the `projects:read` scope, the global headers of the portal project are used too. The `globalHeaders` of `quant/serve.json` override a portal header of the same name, with one warning for each name. Without the scope, `quant serve` prints one warning and uses only the local headers.
 - Basic authentication and the trailing-slash setting have no portal read route. They come only from `quant/serve.json`.

@@ -54,9 +54,15 @@ function methodAllowed(rule, method) {
   return !(rule.methodsNot && rule.methodsNot.includes(method));
 }
 
+// True when the Cookie header has a cookie with exactly this name.
+function hasCookie(header, name) {
+  return String(header || '').split(';').some((pair) => pair.split('=')[0].trim() === name);
+}
+
 function ruleMatches(rule, ctx) {
   if (rule.disabled) return false;
   if (!methodAllowed(rule, ctx.method)) return false;
+  if (rule.cookie && !hasCookie(ctx.cookie, rule.cookie)) return false;
   if (!hostMatches(rule.domain, ctx.host)) return false;
   return rule.url.some(pattern => urlMatches(pattern, ctx.pathname, ctx.search || ''));
 }

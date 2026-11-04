@@ -183,7 +183,7 @@ function requestContext(state, req) {
 }
 
 function matchContext(ctx) {
-  return { host: ctx.host || '', method: ctx.method, pathname: ctx.pathname, search: ctx.search };
+  return { host: ctx.host || '', method: ctx.method, pathname: ctx.pathname, search: ctx.search, cookie: ctx.req?.headers?.cookie || '' };
 }
 
 function clientAddress(state, ctx) {
@@ -714,7 +714,8 @@ function closer(state, server, cleanups) {
  *   and pulledHeaders (--pull-rules: the portal global headers, or null).
  * @returns {Promise<{ url: string, close: () => Promise<void>, setRunPid: (pid: number) => void, summary: Object }>}
  *   setRunPid: the --run process group that the watchdog ends when a function blocks the server.
- *   summary: { stores, rules, libraries, warnings } for the start-up output.
+ *   summary: { stores, rules, localRules, libraries, warnings } for the start-up output.
+ *   localRules: the number of rules from the rules manifest.
  */
 export async function startServer(options) {
   const state = createState(options);
@@ -735,6 +736,7 @@ export async function startServer(options) {
     summary: {
       stores: storeList(state),
       rules: state.project.rules.map((rule) => ({ id: rule.id, type: rule.type || rule.action, urls: rule.url })),
+      localRules: state.project.localRules,
       libraries: fromProject,
       warnings: [site.warning, ...libraryErrors, ...state.project.warnings].filter(Boolean)
     }

@@ -23,6 +23,10 @@ const STATUS_LISTS = ['status_codes', 'static_error_page_status_codes'];
 // Request conditions that quant serve does not check. A rule that uses one is skipped.
 const UNCHECKED_CONDITIONS = ['country', 'ip', 'asn', 'ua', 'traffic_source'];
 const TRUE_TEXT = ['true', '1'];
+// A numeric string as the portal reads one: optional white space and sign,
+// digits with an optional fraction, an optional exponent.
+const NUMERIC_TEXT = /^[ \t\n\r\v\f]*[+-]?(\d+(\.\d*)?|\.\d+)([eE][+-]?\d+)?[ \t\n\r\v\f]*$/;
+const INT_LIMIT = 2 ** 63;
 
 const isObject = (value) => value !== null && typeof value === 'object' && !Array.isArray(value);
 const projectPath = ({ customer, project }, leaf) =>
@@ -64,15 +68,48 @@ function normalConfig(value) {
   return config;
 }
 
+const lower = (value) => (typeof value === 'string' ? value.trim().toLowerCase() : '');
+
+// The uppercase methods of a method list; null (all methods) when it is empty.
+function methodList(value) {
+  const list = textList(value).map((method) => method.toUpperCase());
+  return list.length > 0 ? list : null;
+}
+
 // The allowed and the refused methods of the method condition.
 function methodLists(item) {
-  const upper = (value) => textList(value).map((method) => method.toUpperCase());
-  if (item.method === 'method_is') return { methods: upper(item.method_is), methodsNot: null };
-  if (item.method === 'method_is_not') return { methods: null, methodsNot: upper(item.method_is_not) };
+  const mode = lower(item.method);
+  if (mode === 'method_is') return { methods: methodList(item.method_is), methodsNot: null };
+  if (mode === 'method_is_not') return { methods: null, methodsNot: methodList(item.method_is_not) };
   return { methods: null, methodsNot: null };
 }
 
-const uncheckedConditions = (item) => UNCHECKED_CONDITIONS.filter((name) => typeof item[name] === 'string' && item[name] !== 'any');
+// A condition is set unless it is empty or `any`, or its list is empty.
+function conditionSet(item, name) {
+  const mode = lower(item[name]);
+  if (mode === '' || mode === 'any') return false;
+  const listed = [`${name}_is`, `${name}_is_not`].includes(mode);
+  return !listed || toList(item[mode]).length > 0;
+}
+
+const uncheckedConditions = (item) => UNCHECKED_CONDITIONS.filter((name) => conditionSet(item, name));
+
+const integral = (value) => Number.isFinite(value) && Number.isInteger(value) && value >= -INT_LIMIT && value < INT_LIMIT;
+
+/**
+ * The weight that the portal sorts by: an integral number or a numeric
+ * string with an integral value. Anything else (missing, a fraction, a
+ * boolean, other text, out of range) is 0.
+ */
+export function effectiveWeight(value) {
+  const number = typeof value === 'string' && NUMERIC_TEXT.test(value) ? Number(value.trim()) : value;
+  return typeof number === 'number' && integral(number) ? number : 0;
+}
+
+// The cookie name of the cookie condition, or null for no condition.
+function cookieName(value) {
+  return typeof value === 'string' && value.trim() !== '' ? value.trim() : null;
+}
 
 function ruleId(item) {
   return String(item.uuid ?? item.rule_id ?? `position-${item.position}`);
@@ -88,7 +125,6 @@ export function fromPortalRule(item) {
   const config = normalConfig(item.action_config);
   const action = String(item.action ?? 'rule');
   const unchecked = uncheckedConditions(item);
-  const weight = Number(item.weight);
   return {
     id: ruleId(item),
     name: typeof item.name === 'string' && item.name !== '' ? item.name : null,
@@ -98,7 +134,8 @@ export function fromPortalRule(item) {
     url: textList(item.url),
     domain: domains(item.domain),
     ...methodLists(item),
-    weight: Number.isFinite(weight) ? weight : 0,
+    cookie: cookieName(item.only_with_cookie),
+    weight: effectiveWeight(item.weight),
     disabled: toBoolean(item.disabled) || unchecked.length > 0,
     fnUuid: typeof config.fn_uuid === 'string' ? config.fn_uuid.toLowerCase() : null,
     managed: item.managed === true,
@@ -154,9 +191,8 @@ function conditionWarning(rule) {
 
 /**
  * Pull the rules and the global headers of the project.
- * @returns {Promise<{ rules: Object[], headers: Record<string, string>|null, count: number, managed: number, warnings: string[] }>}
- *   rules: runtime rules in edge order (with the managed rules); count: the pulled rules;
- *   managed: the pulled rules that come from quant/edge-rules.json.
+ * @returns {Promise<{ rules: Object[], headers: Record<string, string>|null, count: number, warnings: string[] }>}
+ *   rules: runtime rules in edge order (with the managed rules); count: the pulled rules.
  */
 export async function pullProject(client, { customer, project }) {
   const pulled = await pullRules(client, { customer, project });
@@ -168,7 +204,6 @@ export async function pullProject(client, { customer, project }) {
     rules,
     headers,
     count: rules.length,
-    managed: rules.filter((rule) => rule.managed).length,
     warnings: [...warnings, ...skipped.map(conditionWarning)]
   };
 }

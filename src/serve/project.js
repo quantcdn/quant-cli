@@ -99,6 +99,7 @@ function ruleWarning(rule, fn, source) {
  *   headers. The globalHeaders of quant/serve.json override them.
  * @returns {{ functions: Map<string, Object>, rules: Object[], stores: Object[], fixtures: string, inlineFunctions: boolean, warnings: string[] }}
  *   functions is keyed by lowercase uuid; rules are runtime rules in run order.
+ *   localRules: the number of rules from the rules manifest.
  *   inlineFunctions: project_settings.enable_inline_fn in meta.json.
  *   settings: the local project settings from serve.json (see project-config.js).
  */
@@ -115,6 +116,7 @@ export function loadProject({ root, functions = DEFAULT_FILES.functions, rules =
   return {
     functions: map,
     rules: runtimeRules,
+    localRules: localRules.length,
     stores: readStores(root, meta),
     fixtures: path.resolve(root, fixtures),
     inlineFunctions: readInlineSetting(root, meta),
