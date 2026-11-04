@@ -115,6 +115,14 @@ function ruleId(item) {
   return String(item.uuid ?? item.rule_id ?? `position-${item.position}`);
 }
 
+// The manifest namespace and rule id of a rule that a rules deploy owns
+// (managed), from its deployment marker. null for any other rule.
+function deploymentOf(item) {
+  const marker = item.managed === true && isObject(item.deployment) ? item.deployment : null;
+  const valid = marker && typeof marker.namespace === 'string' && typeof marker.id === 'string';
+  return valid ? { namespace: marker.namespace, id: marker.id } : null;
+}
+
 function domains(value) {
   const list = textList(value).map((domain) => domain.toLowerCase());
   return list.length > 0 ? list : ['any'];
@@ -139,20 +147,28 @@ export function fromPortalRule(item) {
     disabled: toBoolean(item.disabled) || unchecked.length > 0,
     fnUuid: typeof config.fn_uuid === 'string' ? config.fn_uuid.toLowerCase() : null,
     managed: item.managed === true,
+    deployment: deploymentOf(item),
     unchecked
   };
 }
 
+// True when the local rule (from a manifest with that namespace) replaces the pulled rule.
+const replaces = (local, rule) => rule.deployment !== null && rule.deployment !== undefined &&
+  rule.deployment.namespace === local.namespace && rule.deployment.id === local.id;
+
 /**
- * The rules that run: the pulled list in its order without the rules that a
- * template deploy owns (managed), and each local rule (in weight order)
+ * The rules that run, as a rules deploy of the local file leaves them: the
+ * pulled list in its order without the managed rules that a local rule
+ * replaces (same namespace and id), then each local rule (in weight order)
  * before the first pulled rule with a strictly higher weight. A local rule
- * with a weight higher than all goes last.
+ * with a weight higher than all goes last. Every other pulled rule stays,
+ * also a managed rule that the file no longer lists or a managed rule of
+ * another namespace: a deploy does not remove them.
  */
-export function mergeRules(pulled, localManaged) {
-  const merged = pulled.filter((rule) => !rule.managed);
+export function mergeRules(pulled, localRules) {
+  const merged = pulled.filter((rule) => !localRules.some((local) => replaces(local, rule)));
   const fromPortal = new Set(merged);
-  for (const rule of orderRules(localManaged)) {
+  for (const rule of orderRules(localRules)) {
     const at = merged.findIndex((other) => fromPortal.has(other) && other.weight > rule.weight);
     merged.splice(at === -1 ? merged.length : at, 0, rule);
   }

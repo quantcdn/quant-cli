@@ -491,7 +491,7 @@ quant serve dist --pull-rules --kv-remote sessions --org acme --project marketin
 
 ### Rules (--pull-rules)
 
-The pulled rules run in the order of the edge, with the rules of `quant/edge-rules.json`. The rules that a deploy of `quant/edge-rules.json` owns on the portal are replaced by the local rules. Each local rule goes before the first portal rule with a higher weight. This is the order that the edge has after a deploy of the same file.
+The pulled rules run in the order of the edge, with the rules of `quant/edge-rules.json`. A local rule replaces the portal rule that a deploy of the same namespace and rule ID owns. All other portal rules stay in their order: also a deployed rule that the local file no longer lists, and the deployed rules of other namespaces. Each local rule then goes before the first portal rule with a higher weight. A deploy also creates or updates only the rules of its own namespace and removes no rule, so this is the order that the edge has after a deploy of the same file when the portal rules are in weight order. Without `quant/edge-rules.json`, the portal rules run unchanged.
 
 The start-up output shows `Pulled <n> portal rules (<m> from quant/edge-rules.json).`. `<m>` is the number of local rules that run with the portal rules.
 

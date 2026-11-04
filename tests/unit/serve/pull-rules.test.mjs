@@ -39,6 +39,10 @@ function item(position, action, actionConfig = {}, over = {}) {
 
 // A runtime rule with an id and weight, for the merge tests.
 const runtime = (id, weight, managed = false) => ({ id, weight, managed, url: ['/'], domain: ['any'], action: 'redirect', config: {} });
+// A pulled rule that a rules deploy owns: the namespace and the id of its manifest rule.
+const deployed = (id, weight, namespace, ruleId) => ({ ...runtime(id, weight, true), deployment: { namespace, id: ruleId } });
+// A rule of quant/edge-rules.json with the namespace of the file.
+const local = (id, weight, namespace = 'site') => ({ ...runtime(id, weight), namespace });
 
 async function failure(promise) {
   try {
@@ -199,6 +203,14 @@ describe('serve --pull-rules', () => {
     it('marks a rule that a template deploy owns', () => {
       expect(fromPortalRule(item(0, 'edge_fn', {}, { managed: true })).managed).to.equal(true);
     });
+
+    it('keeps the deploy namespace and id of a managed rule only', () => {
+      const marker = { namespace: 'site', id: 'api', hash: 'sha256:x' };
+      expect(fromPortalRule(item(0, 'edge_fn', {}, { managed: true, deployment: marker })).deployment).to.deep.equal({ namespace: 'site', id: 'api' });
+      expect(fromPortalRule(item(0, 'edge_fn', {}, { managed: false, deployment: marker })).deployment).to.equal(null);
+      expect(fromPortalRule(item(0, 'edge_fn', {}, { managed: true })).deployment).to.equal(null);
+      expect(fromPortalRule(item(0, 'edge_fn', {}, { managed: true, deployment: { namespace: 'site', id: 7 } })).deployment).to.equal(null);
+    });
   });
 
   describe('mergeRules', () => {
@@ -227,11 +239,32 @@ describe('serve --pull-rules', () => {
       expect(ids(mergeRules(unsorted, [runtime('M', 50), runtime('N', 50)]))).to.deep.equal(['M', 'N', 'A', 'B']);
     });
 
-    it('replaces the pulled managed rules with the local rules', () => {
-      const withManaged = [runtime('A', 0), runtime('old', 150, true), runtime('C', 200)];
-      expect(ids(mergeRules(withManaged, [runtime('M', 150)]))).to.deep.equal(['A', 'M', 'C']);
-      expect(ids(mergeRules(withManaged, []))).to.deep.equal(['A', 'C']);
+    it('keeps every pulled managed rule when there is no local rule', () => {
+      const withManaged = [runtime('A', 0), deployed('old', 150, 'site', 'api'), runtime('C', 200), deployed('late', 50, 'site', 'web')];
+      expect(ids(mergeRules(withManaged, []))).to.deep.equal(['A', 'old', 'C', 'late']);
     });
+
+    it('keeps a managed rule that the local file no longer lists', () => {
+      const withManaged = [runtime('A', 0), deployed('gone', 150, 'site', 'gone'), runtime('C', 200)];
+      expect(ids(mergeRules(withManaged, [local('api', 100)]))).to.deep.equal(['A', 'api', 'gone', 'C']);
+    });
+
+    it('keeps the managed rules of another namespace', () => {
+      const withManaged = [runtime('A', 0), deployed('other', 150, 'shop', 'api'), runtime('C', 200)];
+      expect(ids(mergeRules(withManaged, [local('api', 150)]))).to.deep.equal(['A', 'other', 'api', 'C']);
+    });
+
+    it('replaces the pulled copy of a local rule at its local weight', () => {
+      const withManaged = [runtime('A', 0), deployed('old-api', 150, 'site', 'api'), runtime('C', 200)];
+      expect(ids(mergeRules(withManaged, [local('api', 250)]))).to.deep.equal(['A', 'C', 'api']);
+      expect(ids(mergeRules(withManaged, [local('api', 150)]))).to.deep.equal(['A', 'api', 'C']);
+    });
+
+    it('keeps a managed rule with no deployment marker', () => {
+      const withManaged = [runtime('A', 0), runtime('old', 150, true)];
+      expect(ids(mergeRules(withManaged, [local('old', 150)]))).to.deep.equal(['A', 'old', 'old']);
+    });
+
   });
 
   describe('pullGlobalHeaders', () => {
@@ -267,6 +300,39 @@ describe('serve --pull-rules', () => {
       expect(pulled.warnings.filter((line) => line === PARTIAL_WARNING)).to.have.length(1);
       expect(PARTIAL_WARNING).to.equal('Some rule types are not in the portal response for this organisation, so they do not run locally.');
       expect(pulled.warnings).to.include('Rule Rule 4: the ip condition is not checked in quant serve, so the rule is skipped.');
+    });
+  });
+
+  describe('local rules over a pull', () => {
+    const FN_UUID = 'bbbb0000-0000-4000-8000-0000000000bb';
+    let tmp;
+    beforeEach(() => { tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'quant-pull-local-')); });
+    afterEach(() => fs.rmSync(tmp, { recursive: true, force: true }));
+
+    const pulled = () => [
+      fromPortalRule(item(0, 'redirect', {}, { uuid: 'a', weight: 0 })),
+      fromPortalRule(item(1, 'edge_fn', { fn_uuid: FN_UUID }, { uuid: 'm1', weight: 100, managed: true, deployment: { namespace: 'site', id: 'api', hash: 'h' } })),
+      fromPortalRule(item(2, 'edge_fn', { fn_uuid: FN_UUID }, { uuid: 'm2', weight: 150, managed: true, deployment: { namespace: 'site', id: 'gone', hash: 'h' } })),
+      fromPortalRule(item(3, 'redirect', {}, { uuid: 'c', weight: 200 }))
+    ];
+
+    it('runs the pulled list unchanged when there is no local rules file', () => {
+      const project = loadProject({ root: tmp, pulledRules: pulled() });
+      expect(project.rules.map((rule) => rule.id)).to.deep.equal(['a', 'm1', 'm2', 'c']);
+      expect(project.localRules).to.equal(0);
+    });
+
+    it('replaces only the pulled rule of the same namespace and id', () => {
+      fs.mkdirSync(path.join(tmp, 'quant', 'edge-functions'), { recursive: true });
+      fs.writeFileSync(path.join(tmp, 'quant', 'edge-functions', 'api.js'), 'return new Response(\'api\');');
+      fs.writeFileSync(path.join(tmp, 'quant', 'edge-functions.json'), JSON.stringify([{ id: 'api', uuid: FN_UUID, type: 'function', path: 'quant/edge-functions/api.js', description: 'api' }]));
+      fs.writeFileSync(path.join(tmp, 'quant', 'edge-rules.json'), JSON.stringify({ version: 1, namespace: 'site', rules: [
+        { id: 'api', type: 'function', urls: ['/api/*'], weight: 175, function_uuid: FN_UUID }
+      ] }));
+      const project = loadProject({ root: tmp, pulledRules: pulled() });
+      expect(project.rules.map((rule) => rule.id)).to.deep.equal(['a', 'm2', 'api', 'c']);
+      expect(project.rules[2].namespace).to.equal('site');
+      expect(project.localRules).to.equal(1);
     });
   });
 
@@ -327,7 +393,7 @@ describe('serve --pull-rules', () => {
     const LIST = [
       item(0, 'redirect', { to: '/moved', status_code: '302' }, { uuid: 'a', name: 'A', url: ['/a'], weight: 0 }),
       item(1, 'auth', { auth_user: 'ada', auth_pass: PASSWORD }, { uuid: 'b', name: 'B', url: ['/staff'], weight: 100 }),
-      item(2, 'edge_fn', { fn_uuid: FN }, { uuid: 'old', name: 'Old', url: ['/m'], weight: 150, managed: true }),
+      item(2, 'edge_fn', { fn_uuid: FN }, { uuid: 'old', name: 'Old', url: ['/m'], weight: 150, managed: true, deployment: { namespace: 'test', id: 'local-m', hash: 'h' } }),
       item(4, 'proxy', { to: 'http://127.0.0.1:1$*', inject_headers: { 'x-shared': SECRET }, disable_ssl_verify: 'true' }, { uuid: 'p', name: 'P', url: ['/api/*'], weight: 160 }),
       item(5, 'custom_response', { custom_response_status_code: '200', custom_response_body: 'pulled C' }, { uuid: 'c', name: 'C', url: ['/m', '/n'], weight: 200 }),
       item(6, 'custom_response', { custom_response_status_code: '200', custom_response_body: 'with cookie' }, { uuid: 'k', name: 'K', url: ['/cookie'], weight: 300, only_with_cookie: 'preview' })

@@ -58,7 +58,8 @@ function readRules(root, source, functions) {
   const errors = ruleErrors(manifest);
   if (errors.length > 0) throw new Error(`${source} is not a valid rules manifest:\n  ${errors.join('\n  ')}`);
   try {
-    return orderRules(resolveRules(manifest, functions).rules.map(toRuntimeRule));
+    const resolved = resolveRules(manifest, functions);
+    return orderRules(resolved.rules.map((rule) => ({ ...toRuntimeRule(rule), namespace: resolved.namespace })));
   } catch (err) {
     throw new Error(`${source}: ${err.message}`);
   }
@@ -93,8 +94,8 @@ function ruleWarning(rule, fn, source) {
  * Load and check the project files. A missing file counts as empty.
  * @param {Object} options
  * @param {string} options.root The project directory. File paths resolve from it.
- * @param {Object[]|null} [options.pulledRules] --pull-rules: the portal rules in edge order. The
- *   rules of the rules manifest replace the managed ones (see mergeRules). Kept in memory only.
+ * @param {Object[]|null} [options.pulledRules] --pull-rules: the portal rules in edge order. A
+ *   rule of the rules manifest replaces the managed rule of the same namespace and id (see mergeRules). Kept in memory only.
  * @param {Record<string, string>|null} [options.pulledHeaders] --pull-rules: the portal global
  *   headers. The globalHeaders of quant/serve.json override them.
  * @returns {{ functions: Map<string, Object>, rules: Object[], stores: Object[], fixtures: string, inlineFunctions: boolean, warnings: string[] }}
