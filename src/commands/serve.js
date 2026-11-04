@@ -23,6 +23,8 @@ const POSIX = process.platform !== 'win32';
 /** The signals that stop quant serve. SIGHUP comes when the terminal closes. */
 export const STOP_SIGNALS = Object.freeze(['SIGINT', 'SIGTERM', 'SIGHUP']);
 export const RUN_GRACE_MS = 2000;
+/** How long to wait for the --proxy URL after the --run command exits 0. */
+export const RUN_BACKGROUND_WAIT_MS = 5000;
 
 /** The first value that is set (not undefined, null or ''), else the fallback. */
 function first(values, fallback) {
@@ -229,7 +231,7 @@ function rebuild(options, print) {
 // On POSIX the --run command gets its own process group, so that a stop
 // also ends the processes that the shell starts. Its stdin is not the
 // terminal, because a background process group cannot read the terminal.
-function startRun(command, root, print) {
+function startRun(command, root, print, proxy) {
   const child = spawn(command, {
     shell: true,
     cwd: root,
@@ -238,18 +240,60 @@ function startRun(command, root, print) {
   });
   child.on('error', (err) => print(`The --run command could not start: ${err.message}`));
   child.on('exit', (code, signal) => {
-    if (!child.stopping) print(`The --run command stopped (${signal || `exit code ${code}`}).`);
+    if (child.stopping) return;
+    runExitLine(child, { code, signal, proxy }).then((line) => {
+      if (!child.stopping) print(line);
+    });
   });
   return child;
 }
 
 function groupAlive(pid) {
+  if (!POSIX) return false;
   try {
     process.kill(-pid, 0);
     return true;
   } catch (_err) {
     return false;
   }
+}
+
+async function answers(url) {
+  try {
+    await fetch(url, { redirect: 'manual', signal: AbortSignal.timeout(500) });
+    return true;
+  } catch (_err) {
+    return false;
+  }
+}
+
+// True when the dev server answers within waitMs (it can still be starting).
+async function reachable(url, waitMs) {
+  const deadline = Date.now() + waitMs;
+  for (;;) {
+    if (await answers(url)) return true;
+    if (Date.now() >= deadline) return false;
+    await new Promise((resolve) => setTimeout(resolve, 200));
+  }
+}
+
+/**
+ * The line to print when the --run command exits by itself. Some dev servers
+ * move to the background and the command exits 0. When its process group is
+ * still alive, quant serve stops that group on exit. When only the --proxy
+ * URL still answers (the dev server left the group, or on Windows), quant
+ * serve cannot stop it.
+ */
+export async function runExitLine(child, { code, signal, proxy, waitMs = RUN_BACKGROUND_WAIT_MS }) {
+  const stopped = `The --run command stopped (${signal || `exit code ${code}`}).`;
+  if (signal || code !== 0) return stopped;
+  if (groupAlive(child.pid)) {
+    return 'The --run command moved to the background (exit code 0). quant serve keeps serving and stops its process group when quant serve stops.';
+  }
+  if (proxy && await reachable(proxy, waitMs)) {
+    return `The --run command exited (exit code 0), but the dev server at ${proxy} still answers. quant serve keeps serving, but it cannot stop that dev server. Stop it yourself.`;
+  }
+  return stopped;
 }
 
 function signalGroup(child, signal) {
@@ -403,7 +447,7 @@ export async function runServe(options, { stop, print = console.log, log, kvStor
   const server = await startOrShowKeys(serverOptions(options, { kvStore: kv.kvStore, backend: kv.backend, log }, print), kv, print);
   const lines = startupLines({ url: server.url, host: options.host, clock: options.clock, ...startupSummary(server.summary, kv) });
   for (const line of lines) print(line);
-  const child = options.run ? startRun(options.run, options.root, print) : null;
+  const child = options.run ? startRun(options.run, options.root, print, options.proxy) : null;
   watchRun(server, child);
   const onExit = () => killRun(child);
   process.once('exit', onExit);

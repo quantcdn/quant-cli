@@ -271,7 +271,7 @@ Flags:
 - `--user-name` - Value for `{user_name}` in KV seed values (default: `git config user.name`, then `Owner`).
 - `--build` - Command to run once before the server starts.
 - `--watch` - Reload when files change. With `--build`, run the build again when files under `src/` or `public/` change.
-- `--run` - Long-running command, for example a dev server, to start beside the server. Quant serve stops it when it stops.
+- `--run` - Long-running command, for example a dev server, to start beside the server. Quant serve stops it when it stops. On macOS and Linux the command runs in its own process group, and quant serve stops the whole group. Some dev servers move to the background and the command exits 0 at once. If the process group is still alive, quant serve prints one notice, keeps serving and stops the group when it stops. If only the `--proxy` URL still answers (the dev server left the process group), quant serve says that it cannot stop that dev server. On Windows there is no process group: quant serve stops only the command, and it cannot stop a dev server that moved to the background.
 - `--proxy` - Dev server URL. Requests that no rule ends go to this URL. WebSocket upgrades (for example, HMR) also go to this URL, after the auth rules of the path. Function rules do not run for an upgrade.
 - `--geo` - Geolocation fields for functions, as a JSON object.
 - `--client-ip` - Client address for functions.
