@@ -1,5 +1,6 @@
 import { inspect } from 'node:util';
 import { expect } from 'chai';
+import { rulesOptions } from '../../../src/commands/rules.js';
 import { portalOptions, createPortalClient, PortalError } from '../../../src/serve/portal/client.js';
 
 const TOKEN = 'test-token';
@@ -49,6 +50,19 @@ describe('portal client', () => {
       expect(options).to.include({ token: TOKEN, customer: 'org', project: 'site' });
     });
 
+    it('ignores the token and base flags', () => {
+      const flags = { ...args, 'api-token': 'flag-token', 'api-base-url': 'https://other.test/api/v2' };
+      const options = portalOptions(flags, env);
+      expect(options.token).to.equal(TOKEN);
+      expect(options.base.hostname).to.equal('127.0.0.1');
+      expect(() => portalOptions(flags, {})).to.throw('QUANT_API_TOKEN');
+    });
+
+    it('keeps the flags and the old base string in rulesOptions', () => {
+      const flags = { ...args, 'api-token': 'flag-token', 'api-base-url': 'https://example.test/api/v2/' };
+      expect(rulesOptions(flags, {})).to.deep.equal({ customer: 'org', project: 'site', token: 'flag-token', base: 'https://example.test/api/v2' });
+    });
+
     it('asks for the missing values', () => {
       expect(() => portalOptions(args, {})).to.throw('QUANT_API_TOKEN');
     });
@@ -92,6 +106,58 @@ describe('portal client', () => {
       expect(error).to.be.instanceOf(PortalError);
       expect(error.status).to.equal(429);
       expect(waits).to.deep.equal([20000]);
+    });
+
+    it('stops after a bounded number of 429 answers with Retry-After 0', async () => {
+      const { client, calls } = setup(Array.from({ length: 500 }, () => reply(429, {}, { 'retry-after': '0' })));
+      const error = await failure(client.get('/x'));
+      expect(error.status).to.equal(429);
+      expect(calls.length).to.be.at.most(125);
+    });
+
+    it('uses the default delay for a Retry-After that is not whole seconds', async () => {
+      for (const value of ['Wed, 21 Oct 2026 07:28:00 GMT', '1e1', '0x10', '-1']) {
+        const { client, waits } = setup([reply(429, {}, { 'retry-after': value }), reply(200, {})]);
+        await client.get('/x');
+        expect(waits).to.deep.equal([2000]);
+      }
+    });
+
+    it('throws when a 2xx body is not JSON', async () => {
+      const { client } = setup([reply(200, undefined)]);
+      const error = await failure(client.get('/x'));
+      expect(error).to.be.instanceOf(PortalError);
+      expect(error.status).to.equal(200);
+      expect(error.message).to.equal('The portal sent a response that is not JSON.');
+    });
+
+    it('accepts a 204 without a body', async () => {
+      const { client } = setup([reply(204, undefined)]);
+      expect(await client.get('/x')).to.deep.equal({ status: 204, body: null });
+    });
+
+    it('redacts the token before it cuts the message', async () => {
+      const message = `${'a'.repeat(280)}${TOKEN}${'b'.repeat(50)}`;
+      const { client } = setup([reply(500, { message })]);
+      const error = await failure(client.get('/x'));
+      expect(error.message).to.include('[redacted]');
+      expect(error.message).to.not.include('test-tok');
+    });
+
+    it('does not follow a redirect', async () => {
+      const { client, calls } = setup([reply(302, {}, { location: 'http://127.0.0.1:9/' })]);
+      const error = await failure(client.get('/x'));
+      expect(error.status).to.equal(302);
+      expect(calls).to.have.length(1);
+      expect(calls[0].init.redirect).to.equal('manual');
+    });
+
+    it('turns a timeout into a PortalError without the token', async () => {
+      const abort = Object.assign(new Error(`aborted ${TOKEN}`), { name: 'TimeoutError' });
+      const { client } = setup([abort]);
+      const error = await failure(client.get('/x'));
+      expect(error).to.be.instanceOf(PortalError);
+      expect(error.message).to.not.include(TOKEN);
     });
 
     it('stops on 401 and names the token', async () => {

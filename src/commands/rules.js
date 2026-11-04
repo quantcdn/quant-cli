@@ -8,8 +8,14 @@ import { portalOptions, oneLine } from '../serve/portal/client.js';
 export { resolveRules };
 
 export function rulesOptions(args, env = process.env) {
-  const { base, ...rest } = portalOptions(args, env);
-  return { ...rest, base: base.href.replace(/\/$/, '') };
+  // Rules keep the token and base flags that the serve command does not have.
+  const merged = {
+    ...env,
+    QUANT_API_TOKEN: args['api-token'] || env.QUANT_API_TOKEN,
+    QUANT_BASE_URL: args['api-base-url'] || env.QUANT_BASE_URL
+  };
+  const { base: _url, ...rest } = portalOptions(args, merged);
+  return { ...rest, base: merged.QUANT_BASE_URL.replace(/\/$/, '') };
 }
 
 // Drift values printed in CI logs: matchers and placement only. Anything else

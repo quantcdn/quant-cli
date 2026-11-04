@@ -3,6 +3,7 @@ import fs from 'node:fs';
 const REQUEST_TIMEOUT_MS = 15000;
 const DEFAULT_RETRY_SECONDS = 2;
 const MAX_WAIT_MS = 30000;
+const MIN_RETRY_MS = 250;
 const MAX_MESSAGE = 300;
 const LOCAL_HOSTS = ['localhost', '127.0.0.1', '[::1]'];
 
@@ -44,8 +45,8 @@ export function portalOptions(args, env = process.env) {
   const customer = first(args.clientid, args.c, env.QUANT_CLIENT_ID, env.QUANT_CUSTOMER, saved.clientid);
   const project = first(args.project, args.p, env.QUANT_PROJECT, saved.project);
   // Deliberately never read QUANT_TOKEN, -t, saved.token, or upload endpoint.
-  const token = first(args['api-token'], env.QUANT_API_TOKEN);
-  const base = first(args['api-base-url'], env.QUANT_BASE_URL);
+  // The serve command has no token flag: only the environment is read.
+  const { QUANT_API_TOKEN: token, QUANT_BASE_URL: base } = env;
   if (![customer, project, token, base].every(Boolean)) throw new Error('Rules require customer, project, QUANT_API_TOKEN and QUANT_BASE_URL (portal /api/v2 URL)');
   const url = new URL(base);
   assertPortalUrl(url);
@@ -60,20 +61,21 @@ function buildUrl(base, path, query) {
 
 function retryDelayMs(response) {
   const header = response.headers.get('retry-after');
-  const seconds = header === null || header.trim() === '' ? NaN : Number(header);
-  return (Number.isFinite(seconds) && seconds >= 0 ? seconds : DEFAULT_RETRY_SECONDS) * 1000;
+  const seconds = /^\d+$/.test(header ?? '') ? Number(header) : DEFAULT_RETRY_SECONDS;
+  return Math.max(seconds * 1000, MIN_RETRY_MS);
 }
 
 async function readBody(response) {
   try {
     return await response.json();
   } catch {
-    return null;
+    return undefined;
   }
 }
 
 function failureMessage(status, body, token) {
-  const message = oneLine(body?.message)?.split(token).join('[redacted]');
+  const raw = typeof body?.message === 'string' ? body.message.split(token).join('[redacted]') : null;
+  const message = oneLine(raw);
   return message ? `The portal answered ${status}: ${message}` : `The portal answered ${status}.`;
 }
 
@@ -103,7 +105,8 @@ async function settle(context, response, scopeInfo) {
   if (status === 404) return { status };
   const body = await readBody(response);
   if (status < 200 || status > 299) throw new PortalError(failureMessage(status, body, context.token), status);
-  return { status, body };
+  if (body === undefined && status !== 204) throw new PortalError('The portal sent a response that is not JSON.', status);
+  return { status, body: body ?? null };
 }
 
 export function createPortalClient({ base, token, fetchImpl = fetch, sleep = ms => new Promise(resolve => setTimeout(resolve, ms)) }) {
