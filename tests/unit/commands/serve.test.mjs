@@ -106,6 +106,35 @@ describe('serve command', () => {
     expect(JSON.stringify(options)).not.to.include('secret');
   });
 
+  describe('defaults from quant/serve.json', () => {
+    function serveJson(document) {
+      fs.mkdirSync(path.join(tmp, 'quant'), { recursive: true });
+      fs.writeFileSync(path.join(tmp, 'quant', 'serve.json'), JSON.stringify(document));
+    }
+
+    it('reads org, project and meta from quant/serve.json', () => {
+      serveJson({ org: 'acme', project: 'site', meta: 'config/meta.json' });
+      expect(resolveOptions(parse([]), { root: tmp, gitUserName: noGit })).to.include({ org: 'acme', project: 'site', meta: 'config/meta.json' });
+    });
+
+    it('lets the flags win', () => {
+      serveJson({ org: 'acme', project: 'site', meta: 'config/meta.json' });
+      const options = resolveOptions(parse(['--org', 'flag-org', '--project', 'flag-project', '--meta', 'flag/meta.json']), { root: tmp, gitUserName: noGit });
+      expect(options).to.include({ org: 'flag-org', project: 'flag-project', meta: 'flag/meta.json' });
+    });
+
+    it('wins over quant.json', () => {
+      fs.writeFileSync(path.join(tmp, 'quant.json'), JSON.stringify({ clientid: 'saved', project: 'saved-project' }));
+      serveJson({ org: 'acme' });
+      expect(resolveOptions(parse([]), { root: tmp, gitUserName: noGit })).to.include({ org: 'acme', project: 'saved-project' });
+    });
+
+    it('refuses an invalid value', () => {
+      serveJson({ org: 'a b' });
+      expect(() => resolveOptions(parse([]), { root: tmp, gitUserName: noGit })).to.throw('quant/serve.json: org must be');
+    });
+  });
+
   it('reads quant.json softly', () => {
     fs.writeFileSync(path.join(tmp, 'quant.json'), '{ broken');
     const options = resolveOptions(parse([]), { root: tmp, gitUserName: noGit });

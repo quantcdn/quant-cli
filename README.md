@@ -263,9 +263,9 @@ Flags:
 - `--host` - Address to listen on (default: `127.0.0.1`). Any other address makes the site and its KV data reachable on the network.
 - `--functions` - Functions manifest (default: `quant/edge-functions.json`).
 - `--rules` - Rules manifest (default: `quant/edge-rules.json`).
-- `--meta` - Template metadata with the KV stores (default: `quant/meta.json`).
+- `--meta` - Template metadata with the KV stores (default: `meta` in `quant/serve.json`, then `quant/meta.json`).
 - `--fixtures` - Directory of KV fixtures (default: `quant/kv-fixtures`).
-- `--org` - Organisation (default: the `quant.json` clientid, then `local`).
+- `--org` - Organisation (default: `org` in `quant/serve.json`, the `quant.json` clientid, then `local`).
 - `--project` - Project (default: the `quant.json` project, then `dev`).
 - `--domain` - Host for the domain match of rules (default: the Host of the request).
 - `--user-name` - Value for `{user_name}` in KV seed values (default: `git config user.name`, then `Owner`).
@@ -312,9 +312,11 @@ Flags:
 - `--equals` - `list`: `field=value` for the index. Repeat the flag for more fields.
 - `--if-version` - `set`: write only if the key has this version.
 - `--secret` - `set`: store the value encrypted, as `set(key, value, { secret: true })` in a function does. A function reads the value as usual. `list` shows `encrypted: true` and the value `[ENCRYPTED]`. `get --local` shows the value, because the local store is yours. A key in an indexed collection cannot hold a secret (`INDEX_FIELD_ENCRYPTED`). The local store uses local keys only: do not put production secrets in it.
-- `--org` - Organisation (default: the `quant.json` clientid, then `local`).
-- `--project` - Project (default: the `quant.json` project, then `dev`).
-- `--meta` - Template metadata with the KV stores (default: `quant/meta.json`).
+- `--org` - Organisation (default: `org` in `quant/serve.json`, the `quant.json` clientid, then `local`).
+- `--project` - Project (default: `project` in `quant/serve.json`, the `quant.json` project, then `dev`).
+- `--meta` - Template metadata with the KV stores (default: `meta` in `quant/serve.json`, then `quant/meta.json`).
+
+To set these defaults one time for a project, put them in `quant/serve.json` (see [Local project settings](#local-project-settings-quantservejson)).
 
 ## Local ledgers
 
@@ -448,6 +450,14 @@ Each field is optional.
 - `globalHeaders` - Headers for every response from the site: pages, files, function responses, the 404 page and the basic authentication 401. A header that a function sets replaces the global header of the same name. `quant-server` and `age` cannot be set.
 - `basicAuth` - With a username and a password, every path needs these credentials. A request without them gets 401 with `WWW-Authenticate: Basic`. The check applies before the rules, so functions and redirects need the credentials too. WebSocket upgrades also need them. The `/_quant_serve/` control routes do not need them: they are local only and need the `x-quant-serve: 1` header (see [Safety](#safety)).
 - `trailingSlash` - `"redirect"`: a path that ends with `/` (except `/`) gets a 301 to the path without the trailing slashes, with the query string. A path that a rule answers is not redirected. `"none"` (the default): no redirect.
+- `org`, `project` - The organisation and the project for the local KV store ids, for `quant serve` and `quant kv --local`. Use them when the project has no `quant.json`. Each value is 1 to 100 letters, digits, `.`, `_` or `-`.
+- `meta` - The template metadata file with the KV stores (default: `quant/meta.json`). The path is relative to the project directory and must stay in it.
+
+For `org`, `project` and `meta`, the order is: the flag, then `quant/serve.json`, then `quant.json` (org and project only), then the default (`local`, `dev`, `quant/meta.json`). `quant serve` reads these three fields only at start-up, also with `--watch`.
+
+```json
+{ "org": "acme", "project": "marketing-site" }
+```
 
 The order is the order of the edge: global headers, basic authentication, rules, the trailing-slash redirect, then static content.
 

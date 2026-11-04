@@ -169,6 +169,31 @@ describe('kv command', () => {
     expect(JSON.stringify(state)).to.include('acme-site-orbit');
   });
 
+  describe('defaults from quant/serve.json', () => {
+    const serveJson = (document) => fs.writeFileSync(path.join(root, 'quant', 'serve.json'), JSON.stringify(document));
+    const state = () => fs.readFileSync(path.join(root, '.quant', 'kv', 'state.json'), 'utf8');
+
+    it('uses org, project and meta from quant/serve.json', async () => {
+      fs.mkdirSync(path.join(root, 'config'));
+      fs.renameSync(path.join(root, 'quant', 'meta.json'), path.join(root, 'config', 'meta.json'));
+      serveJson({ org: 'acme', project: 'site', meta: 'config/meta.json' });
+      expect(await run(['--local', 'set', 'orbit', 'a', '1'])).to.equal(0);
+      expect(state()).to.include('acme-site-orbit');
+    });
+
+    it('lets the flags win', async () => {
+      serveJson({ org: 'acme', project: 'site', meta: 'missing.json' });
+      expect(await run(['--local', '--org', 'other', '--project', 'web', '--meta', 'quant/meta.json', 'set', 'orbit', 'a', '1'])).to.equal(0);
+      expect(state()).to.include('other-web-orbit').and.not.to.include('acme-site-orbit');
+    });
+
+    it('refuses an invalid quant/serve.json', async () => {
+      serveJson({ project: '' });
+      expect(await run(['--local', 'get', 'orbit', 'a'])).to.equal(1);
+      expect(err[0]).to.match(/^quant\/serve\.json: project must be/);
+    });
+  });
+
   it('leaves a BUILDING index BUILDING', async () => {
     const { stores } = loadProject({ root });
     const first = await openLocalKv({ root, org: 'local', project: 'dev', stores, indexState: 'BUILDING' });

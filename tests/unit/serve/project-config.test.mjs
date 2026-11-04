@@ -18,7 +18,7 @@ function settings(document) {
 describe('serve project settings (quant/serve.json)', () => {
   describe('parseServeConfig', () => {
     it('gives the defaults for an empty document', () => {
-      expect(settings({})).to.deep.equal({ globalHeaders: [], basicAuth: null, trailingSlash: 'none', warnings: [] });
+      expect(settings({})).to.deep.equal({ globalHeaders: [], basicAuth: null, trailingSlash: 'none', defaults: {}, warnings: [] });
     });
 
     it('reads every field', () => {
@@ -26,6 +26,12 @@ describe('serve project settings (quant/serve.json)', () => {
       expect(result.globalHeaders).to.deep.equal([['x-frame-options', 'DENY']]);
       expect(result.basicAuth).to.equal(GOOD);
       expect(result.trailingSlash).to.equal('redirect');
+    });
+
+    it('reads the org, project and meta defaults for local KV commands', () => {
+      const result = settings({ org: 'acme', project: 'site-1', meta: 'config/meta.json' });
+      expect(result.defaults).to.deep.equal({ org: 'acme', project: 'site-1', meta: 'config/meta.json' });
+      expect(settings({ project: 'p' }).defaults).to.deep.equal({ project: 'p' });
     });
 
     it('skips the headers that a project cannot set, with a warning', () => {
@@ -38,7 +44,7 @@ describe('serve project settings (quant/serve.json)', () => {
     it('refuses a document with the wrong shape, with a clear message', () => {
       const cases = [
         [[], 'quant/serve.json must be a JSON object.'],
-        [{ headers: {} }, 'quant/serve.json: headers is not supported (supported: globalHeaders, basicAuth, trailingSlash).'],
+        [{ headers: {} }, 'quant/serve.json: headers is not supported (supported: globalHeaders, basicAuth, trailingSlash, org, project, meta).'],
         [{ globalHeaders: [] }, 'quant/serve.json: globalHeaders must be an object of header names and values.'],
         [{ globalHeaders: { 'bad name': 'x' } }, 'quant/serve.json: globalHeaders: "bad name" is not a valid header name.'],
         [{ globalHeaders: { 'x-a': 1 } }, 'quant/serve.json: globalHeaders.x-a must be printable ASCII text on one line.'],
@@ -46,7 +52,13 @@ describe('serve project settings (quant/serve.json)', () => {
         [{ basicAuth: { username: 'u' } }, /basicAuth must be \{ "username": "\.\.\.", "password": "\.\.\." \}/],
         [{ basicAuth: { username: 'u', password: '' } }, /basicAuth must be/],
         [{ basicAuth: { username: 'u:v', password: 'p' } }, 'quant/serve.json: basicAuth.username cannot contain ":".'],
-        [{ trailingSlash: 'preserve' }, 'quant/serve.json: trailingSlash must be "redirect" or "none".']
+        [{ trailingSlash: 'preserve' }, 'quant/serve.json: trailingSlash must be "redirect" or "none".'],
+        [{ org: '' }, 'quant/serve.json: org must be letters, digits, ".", "_" or "-" (1 to 100 characters).'],
+        [{ project: 'my site' }, 'quant/serve.json: project must be letters, digits, ".", "_" or "-" (1 to 100 characters).'],
+        [{ org: 7 }, /org must be letters/],
+        [{ meta: '' }, 'quant/serve.json: meta must be a path to a file in the project, relative to the project directory.'],
+        [{ meta: '/etc/meta.json' }, /meta must be a path to a file in the project/],
+        [{ meta: '../other/meta.json' }, /meta must be a path to a file in the project/]
       ];
       for (const [document, message] of cases) expect(() => settings(document), JSON.stringify(document)).to.throw(message);
     });

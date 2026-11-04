@@ -181,9 +181,9 @@ export default {
     .option('equals', { type: 'string', array: true, describe: 'list: field=value for the index (repeat)' })
     .option('if-version', { type: 'string', describe: 'set: write only if the key has this version' })
     .option('secret', { type: 'boolean', describe: 'set: store the value encrypted (a list shows it masked)' })
-    .option('org', { type: 'string', describe: 'Organisation (default: quant.json clientid, then local)' })
-    .option('project', { type: 'string', describe: 'Project (default: quant.json project, then dev)' })
-    .option('meta', { type: 'string', default: DEFAULT_FILES.meta, describe: 'Template metadata with KV stores' }),
+    .option('org', { type: 'string', describe: 'Organisation (default: quant/serve.json org, quant.json clientid, then local)' })
+    .option('project', { type: 'string', describe: 'Project (default: quant/serve.json project, quant.json project, then dev)' })
+    .option('meta', { type: 'string', describe: `Template metadata with KV stores (default: quant/serve.json meta, then ${DEFAULT_FILES.meta})` }),
   promptArgs,
   async handler(args) {
     const code = await runKv(args);

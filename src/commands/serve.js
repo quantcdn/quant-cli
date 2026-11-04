@@ -14,6 +14,7 @@ import { startServer } from '../serve/server.js';
 import { DEFAULT_FILES, loadProject } from '../serve/project.js';
 import { openLocalKv } from '../serve/kv/wire.js';
 import { LEDGERS_FILE, readLedgerFile } from '../serve/kv/ledgers.js';
+import { readServeConfig } from '../serve/project-config.js';
 
 const DEFAULTS = Object.freeze({ dir: 'dist', port: 8787, host: '127.0.0.1', org: 'local', project: 'dev', userName: 'Owner' });
 const LATER_RELEASE = ['pull-rules', 'kv-remote'];
@@ -98,23 +99,23 @@ function clockOf(value) {
   return clock;
 }
 
-function siteOptions(args) {
+function siteOptions(args, local) {
   return {
     dir: first([args.dir], DEFAULTS.dir),
     port: portOf(args.port),
     host: first([args.host], DEFAULTS.host),
     functions: first([args.functions], DEFAULT_FILES.functions),
     rules: first([args.rules], DEFAULT_FILES.rules),
-    meta: first([args.meta], DEFAULT_FILES.meta),
+    meta: first([args.meta, local.meta], DEFAULT_FILES.meta),
     fixtures: first([args.fixtures], DEFAULT_FILES.fixtures)
   };
 }
 
-function identityOptions(args, root, gitUserName) {
+function identityOptions(args, root, gitUserName, local) {
   const saved = readQuantJson(root);
   return {
-    org: first([args.org, args.clientid, saved.clientid], DEFAULTS.org),
-    project: first([args.project, saved.project], DEFAULTS.project),
+    org: first([args.org, args.clientid, local.org, saved.clientid], DEFAULTS.org),
+    project: first([args.project, local.project, saved.project], DEFAULTS.project),
     domain: first([args.domain], undefined),
     userName: first([args['user-name'], gitUserName(root)], DEFAULTS.userName)
   };
@@ -150,10 +151,12 @@ function devOptions(args) {
  */
 export function resolveOptions(args, { root = process.cwd(), gitUserName = readGitUserName } = {}) {
   refuseLaterFlags(args);
+  // The org, project and meta defaults of quant/serve.json (a flag wins).
+  const local = readServeConfig(root).defaults;
   return {
     root,
-    ...siteOptions(args),
-    ...identityOptions(args, root, gitUserName),
+    ...siteOptions(args, local),
+    ...identityOptions(args, root, gitUserName, local),
     ...kvOptions(args),
     ...devOptions(args)
   };
@@ -513,9 +516,9 @@ export default {
     .option('host', { type: 'string', default: DEFAULTS.host, describe: 'Address to listen on' })
     .option('functions', { type: 'string', default: DEFAULT_FILES.functions, describe: 'Functions manifest' })
     .option('rules', { type: 'string', default: DEFAULT_FILES.rules, describe: 'Rules manifest' })
-    .option('meta', { type: 'string', default: DEFAULT_FILES.meta, describe: 'Template metadata with KV stores' })
+    .option('meta', { type: 'string', describe: `Template metadata with KV stores (default: quant/serve.json meta, then ${DEFAULT_FILES.meta})` })
     .option('fixtures', { type: 'string', default: DEFAULT_FILES.fixtures, describe: 'KV fixtures directory' })
-    .option('org', { type: 'string', describe: 'Organisation (default: quant.json clientid, then local)' })
+    .option('org', { type: 'string', describe: 'Organisation (default: quant/serve.json org, quant.json clientid, then local)' })
     .option('domain', { type: 'string', describe: 'Host for rule domain matching (default: the request Host)' })
     .option('user-name', { type: 'string', describe: '{user_name} value (default: git config user.name, then Owner)' })
     .option('reset', { type: 'boolean', describe: 'Delete the local KV state and seed again' })
