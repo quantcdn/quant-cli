@@ -20,7 +20,6 @@ import { pullProject } from '../serve/portal/pull-rules.js';
 import { readRemoteStore, remoteLines } from '../serve/kv/remote.js';
 
 const DEFAULTS = Object.freeze({ dir: 'dist', port: 8787, host: '127.0.0.1', org: 'local', project: 'dev', userName: 'Owner' });
-const LATER_RELEASE = [];
 const IDENTITY_HELP = 'pass --org and --project, or set them in quant/serve.json or quant.json.';
 const PULL_IDENTITY = `--pull-rules needs the portal organisation and project: ${IDENTITY_HELP}`;
 const REMOTE_IDENTITY = `--kv-remote needs the portal organisation and project: ${IDENTITY_HELP}`;
@@ -54,12 +53,6 @@ function readGitUserName(root) {
     return result.status === 0 ? result.stdout.trim() : null;
   } catch (_err) {
     return null;
-  }
-}
-
-function refuseLaterFlags(args) {
-  for (const flag of LATER_RELEASE) {
-    if (args[flag] !== undefined && args[flag] !== false) throw new Error(`--${flag} is available in a later release`);
   }
 }
 
@@ -196,7 +189,6 @@ function devOptions(args) {
  * @param {{ root?: string, gitUserName?: (root: string) => string|null }} [deps]
  */
 export function resolveOptions(args, { root = process.cwd(), gitUserName = readGitUserName } = {}) {
-  refuseLaterFlags(args);
   // The org, project and meta defaults of quant/serve.json (a flag wins).
   const local = readServeConfig(root).defaults;
   return {
@@ -662,7 +654,7 @@ export default {
     .option('watch', { type: 'boolean', describe: 'Reload on changes; run --build again on changes under src/ and public/' })
     .option('run', { type: 'string', describe: 'Long-running command (a dev server) to start beside the server' })
     .option('proxy', { type: 'string', describe: 'Dev server URL for requests that no rule ends' })
-    .option('pull-rules', { type: 'boolean', describe: 'Read the portal rules at start and run them with the local rules (needs QUANT_API_TOKEN and QUANT_BASE_URL)' })
+    .option('pull-rules', { type: 'boolean', describe: 'Read the portal rules and global headers once at start and run them with the local rules (needs QUANT_API_TOKEN and QUANT_BASE_URL)' })
     .option('kv-remote', { type: 'string', describe: 'Serve one portal KV store from a snapshot read at start; writes stay local (needs QUANT_API_TOKEN and QUANT_BASE_URL)' })
     .option('version-info', { type: 'boolean', describe: 'Print the versions and exit' }),
   promptArgs: async () => {
