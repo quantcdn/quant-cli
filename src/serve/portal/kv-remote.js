@@ -1,3 +1,4 @@
+import { storeId } from '../../helper/quant-meta.js';
 import { PortalError, RequestLimitError } from './client.js';
 
 const PAGE_LIMIT = 1000;
@@ -11,12 +12,21 @@ const storePath = ({ customer, project }, leaf = '') =>
 const notLinked = name => new PortalError(`The KV store ${name} is not linked to this project.`, 404);
 const scopeInfo = name => ({ scope: READ_SCOPE, what: `KV store ${name}` });
 
+// The list row of the store: by user_name (the meta.json name), then by the
+// project store id, then by name. The portal can send a display name in name.
+function matchStore(stores, { customer, project, name }) {
+  const id = storeId(customer, project, name);
+  return stores.find(store => store.user_name === name)
+    ?? stores.find(store => store.id === id)
+    ?? stores.find(store => store.name === name);
+}
+
 export async function findStore(client, { customer, project, name }) {
   const { status, body } = await client.get(storePath({ customer, project }), undefined, scopeInfo(name));
   const stores = status === 404 || !Array.isArray(body) ? [] : body;
-  const found = stores.find(store => store && store.name === name);
+  const found = matchStore(stores.filter(Boolean), { customer, project, name });
   if (!found) throw notLinked(name);
-  return { id: found.id, name: found.name, ...([1, 2].includes(found.format) ? { format: found.format } : {}) };
+  return { id: found.id, name, ...([1, 2].includes(found.format) ? { format: found.format } : {}) };
 }
 
 async function fetchOk(name, send) {

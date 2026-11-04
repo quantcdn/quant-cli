@@ -55,6 +55,17 @@ describe('remote KV read', () => {
       expect(calls[0].route).to.equal('/');
     });
 
+    it('matches the user_name of a row with a display name, and accepts linked false with no format', async () => {
+      const row = { id: 'org-proj-sessions', name: 'org/proj: sessions', user_name: 'sessions', linked: false };
+      const other = { id: 'org-proj-local', name: 'sessions', user_name: 'local', linked: false };
+      expect(await findStore(portal({ stores: [other, row] }).client, CTX)).to.deep.equal({ id: 'org-proj-sessions', name: 'sessions' });
+    });
+
+    it('matches the project store id when the row has no user_name', async () => {
+      const row = { id: 'org-proj-sessions', name: 'org/proj: sessions' };
+      expect(await findStore(portal({ stores: [row] }).client, CTX)).to.deep.equal({ id: 'org-proj-sessions', name: 'sessions' });
+    });
+
     it('passes the store format through when the list reports 1 or 2', async () => {
       expect(await findStore(portal({ stores: [{ id: 'abc', name: 'sessions', format: 1 }] }).client, CTX)).to.deep.equal({ id: 'abc', name: 'sessions', format: 1 });
       expect(await findStore(portal({ stores: [{ id: 'abc', name: 'sessions', format: 'x' }] }).client, CTX)).to.deep.equal({ id: 'abc', name: 'sessions' });

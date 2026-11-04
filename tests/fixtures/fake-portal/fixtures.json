@@ -166,8 +166,10 @@
   },
   "stores": [
     {
-      "id": "abc",
-      "name": "cache"
+      "id": "acme-site-cache",
+      "name": "acme/site: cache",
+      "user_name": "cache",
+      "linked": false
     }
   ],
   "indexes": [],
