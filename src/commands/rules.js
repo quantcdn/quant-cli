@@ -14,8 +14,8 @@ export function rulesOptions(args, env = process.env) {
     QUANT_API_TOKEN: args['api-token'] || env.QUANT_API_TOKEN,
     QUANT_BASE_URL: args['api-base-url'] || env.QUANT_BASE_URL
   };
-  const { base: _url, ...rest } = portalOptions(args, merged);
-  return { ...rest, base: merged.QUANT_BASE_URL.replace(/\/$/, '') };
+  const { customer, project, token } = portalOptions(args, merged);
+  return { customer, project, token, base: merged.QUANT_BASE_URL.replace(/\/$/, '') };
 }
 
 // Drift values printed in CI logs: matchers and placement only. Anything else

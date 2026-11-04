@@ -137,10 +137,13 @@ describe('portal client', () => {
     });
 
     it('redacts the token before it cuts the message', async () => {
-      const message = `${'a'.repeat(280)}${TOKEN}${'b'.repeat(50)}`;
+      const message = `${'a'.repeat(292)}${TOKEN}${'b'.repeat(50)}`;
       const { client } = setup([reply(500, { message })]);
       const error = await failure(client.get('/x'));
-      expect(error.message).to.include('[redacted]');
+      expect(error.message).to.include('[red');
+      for (let i = 0; i + 4 <= TOKEN.length; i++) {
+        for (let j = i + 4; j <= TOKEN.length; j++) expect(error.message).to.not.include(TOKEN.slice(i, j));
+      }
       expect(error.message).to.not.include('test-tok');
     });
 
