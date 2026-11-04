@@ -123,8 +123,16 @@ describe('Rules deployment', () => {
       expect(message).to.equal(`Rules deployment failed (422): ${text}`);
       expect(message).not.to.match(/retry/i);
     });
-    it('prints the error text of a 422 when the body has no message', async () => {
-      expect(await failure({ status: 422, data: { error: 'The rule order cannot be kept.' } })).to.equal('Rules deployment failed (422): The rule order cannot be kept.');
+    it('prints the error text of a 422 and keeps the advice when the body has no message', async () => {
+      expect(await failure({ status: 422, data: { error: 'rule_order' } })).to.equal(
+        'Rules deployment failed (422): rule_order\nRules deployment failed (422). Check portal URL, token scopes and project access.');
+    });
+    it('prints the error text of a 409 and keeps the retry advice when the body has no message', async () => {
+      expect(await failure({ status: 409, data: { error: 'conflict' } })).to.equal(
+        'Rules deployment failed (409): conflict\nRules are being changed by another request (409). Retry shortly.');
+    });
+    it('uses the message, not the error text, when the body has both', async () => {
+      expect(await failure({ status: 409, data: { error: 'conflict', message: 'Reload and check.' } })).to.equal('Rules deployment failed (409): Reload and check.');
     });
     it('keeps the generic text for a 422 without a body', async () => {
       expect(await failure({ status: 422 })).to.equal('Rules deployment failed (422). Check portal URL, token scopes and project access.');
