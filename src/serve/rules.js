@@ -34,10 +34,14 @@ function compile(pattern) {
   return re;
 }
 
+// The text that a pattern is tested against: path plus query for a pattern with ?.
+function subjects(pattern, pathname, search) {
+  return pattern.includes('?') ? [pathname + search] : pathForms(pathname);
+}
+
 function urlMatches(pattern, pathname, search) {
   const re = compile(pattern);
-  if (pattern.includes('?')) return re.test(pathname + search);
-  return pathForms(pathname).some(form => re.test(form));
+  return subjects(pattern, pathname, search).some(form => re.test(form));
 }
 
 function hostMatches(domains, host) {
@@ -52,24 +56,46 @@ function ruleMatches(rule, ctx) {
   return rule.url.some(pattern => urlMatches(pattern, ctx.pathname, ctx.search || ''));
 }
 
-function firstMatch(rules, ctx, wantFilter) {
-  return rules.find(rule => (rule.type === 'filter') === wantFilter && ruleMatches(rule, ctx)) || null;
-}
+// Filter and error page rules are not run in the rule stage.
+const NOT_IN_RULE_STAGE = new Set(['edge_filter', 'error_page']);
+const inRuleStage = rule => !NOT_IN_RULE_STAGE.has(rule.action);
 
-/** The first enabled function or auth rule that matches, or null. Filter rules are skipped. */
+/** The first enabled rule of the rule stage that matches, or null. Filter and error page rules are skipped. */
 export function matchRule(rules, ctx) {
-  return firstMatch(rules, ctx, false);
+  return rules.find(rule => inRuleStage(rule) && ruleMatches(rule, ctx)) || null;
 }
 
 /**
- * Every enabled function or auth rule that matches, in run order. An auth
- * rule's 201 continues to the next rule in this list.
+ * Every enabled rule of the rule stage that matches, in run order. A rule
+ * that continues (an auth 201, a headers rule) goes on to the next rule.
  */
 export function matchRules(rules, ctx) {
-  return rules.filter(rule => rule.type !== 'filter' && ruleMatches(rule, ctx));
+  return rules.filter(rule => inRuleStage(rule) && ruleMatches(rule, ctx));
 }
 
 /** The first enabled filter rule that matches, or null. */
 export function matchFilter(rules, ctx) {
-  return firstMatch(rules, ctx, true);
+  return rules.find(rule => rule.action === 'edge_filter' && ruleMatches(rule, ctx)) || null;
+}
+
+const listsStatus = (rule, status) => (rule.config?.status_codes || []).map(String).includes(String(status));
+
+/** The first enabled error page rule for the status that matches, or null. */
+export function matchErrorPage(rules, ctx, status) {
+  return rules.find(rule => rule.action === 'error_page' && listsStatus(rule, status) && ruleMatches(rule, ctx)) || null;
+}
+
+/**
+ * The text that each * of the first matching URL pattern matched, and
+ * whether that pattern contains ?. Null when no pattern matches.
+ */
+export function ruleCaptures(rule, ctx) {
+  for (const pattern of rule.url) {
+    const re = compile(pattern);
+    for (const form of subjects(pattern, ctx.pathname, ctx.search || '')) {
+      const found = re.exec(form);
+      if (found) return { groups: found.slice(1), withQuery: pattern.includes('?') };
+    }
+  }
+  return null;
 }

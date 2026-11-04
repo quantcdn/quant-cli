@@ -73,6 +73,13 @@ describe('Edge rules manifest helpers', () => {
     expect(runtime.fnUuid).to.equal(functions.find(fn => fn.id === 'orbit-api-v1').uuid.toLowerCase());
   });
 
+  it('sets the runtime action from the rule type', () => {
+    expect(toRuntimeRule(manifest().rules[0])).to.include({ action: 'edge_fn' });
+    expect(toRuntimeRule(manifest({ type: 'auth' }).rules[0])).to.include({ action: 'edge_auth' });
+    expect(toRuntimeRule(manifest({ type: 'filter' }).rules[0])).to.include({ action: 'edge_filter' });
+    expect(toRuntimeRule(manifest().rules[0]).config).to.deep.equal({});
+  });
+
   it('lowercases the function uuid and keeps explicit matchers', () => {
     const rule = toRuntimeRule({ ...manifest({ methods: ['GET'], domains: ['a.com'], disabled: true, function_uuid: UUID.toUpperCase() }).rules[0] });
     expect(rule).to.include({ fnUuid: UUID, disabled: true });

@@ -12,6 +12,7 @@ import { resolveRules, ruleErrors, toRuntimeRule } from '../helper/edge-rules-ma
 import { parseMeta } from '../helper/quant-meta.js';
 import { readInlineSetting } from './inline.js';
 import { readServeConfig, SERVE_CONFIG } from './project-config.js';
+import { actionWarnings } from './rule-actions.js';
 import { orderRules } from './rules.js';
 
 export const DEFAULT_FILES = Object.freeze({
@@ -76,9 +77,12 @@ function functionMap(root, manifest) {
   }]));
 }
 
+const FUNCTION_ACTIONS = new Set(['edge_fn', 'edge_auth', 'edge_filter']);
+
 function ruleWarning(rule, fn, source) {
+  if (!FUNCTION_ACTIONS.has(rule.action)) return null;
   if (!fn) {
-    const effect = rule.type === 'filter' ? ' The filter is skipped.' : '';
+    const effect = rule.action === 'edge_filter' ? ' The filter is skipped.' : '';
     return `Rule ${rule.id}: function ${rule.fnUuid} is not in ${source}.${effect}`;
   }
   return fs.existsSync(fn.path) ? null : `Rule ${rule.id}: the function file ${fn.path} was not found.`;
@@ -88,17 +92,22 @@ function ruleWarning(rule, fn, source) {
  * Load and check the project files. A missing file counts as empty.
  * @param {Object} options
  * @param {string} options.root The project directory. File paths resolve from it.
+ * @param {Object[]} [options.runtimeRules] Runtime rules (with action and config) that run with
+ *   the rules of the rules manifest, ordered by weight.
  * @returns {{ functions: Map<string, Object>, rules: Object[], stores: Object[], fixtures: string, inlineFunctions: boolean, warnings: string[] }}
  *   functions is keyed by lowercase uuid; rules are runtime rules in run order.
  *   inlineFunctions: project_settings.enable_inline_fn in meta.json.
  *   settings: the local project settings from serve.json (see project-config.js).
  */
-export function loadProject({ root, functions = DEFAULT_FILES.functions, rules = DEFAULT_FILES.rules, meta = DEFAULT_FILES.meta, fixtures = DEFAULT_FILES.fixtures, serve = DEFAULT_FILES.serve }) {
+export function loadProject({ root, functions = DEFAULT_FILES.functions, rules = DEFAULT_FILES.rules, meta = DEFAULT_FILES.meta, fixtures = DEFAULT_FILES.fixtures, serve = DEFAULT_FILES.serve, runtimeRules: extraRules = [] }) {
   const manifest = readFunctions(root, functions);
-  const runtimeRules = readRules(root, rules, manifest);
+  const runtimeRules = orderRules([...readRules(root, rules, manifest), ...extraRules]);
   const map = functionMap(root, manifest);
   const settings = readServeConfig(root, serve);
-  const warnings = runtimeRules.map((rule) => ruleWarning(rule, map.get(rule.fnUuid), functions)).filter(Boolean);
+  const warnings = [
+    ...runtimeRules.map((rule) => ruleWarning(rule, map.get(rule.fnUuid), functions)).filter(Boolean),
+    ...actionWarnings(runtimeRules)
+  ];
   return {
     functions: map,
     rules: runtimeRules,

@@ -1,9 +1,11 @@
 import { expect } from 'chai';
-import { orderRules, matchRule, matchFilter, pathForms } from '../../../src/serve/rules.js';
+import { orderRules, matchRule, matchRules, matchFilter, matchErrorPage, pathForms, ruleCaptures } from '../../../src/serve/rules.js';
 
-const rule = (over = {}) => ({
-  id: 'r', type: 'function', url: ['/api/*'], domain: ['any'], methods: null, weight: 0, disabled: false, fnUuid: 'u', ...over
-});
+const ACTION = { function: 'edge_fn', auth: 'edge_auth', filter: 'edge_filter' };
+const rule = (over = {}) => {
+  const base = { id: 'r', type: 'function', url: ['/api/*'], domain: ['any'], methods: null, weight: 0, disabled: false, fnUuid: 'u', ...over };
+  return { action: ACTION[base.type], ...base };
+};
 const ctx = (over = {}) => ({ host: 'example.com', method: 'GET', pathname: '/api/projects', search: '', ...over });
 
 describe('serve rules', () => {
@@ -87,6 +89,35 @@ describe('serve rules', () => {
       const f = rule({ id: 'f', type: 'filter' });
       expect(matchFilter([fn, off, f], ctx())).to.equal(f);
       expect(matchFilter([fn], ctx())).to.equal(null);
+    });
+  });
+
+  describe('error page rules', () => {
+    const page = (over = {}) => rule({ id: 'e', action: 'error_page', url: ['*'], config: { status_codes: ['404'], error_page_path: '/p' }, ...over });
+
+    it('are not in the rule stage', () => {
+      expect(matchRule([page()], ctx())).to.equal(null);
+      expect(matchRules([page()], ctx())).to.deep.equal([]);
+    });
+
+    it('match only for a listed status', () => {
+      const e = page();
+      expect(matchErrorPage([e], ctx(), 404)).to.equal(e);
+      expect(matchErrorPage([e], ctx(), 500)).to.equal(null);
+      expect(matchErrorPage([page({ disabled: true })], ctx(), 404)).to.equal(null);
+    });
+  });
+
+  describe('ruleCaptures', () => {
+    it('returns the text of each * from the first matching pattern', () => {
+      const r = rule({ url: ['/none/*', '/blogs/*/category/*'] });
+      expect(ruleCaptures(r, ctx({ pathname: '/Blogs/Ada/category/maths' }))).to.deep.equal({ groups: ['Ada', 'maths'], withQuery: false });
+      expect(ruleCaptures(r, ctx({ pathname: '/other' }))).to.equal(null);
+    });
+
+    it('matches a pattern with ? against the path and query', () => {
+      const r = rule({ url: ['/search?q=*'] });
+      expect(ruleCaptures(r, ctx({ pathname: '/search', search: '?q=cats' }))).to.deep.equal({ groups: ['cats'], withQuery: true });
     });
   });
 });

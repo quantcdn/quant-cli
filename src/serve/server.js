@@ -19,16 +19,14 @@ import { applyInline, isHtmlFile, refusal } from './inline.js';
 import { loadProject, watchProject } from './project.js';
 import { LEDGERS_FILE, declareLedgers, readLedgerFile } from './kv/ledgers.js';
 import { basicAuthResponse, globalHeaderObject, trailingSlashRedirect, withGlobalHeaders } from './project-config.js';
-import { matchRules, matchFilter } from './rules.js';
+import { PROXY_RESPONSE_DROP, proxyBody, proxyRequestHeaders, withoutHeaders } from './forward.js';
+import { runAction } from './rule-actions.js';
+import { matchErrorPage, matchRules, matchFilter } from './rules.js';
 import { startWatchdog } from './watchdog.js';
 import { buildIndex, containsProject, findOnDisk, lookup, serveStatic, notFound, NOT_SERVED } from './static.js';
 
 const SERVER_HEADER = 'QuantCDN (quant serve)';
 const AUTH_UNAVAILABLE = 'Authentication for this page is not available.';
-const HOP_BY_HOP = ['connection', 'keep-alive', 'proxy-connection', 'transfer-encoding', 'te', 'trailer', 'upgrade', 'expect'];
-const PROXY_REQUEST_DROP = [...HOP_BY_HOP, 'host', 'content-length'];
-// Node fetch decodes the body, so the encoding and length headers are dropped.
-const PROXY_RESPONSE_DROP = [...HOP_BY_HOP, 'content-encoding', 'content-length'];
 const VERSION = readVersion();
 
 function readVersion() {
@@ -179,7 +177,7 @@ function requestContext(state, req) {
     remoteAddress: req.socket.remoteAddress,
     bodyPending: null,
     bodyStreamed: false,
-    authHeaders: null,
+    ruleHeaders: null,
     inlinePage: false
   };
 }
@@ -217,8 +215,9 @@ async function functionContext(state, ctx, mode) {
 
 // --- Rules -------------------------------------------------------------------
 
-// The headers of each auth 201 in a chain: a later auth function replaces
-// a header that an earlier one set, and set-cookie values add up.
+// The headers that rules add to the final response (an auth 201, a headers
+// rule): a later rule replaces a header that an earlier one set, and
+// set-cookie values add up.
 function mergeHeaders(target, source) {
   const headers = new Headers(target || []);
   for (const [key, value] of source) {
@@ -232,7 +231,7 @@ async function authStage(state, ctx, fn) {
   if (!fn) return text(503, AUTH_UNAVAILABLE, { 'cache-control': 'no-store' });
   const response = await state.executor.run(fn, await functionContext(state, ctx, 'auth'));
   if (response.status !== 201) return response;
-  ctx.authHeaders = mergeHeaders(ctx.authHeaders, authContinueHeaders(response));
+  ctx.ruleHeaders = mergeHeaders(ctx.ruleHeaders, authContinueHeaders(response));
   return null;
 }
 
@@ -244,49 +243,25 @@ async function functionStage(state, ctx, rule, fn) {
   return state.executor.run(fn, { ...(await functionContext(state, ctx, 'function')), baseHeaders: globalHeaderObject(state.project.settings) });
 }
 
-// The matching rules run in order. An auth 201 continues to the next rule;
-// any other auth response, and every function rule, ends the request.
+// The matching rules run in order (see rule-actions.js). An auth 201, right
+// basic-auth credentials and a headers rule continue to the next rule; any
+// other response ends the request.
 async function ruleStage(state, ctx) {
   for (const rule of matchRules(state.project.rules, matchContext(ctx))) {
-    const fn = state.project.functions.get(rule.fnUuid);
-    const response = rule.type === 'auth' ? await authStage(state, ctx, fn) : await functionStage(state, ctx, rule, fn);
-    if (response) return response;
+    const result = await runAction(state, ctx, rule);
+    if (result instanceof Response) return result;
+    if (result && result.continue) ctx.ruleHeaders = mergeHeaders(ctx.ruleHeaders, result.headers);
   }
   return null;
 }
 
 // --- Proxy -------------------------------------------------------------------
 
-function withoutHeaders(source, names) {
-  const headers = new Headers(source);
-  for (const name of names) headers.delete(name);
-  return headers;
-}
-
-function proxyRequestHeaders(req) {
-  const headers = new Headers();
-  for (let i = 0; i < req.rawHeaders.length; i += 2) headers.append(req.rawHeaders[i], req.rawHeaders[i + 1]);
-  return withoutHeaders(headers, PROXY_REQUEST_DROP);
-}
-
 function proxyTarget(base, ctx) {
   const target = new URL(base);
   target.pathname = ctx.sentPath;
   target.search = ctx.search;
   return target;
-}
-
-// The proxy streams the request body to the dev server, unless a function
-// (an auth rule that continued) has read it already. Then the proxy sends the
-// capped body that the function saw.
-async function proxyBody(ctx) {
-  if (['GET', 'HEAD'].includes(ctx.method)) return {};
-  if (ctx.bodyPending) {
-    const bytes = await ctx.bodyPending;
-    return bytes ? { body: bytes } : {};
-  }
-  ctx.bodyStreamed = true;
-  return { body: ctx.req, duplex: 'half' };
 }
 
 async function proxyStage(state, ctx) {
@@ -338,7 +313,23 @@ async function devServerStage(state, ctx) {
   return response;
 }
 
-function notFoundStage(state) {
+// The published page for an error status: the page of the first matching
+// error page rule that lists the status, else /_quant<status>. Null when
+// neither is published.
+function errorPageStage(state, ctx, status) {
+  const rule = matchErrorPage(state.project.rules, matchContext(ctx), status);
+  const file = (rule && pageFile(state, rule.config.error_page_path)) || pageFile(state, `/_quant${status}`);
+  return file ? serveStatic(file, 'GET', null, status) : null;
+}
+
+function pageFile(state, pagePath) {
+  const pathname = typeof pagePath === 'string' && pagePath.startsWith('/') ? canonicalPath(pagePath) : null;
+  return pathname ? staticFile(state, { pathname, search: '' }) : null;
+}
+
+function notFoundStage(state, ctx) {
+  const page = errorPageStage(state, ctx, 404);
+  if (page) return page;
   const { response, warning } = notFound(state.dir, state.index);
   if (warning && !state.notFoundWarned) {
     state.notFoundWarned = true;
@@ -391,10 +382,10 @@ async function siteResponse(state, ctx) {
   const denied = basicAuthResponse(settings, ctx.req.headers.authorization);
   if (denied) return denied;
   const ruled = await ruleStage(state, ctx);
-  if (ruled) return filterStage(state, ctx, withGlobalHeaders(ruled, settings, false));
+  if (ruled) return inlineStage(state, ctx, await filterStage(state, ctx, withGlobalHeaders(ruled, settings, false)));
   const redirect = trailingSlashRedirect(settings, ctx.sentPath, ctx.search);
   if (redirect) return redirect;
-  const response = await devServerStage(state, ctx) || staticStage(state, ctx) || notFoundStage(state);
+  const response = await devServerStage(state, ctx) || staticStage(state, ctx) || notFoundStage(state, ctx);
   return inlineStage(state, ctx, await filterStage(state, ctx, withGlobalHeaders(response, settings)));
 }
 
@@ -413,9 +404,9 @@ async function respond(state, ctx) {
 
 // --- Headers and send ------------------------------------------------------------
 
-function finalHeaders(state, source, authHeaders) {
+function finalHeaders(state, source, ruleHeaders) {
   const headers = new Headers(source);
-  for (const [key, value] of authHeaders || []) {
+  for (const [key, value] of ruleHeaders || []) {
     if (key === 'set-cookie') headers.append(key, value);
     else headers.set(key, value);
   }
@@ -435,8 +426,8 @@ function writeHead(res, response, headers) {
   if (cookies.length > 0) res.setHeader('set-cookie', cookies);
 }
 
-async function send(state, res, response, method, authHeaders) {
-  writeHead(res, response, finalHeaders(state, response.headers, authHeaders));
+async function send(state, res, response, method, ruleHeaders) {
+  writeHead(res, response, finalHeaders(state, response.headers, ruleHeaders));
   if (!response.body || method === 'HEAD') {
     res.end();
     if (response.body) await response.body.cancel().catch(() => {});
@@ -474,7 +465,7 @@ async function handleRequest(state, req, res) {
     response = new Response(null, { status: 500 });
   }
   try {
-    await send(state, res, response, req.method, ctx && ctx.authHeaders);
+    await send(state, res, response, req.method, ctx && ctx.ruleHeaders);
   } catch (err) {
     sendFailed(state, req, res, err);
   }
@@ -510,16 +501,18 @@ function upgradeAllowed(state, req) {
   }
 }
 
-// The auth rules of the upgrade path run in order, as for a request. The
-// response of an auth that does not answer 201 ends the upgrade. Function
-// rules do not run for an upgrade. An upgrade has no body.
+// The auth and basic-auth rules of the upgrade path run in order, as for a
+// request. The response of an auth that does not continue ends the upgrade.
+// Other rules do not run for an upgrade. An upgrade has no body.
+const UPGRADE_ACTIONS = new Set(['edge_auth', 'auth']);
+
 async function upgradeAuth(state, req) {
   const denied = basicAuthResponse(state.project.settings, req.headers.authorization);
   if (denied) return denied;
   const ctx = { ...requestContext(state, req), bodyStreamed: true };
   for (const rule of matchRules(state.project.rules, matchContext(ctx))) {
-    if (rule.type !== 'auth') continue;
-    const response = await authStage(state, ctx, state.project.functions.get(rule.fnUuid));
+    if (!UPGRADE_ACTIONS.has(rule.action)) continue;
+    const response = await runAction(state, ctx, rule);
     if (response) return response;
   }
   return null;
@@ -572,8 +565,8 @@ async function handleUpgrade(state, req, socket, head) {
 // --- Start-up -------------------------------------------------------------------
 
 function projectFiles(state) {
-  const { functions, rules, meta, fixtures } = state.options;
-  return { root: state.root, functions, rules, meta, fixtures };
+  const { functions, rules, meta, fixtures, runtimeRules } = state.options;
+  return { root: state.root, functions, rules, meta, fixtures, runtimeRules };
 }
 
 function siteIndex(state) {
@@ -640,6 +633,17 @@ function storeList(state) {
   return state.project.stores.map((store) => ({ name: store.name, id: storeId(state.org, state.projectName, store.name) }));
 }
 
+// The server stages that the rule actions call (see rule-actions.js).
+function serverStages(state) {
+  const fnOf = (rule) => state.project.functions.get(rule.fnUuid);
+  return {
+    edgeFunction: (ctx, rule) => functionStage(state, ctx, rule, fnOf(rule)),
+    edgeAuth: (ctx, rule) => authStage(state, ctx, fnOf(rule)),
+    static: (ctx) => staticStage(state, ctx),
+    errorPage: (ctx, status) => errorPageStage(state, ctx, status)
+  };
+}
+
 function createState(options) {
   const root = path.resolve(options.root || process.cwd());
   const state = {
@@ -654,6 +658,7 @@ function createState(options) {
     allowedHosts: allowedHosts(options)
   };
   checkIdentity(state.org, state.projectName);
+  state.stages = serverStages(state);
   state.project = loadProject(projectFiles(state));
   state.executor = createExecutor({
     kvStore: options.kvStore, org: state.org, project: state.projectName, root,
@@ -704,7 +709,8 @@ function closer(state, server, cleanups) {
  * @param {Object} options The parsed flags plus root and kvStore:
  *   root, dir, port, host, functions, rules, meta, fixtures, org, project,
  *   domain, proxy, watch, geo, clientIp, timeoutMs, kvStore, log, onSourceChange,
- *   backend (the local KV backend, for the control route) and clock ('real' or 'manual').
+ *   backend (the local KV backend, for the control route), clock ('real' or 'manual')
+ *   and runtimeRules (runtime rules that run with the rules of the rules manifest, by weight).
  * @returns {Promise<{ url: string, close: () => Promise<void>, setRunPid: (pid: number) => void, summary: Object }>}
  *   setRunPid: the --run process group that the watchdog ends when a function blocks the server.
  *   summary: { stores, rules, libraries, warnings } for the start-up output.
@@ -727,7 +733,7 @@ export async function startServer(options) {
     setRunPid: (pid) => state.watchdog.setRunPid(pid),
     summary: {
       stores: storeList(state),
-      rules: state.project.rules.map((rule) => ({ id: rule.id, type: rule.type, urls: rule.url })),
+      rules: state.project.rules.map((rule) => ({ id: rule.id, type: rule.type || rule.action, urls: rule.url })),
       libraries: fromProject,
       warnings: [site.warning, ...libraryErrors, ...state.project.warnings].filter(Boolean)
     }
