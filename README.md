@@ -500,7 +500,7 @@ Actions that run locally: redirect (with `$1` to `$5`), headers, custom response
 These do not run locally:
 
 - A rule action that quant serve does not have (for example a bot challenge or serve-static). `quant serve` skips the rule and prints `Rule <name> (<action>) is not available in quant serve and is skipped.`
-- A rule with a country, IP, ASN, user agent or traffic source condition. `quant serve` skips the rule and prints `Rule <name>: the <conditions> condition(s) is/are not checked in quant serve, so the rule is skipped.`
+- A rule with a country, IP, ASN, user agent or traffic source condition. `quant serve` skips the rule and prints `Rule <name>: the <condition> condition is not checked in quant serve, so the rule is skipped.` (one condition) or `Rule <name>: the <condition>, <condition> conditions are not checked in quant serve, so the rule is skipped.` (more than one).
 - The WAF settings of a proxy rule. `quant serve` prints `Rule <name>: WAF settings are ignored in quant serve.`
 - The host setting of a proxy rule. The origin gets the host of the `to` URL, and `quant serve` prints `Rule <name>: the host setting is ignored in quant serve. The origin gets the host of the to URL.`
 - The failover mode and TLS verification settings of a proxy rule. `quant serve` prints `Rule <name>: failover and TLS verification settings work differently in quant serve.`
@@ -517,10 +517,10 @@ Other points:
 `--kv-remote <name>` copies the KV store `<name>` into the local KV, in memory. The store must be linked to the portal project and listed in `quant/meta.json`, so that functions can open it. The `initial_values` and fixtures of that store are not seeded.
 
 - Caps: at most 10,000 keys and 200 portal requests. If a cap stops the read, `quant serve` prints `KV store <name>: copied the first <n> keys only (limit 10000). Writes stay local.`. For the request cap, the text in the brackets is `request limit 200`. If the portal ends the key list early, it is `the portal ended the list early`.
-- The start-up output shows `KV store <name>: copied <n> keys from the portal (<m> encrypted values masked).`
+- The start-up output shows `KV store <name>: copied <n> keys from the portal (<m> encrypted values masked).` If the portal store has ledger entries, the line adds ` (<k> ledger entries not copied)` before the final full stop.
 - A secret value reads `[ENCRYPTED]`. The portal does not send the real value.
 - Index definitions are copied, so index lists and counts work. Expiry times are kept.
-- Ledger entries are not copied. If `quant/kv-ledgers.json` declares ledgers for the store, those ledgers run locally and start empty.
+- Ledger entries are not copied. If `quant/kv-ledgers.json` declares ledgers for the store, those ledgers run locally and start empty, and `quant serve` prints `Ledgers of <name> are not copied from the portal; declare local ledgers in quant/kv-ledgers.json.`
 - `quant kv --local` in a second process does not see the snapshot. It sees only the state on disk.
 
 ## Edge libraries in quant serve

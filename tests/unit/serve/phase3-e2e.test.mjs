@@ -11,6 +11,7 @@ const BASIC_PASSWORD = 'basic-auth-secret-e2e';
 const INJECT_SECRET = 'inject-secret-e2e';
 const LOCAL_WRITE = 'local-write-e2e';
 const PORTAL_VALUE = 'hello from the portal';
+const START_DEADLINE_MS = 20000;
 const FN = 'aaaa0000-0000-4000-8000-0000000000e2';
 
 const FUNCTION = `
@@ -20,6 +21,11 @@ if (url.searchParams.get('op') === 'roundtrip') {
   const before = await store.get('greeting');
   await store.set('written', url.searchParams.get('value'));
   return new Response(JSON.stringify({ before, after: await store.get('written') }));
+}
+if (url.searchParams.get('op') === 'ledger') {
+  const rows = [];
+  for await (const item of store.list({ prefix: 'events:' })) rows.push(item.key);
+  return new Response(JSON.stringify(rows));
 }
 return new Response('local-function');
 `;
@@ -49,6 +55,7 @@ function writeProject(root) {
     localRule('order', ['/order'], 200),
     localRule('late', ['/late'], 200)
   ] });
+  writeJson(path.join(root, 'quant', 'kv-ledgers.json'), { cache: [{ name: 'events', collection: 'events', chains: 1, retentionDays: 30 }] });
   writeJson(path.join(root, 'quant', 'meta.json'), { kv_stores: [{ name: 'cache' }] });
 }
 
@@ -69,17 +76,16 @@ function startCli(root, portal) {
   child.stderr.on('data', (chunk) => { text += chunk; });
   const exited = new Promise((resolve) => child.on('exit', resolve));
   const ready = new Promise((resolve, reject) => {
+    const started = Date.now();
     const timer = setInterval(() => {
       const found = /quant serve is running at (\S+)/.exec(text);
       if (found) { clearInterval(timer); resolve(found[1]); }
-      if (child.exitCode !== null) { clearInterval(timer); reject(new Error(`quant serve exited:\n${text}`)); }
+      else if (child.exitCode !== null) { clearInterval(timer); reject(new Error(`quant serve exited:\n${text}`)); }
+      else if (Date.now() - started > START_DEADLINE_MS) { clearInterval(timer); reject(new Error(`quant serve did not start in time:\n${text}`)); }
     }, 50);
   });
-  return ready.then((url) => ({
-    url,
-    output: () => text,
-    stop: async () => { child.kill('SIGTERM'); await exited; }
-  }));
+  const stop = async () => { child.kill('SIGTERM'); await exited; };
+  return { ready, output: () => text, stop };
 }
 
 describe('quant serve phase 3 end to end', function () {
@@ -92,7 +98,8 @@ describe('quant serve phase 3 end to end', function () {
     root = fs.mkdtempSync(path.join(os.tmpdir(), 'quant-phase3-e2e-'));
     writeProject(root);
     portal = await startFakePortal(loadFixtures());
-    site = await startCli(root, portal);
+    site = startCli(root, portal);
+    site.url = await site.ready;
   });
 
   after(async () => {
@@ -149,6 +156,12 @@ describe('quant serve phase 3 end to end', function () {
     expect(await res.json()).to.deep.equal({ before: PORTAL_VALUE, after: LOCAL_WRITE });
   });
 
+  it('starts a ledger declared for the remote store empty', async () => {
+    expect(await (await get('/kv?op=ledger')).json()).to.deep.equal([]);
+    expect(site.output()).to.include('KV store cache: copied 1 keys from the portal (0 encrypted values masked) (1 ledger entries not copied).');
+    expect(site.output()).to.include('Ledgers of cache are not copied from the portal; declare local ledgers in quant/kv-ledgers.json.');
+  });
+
   it('reads the portal with GET and batch-get only, each with the bearer token', () => {
     const methodPaths = portal.requests.map((request) => `${request.method} ${request.path.split('/').pop()}`);
     expect(methodPaths.filter((entry) => entry.startsWith('POST'))).to.deep.equal(['POST batch-get']);
@@ -160,7 +173,6 @@ describe('quant serve phase 3 end to end', function () {
   it('prints no token or secret, and writes no snapshot value or token to the project', async () => {
     const printed = site.output();
     expect(printed).to.include('Pulled 9 portal rules (4 from quant/edge-rules.json).');
-    expect(printed).to.include('KV store cache: copied 1 keys from the portal');
     for (const secret of [TOKEN, BASIC_PASSWORD, INJECT_SECRET, PORTAL_VALUE, LOCAL_WRITE]) expect(printed).to.not.include(secret);
     await site.stop();
     expect(fs.existsSync(path.join(root, '.quant'))).to.equal(true);
@@ -168,6 +180,5 @@ describe('quant serve phase 3 end to end', function () {
       const text = fs.readFileSync(file, 'latin1');
       for (const secret of [TOKEN, PORTAL_VALUE, LOCAL_WRITE, BASIC_PASSWORD, INJECT_SECRET]) expect(text, `${secret} in ${file}`).to.not.include(secret);
     }
-    site = null;
   });
 });
