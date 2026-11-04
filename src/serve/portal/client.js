@@ -30,26 +30,35 @@ function savedProject() {
   }
 }
 
-function assertPortalUrl(url) {
+// The start of an error message: "Rules require", or "<feature> needs" (for example --kv-remote).
+const subject = (feature) => (feature ? `${feature} needs` : 'Rules require');
+
+function assertPortalUrl(url, feature) {
   const plainLocal = url.protocol === 'http:' && LOCAL_HOSTS.includes(url.hostname);
   if (url.username || url.password || url.search || url.hash || !/\/api\/v2\/?$/.test(url.pathname) ||
       (url.protocol !== 'https:' && !plainLocal)) {
-    throw new Error('Rules require an HTTPS portal /api/v2 URL (HTTP is allowed only for localhost)');
+    throw new Error(`${subject(feature)} an HTTPS portal /api/v2 URL (HTTP is allowed only for localhost)`);
   }
+}
+
+function missingMessage(feature) {
+  if (!feature) return 'Rules require customer, project, QUANT_API_TOKEN and QUANT_BASE_URL (portal /api/v2 URL)';
+  return `${feature} needs QUANT_API_TOKEN and QUANT_BASE_URL (portal /api/v2 URL), and an org and project.`;
 }
 
 const first = (...values) => values.find(Boolean);
 
-export function portalOptions(args, env = process.env) {
+// feature: the flag in use (for example --kv-remote), named in the errors. Without it, the rules messages.
+export function portalOptions(args, env = process.env, feature = undefined) {
   const saved = savedProject();
   const customer = first(args.clientid, args.c, env.QUANT_CLIENT_ID, env.QUANT_CUSTOMER, saved.clientid);
   const project = first(args.project, args.p, env.QUANT_PROJECT, saved.project);
   // Deliberately never read QUANT_TOKEN, -t, saved.token, or upload endpoint.
   // The serve command has no token flag: only the environment is read.
   const { QUANT_API_TOKEN: token, QUANT_BASE_URL: base } = env;
-  if (![customer, project, token, base].every(Boolean)) throw new Error('Rules require customer, project, QUANT_API_TOKEN and QUANT_BASE_URL (portal /api/v2 URL)');
+  if (![customer, project, token, base].every(Boolean)) throw new Error(missingMessage(feature));
   const url = new URL(base);
-  assertPortalUrl(url);
+  assertPortalUrl(url, feature);
   return { customer, project, token, base: url };
 }
 

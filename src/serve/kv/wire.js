@@ -112,6 +112,8 @@ async function seedInMemory(ctx, seedOptions) {
 }
 
 function seedAll(ctx, seedOptions) {
+  // The seed copies the disk state (no remote store) and allows it: it must run before loadRemote.
+  if (ctx.remoteLoaded) return Promise.reject(new Error('The --kv-remote store is loaded: the seed must run before it.'));
   return ctx.paths ? seedOnFile(ctx, seedOptions) : seedInMemory(ctx, seedOptions);
 }
 
@@ -205,6 +207,7 @@ async function loadRemote(ctx, snapshot) {
     backendOptions: backendOptions(null, undefined, ctx.options), building: ctx.indexState === 'BUILDING'
   });
   if (ctx.overlay) ctx.overlay.setRemote(built.data);
+  ctx.remoteLoaded = true;
   ctx.backend.restore(withStore(ctx.backend.snapshot(), built.data));
   ctx.allowed.set(id, definition);
   await declareLedgers(ctx.backend, {

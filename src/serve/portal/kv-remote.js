@@ -67,17 +67,24 @@ function readKeysPage(client, state, ctx, id, cursor) {
 
 const pageKeys = page => (Array.isArray(page?.data) ? page.data : []).map(row => row?.key).filter(key => typeof key === 'string');
 
-// Reads one page of keys and their values. Returns the next cursor, or a stop flag.
+// Why a page stops the read: 'requests' (the request cap cut the values),
+// 'keys' (maxKeys), 'cursor' (has_more with no cursor: the rest cannot be
+// read), or null (the read goes on, or the list has ended).
+function stopReason({ complete, room, count, hasMore, more }) {
+  if (!complete) return 'requests';
+  if (room < count || (more && room <= count)) return 'keys';
+  return hasMore && !more ? 'cursor' : null;
+}
+
+// Reads one page of keys and their values. Returns the next cursor, or the stop reason.
 async function readPage(client, state, ctx, id, { cursor, room }) {
   const page = await readKeysPage(client, state, ctx, id, cursor);
   const all = pageKeys(page);
   const values = await readValues(client, state, ctx, id, all.slice(0, room));
   const hasMore = page?.has_more === true;
   const more = hasMore && Boolean(page.next_cursor);
-  // has_more with no cursor: the rest cannot be read.
-  const lost = hasMore && !more;
-  const cut = !values.complete || room < all.length || (more && room <= all.length) || lost;
-  return { entries: values.entries, next: more ? page.next_cursor : null, cut };
+  const stop = stopReason({ complete: values.complete, room, count: all.length, hasMore, more });
+  return { entries: values.entries, next: more && !stop ? page.next_cursor : null, stop };
 }
 
 export async function readStore(client, ctx, id, { maxKeys = 10000, maxRequests = 200 } = {}) {
@@ -85,15 +92,17 @@ export async function readStore(client, ctx, id, { maxKeys = 10000, maxRequests 
   const entries = [];
   const indexes = state.full() ? [] : await readIndexes(client, state, ctx, id);
   let cursor;
-  let truncated = false;
+  let stoppedBy = null;
   do {
-    truncated = state.full();
-    if (truncated) break;
+    if (state.full()) {
+      stoppedBy = 'requests';
+      break;
+    }
     const page = await readPage(client, state, ctx, id, { cursor, room: maxKeys - entries.length });
     entries.push(...page.entries);
-    truncated = page.cut;
-    cursor = truncated ? null : page.next;
+    stoppedBy = page.stop;
+    cursor = page.next;
   } while (cursor);
   const masked = entries.filter(entry => entry.value === MASKED).length;
-  return { entries, indexes, masked, truncated, requests: state.requests };
+  return { entries, indexes, masked, truncated: stoppedBy !== null, stoppedBy, requests: state.requests };
 }

@@ -67,6 +67,17 @@ describe('portal client', () => {
       expect(() => portalOptions(args, {})).to.throw('QUANT_API_TOKEN');
     });
 
+    it('names the feature in use when a value is missing, and keeps the rules message without one', () => {
+      expect(() => portalOptions(args, {})).to.throw('Rules require customer, project, QUANT_API_TOKEN and QUANT_BASE_URL (portal /api/v2 URL)');
+      for (const feature of ['--kv-remote', '--pull-rules']) {
+        const error = (() => { try { portalOptions(args, {}, feature); } catch (err) { return err; } return null; })();
+        expect(error.message).to.equal(`${feature} needs QUANT_API_TOKEN and QUANT_BASE_URL (portal /api/v2 URL), and an org and project.`);
+      }
+      expect(() => portalOptions({}, env, '--kv-remote')).to.throw('--kv-remote needs QUANT_API_TOKEN');
+      expect(() => portalOptions(args, { ...env, QUANT_BASE_URL: 'http://example.com/api/v2' }, '--kv-remote'))
+        .to.throw('--kv-remote needs an HTTPS portal /api/v2 URL (HTTP is allowed only for localhost)');
+    });
+
     it('refuses plain HTTP to a remote host', () => {
       expect(() => portalOptions(args, { ...env, QUANT_BASE_URL: 'http://example.com/api/v2' })).to.throw('HTTPS');
     });

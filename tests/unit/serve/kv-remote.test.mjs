@@ -2,8 +2,10 @@ import { expect } from 'chai';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
+import { createLocalKv } from '@quantcdn/edge-kv';
 import { resolveOptions, runServe } from '../../../src/commands/serve.js';
-import { toLocalIndex } from '../../../src/serve/kv/remote.js';
+import { buildRemoteStore, remoteLines, remoteOverlay, toLocalIndex } from '../../../src/serve/kv/remote.js';
+import { openLocalKv } from '../../../src/serve/kv/wire.js';
 
 const TOKEN = 'remote-token-never-printed';
 const ENV = { QUANT_API_TOKEN: TOKEN, QUANT_BASE_URL: 'http://127.0.0.1:8080/api/v2' };
@@ -107,7 +109,7 @@ async function until(check, timeoutMs = 8000) {
 }
 
 // Start quant serve; returns { url, output, ask(query), close() }.
-async function serve(root, portal, flags = {}) {
+async function serve(root, portal, flags = {}, env = ENV) {
   const output = [];
   let stop;
   const stopped = new Promise((resolve) => { stop = resolve; });
@@ -117,7 +119,7 @@ async function serve(root, portal, flags = {}) {
     stop: stopped,
     print: (line) => output.push(line),
     log: (line) => output.push(line),
-    env: ENV,
+    env,
     fetchImpl: portal.fetchImpl,
     onListening: (server) => { url = server.url; }
   });
@@ -301,6 +303,156 @@ describe('serve --kv-remote', function () {
     const missing = await failure(serve(root, fakePortal({ stores: [] })));
     expect(missing.message).to.equal('The KV store sessions is not linked to this project.');
     for (const error of [denied, missing]) expect(`${error.message}\n${error.stack}`).to.not.include(TOKEN);
+  });
+
+  it('names the feature when QUANT_API_TOKEN or QUANT_BASE_URL is missing', async () => {
+    const root = projectRoot(tmp);
+    const remote = await failure(serve(root, fakePortal(), {}, {}));
+    expect(remote.message).to.equal('--kv-remote needs QUANT_API_TOKEN and QUANT_BASE_URL (portal /api/v2 URL), and an org and project.');
+    const pull = await failure(serve(root, fakePortal(), { 'kv-remote': undefined, 'pull-rules': true }, { QUANT_API_TOKEN: TOKEN }));
+    expect(pull.message).to.equal('--pull-rules needs QUANT_API_TOKEN and QUANT_BASE_URL (portal /api/v2 URL), and an org and project.');
+  });
+
+  describe('buildRemoteStore', () => {
+    const ID = 'acme-site-sessions';
+    const base = () => createLocalKv().backend.snapshot();
+    const snapshot = (over) => ({ name: 'sessions', format: 2, indexes: [], entries: [], ...over });
+    const build = (over) => buildRemoteStore({ base: base(), id: ID, snapshot: snapshot(over), backendOptions: {} });
+    const keysOf = (built) => built.data.items.map(([key]) => key).sort();
+
+    it('skips expired entries and ledger rows, and counts the ledger rows', async () => {
+      const past = Math.floor(Date.now() / 1000) - 60;
+      const built = await build({ entries: [
+        { key: 'live', value: 1, metadata: {} },
+        { key: 'gone', value: 2, metadata: { expires_at: past } },
+        { key: 'events:1', value: { a: 1 }, metadata: { ledger: { chain: 0 } } },
+        { key: 'events:2', value: { a: 2 }, metadata: { ledger: { chain: 0 } } }
+      ] });
+      expect(keysOf(built)).to.deep.equal(['live']);
+      expect(built.copied).to.equal(1);
+      expect(built.ledgerRows).to.equal(2);
+    });
+
+    it('warns with the error code only when a key cannot be copied', async () => {
+      const built = await build({
+        indexes: [{ name: 'byEmail', collection: 'user', fields: ['email'], unique: true }],
+        entries: [
+          { key: 'user:secret-key-name-1', value: { email: 'a' }, metadata: {} },
+          { key: 'user:secret-key-name-2', value: { email: 'a' }, metadata: {} }
+        ]
+      });
+      expect(built.copied).to.equal(1);
+      expect(built.warnings).to.deep.equal(['KV store sessions: some keys from the portal could not be copied locally (UNIQUE_VIOLATION).']);
+      expect(built.warnings.join('\n')).to.not.include('secret-key-name');
+    });
+
+    it('warns for an index that cannot be declared, and for an index item that is not an object', async () => {
+      const built = await build({ indexes: [null, 'text', { name: 'bad name', collection: 'item', fields: [] }, INDEXES[0]] });
+      expect(built.warnings).to.deep.equal([
+        'KV store sessions: index ? from the portal could not be declared locally (VALIDATION).',
+        'KV store sessions: index ? from the portal could not be declared locally (VALIDATION).',
+        'KV store sessions: index bad name from the portal could not be declared locally (VALIDATION).'
+      ]);
+      expect(built.data.indexes.map(([name]) => name)).to.deep.equal(['byColor']);
+    });
+  });
+
+  describe('remoteLines', () => {
+    const built = { copied: 7, masked: 1, ledgerRows: 0 };
+    it('names the cap that stopped the read', () => {
+      expect(remoteLines({ name: 's', truncated: true, stoppedBy: 'keys' }, built, [])).to.deep.equal(['KV store s: copied the first 7 keys only (limit 10000). Writes stay local.']);
+      expect(remoteLines({ name: 's', truncated: true, stoppedBy: 'requests' }, built, [])).to.deep.equal(['KV store s: copied the first 7 keys only (request limit 200). Writes stay local.']);
+      expect(remoteLines({ name: 's', truncated: true, stoppedBy: 'cursor' }, built, [])).to.deep.equal(['KV store s: copied the first 7 keys only (the portal ended the list early). Writes stay local.']);
+      expect(remoteLines({ name: 's', truncated: false, stoppedBy: null }, built, [])).to.deep.equal(['KV store s: copied 7 keys from the portal (1 encrypted values masked).']);
+    });
+
+    it('adds the count of ledger entries not copied, only when there are some', () => {
+      const ledger = { ...built, ledgerRows: 3 };
+      expect(remoteLines({ name: 's', truncated: false, stoppedBy: null }, ledger, [])).to.deep.equal(['KV store s: copied 7 keys from the portal (1 encrypted values masked) (3 ledger entries not copied).']);
+      expect(remoteLines({ name: 's', truncated: true, stoppedBy: 'keys' }, ledger, [])).to.deep.equal(['KV store s: copied the first 7 keys only (limit 10000) (3 ledger entries not copied). Writes stay local.']);
+    });
+  });
+
+  describe('remoteOverlay', () => {
+    it('rolls the remote store back when the save fails', async () => {
+      const disk = { v: 1, stores: [{ id: 'other', items: [] }] };
+      let fail = false;
+      const inner = {
+        load: () => disk,
+        changed: () => false,
+        transaction: async (run) => {
+          const next = await run(disk);
+          if (fail) throw new Error('disk full');
+          disk.stores = next.stores;
+        }
+      };
+      const overlay = remoteOverlay(inner, 'remote');
+      overlay.setRemote({ id: 'remote', items: [['a', 1]] });
+      fail = true;
+      const write = (doc) => ({ ...doc, stores: doc.stores.map((store) => (store.id === 'remote' ? { ...store, items: [['a', 2]] } : store)) });
+      const error = await failure(overlay.storage.transaction(async (fresh) => write(fresh)));
+      expect(error.message).to.equal('disk full');
+      expect(overlay.storage.load().stores.find((store) => store.id === 'remote').items).to.deep.equal([['a', 1]]);
+      fail = false;
+      await overlay.storage.transaction(async (fresh) => write(fresh));
+      expect(overlay.storage.load().stores.find((store) => store.id === 'remote').items).to.deep.equal([['a', 2]]);
+      expect(disk.stores.map((store) => store.id)).to.deep.equal(['other']);
+    });
+  });
+
+  describe('openLocalKv with a remote store', () => {
+    const STORES = [{ name: 'sessions', indexes: [], initialValues: [] }, { name: 'local', indexes: [], initialValues: [] }];
+    const SNAPSHOT_KEY = 'snapshot-key-never-on-disk';
+    const open = (root, remote) => openLocalKv({ root, org: 'acme', project: 'site', stores: STORES, ledgers: [], ...(remote ? { remote } : {}) });
+    const snapshot = () => ({ name: 'sessions', format: 2, indexes: [], entries: [{ key: SNAPSHOT_KEY, value: SNAPSHOT_VALUE, metadata: {} }] });
+
+    it('keeps every write of two instances on one state, and no snapshot data on disk', async () => {
+      const root = path.join(tmp, 'site');
+      fs.mkdirSync(root, { recursive: true });
+      const plain = await open(root);
+      await plain.seed();
+      await plain.kvStore.open('acme-site-sessions').set('old', 'disk copy');
+      const remote = await open(root, 'sessions');
+      await remote.seed();
+      await remote.loadRemote(snapshot());
+      const r = (name) => remote.kvStore.open(`acme-site-${name}`);
+      const p = (name) => plain.kvStore.open(`acme-site-${name}`);
+      await Promise.all(Array.from({ length: 10 }, (_, i) => [
+        r('sessions').set(`remote-${i}`, LOCAL_WRITE),
+        r('local').set(`from-remote-${i}`, i),
+        p('local').set(`from-plain-${i}`, i),
+        p('sessions').set(`disk-${i}`, i)
+      ]).flat());
+      for (let i = 0; i < 10; i++) {
+        expect(await r('sessions').get(`remote-${i}`)).to.equal(LOCAL_WRITE);
+        expect(await r('local').get(`from-plain-${i}`)).to.equal(i);
+        expect(await p('local').get(`from-remote-${i}`)).to.equal(i);
+        expect(await p('sessions').get(`disk-${i}`)).to.equal(i);
+        expect(await p('sessions').get(`remote-${i}`)).to.equal(null);
+      }
+      expect(await r('sessions').get(SNAPSHOT_KEY)).to.equal(SNAPSHOT_VALUE);
+      expect(await p('sessions').get(SNAPSHOT_KEY)).to.equal(null);
+      expect(await p('sessions').get('old')).to.equal('disk copy');
+      const fresh = await open(root);
+      expect(await fresh.kvStore.open('acme-site-sessions').get('disk-9')).to.equal(9);
+      expect(await fresh.kvStore.open('acme-site-local').get('from-remote-9')).to.equal(9);
+      for (const file of filesUnder(root)) {
+        const text = fs.readFileSync(file, 'latin1');
+        for (const value of [SNAPSHOT_VALUE, SNAPSHOT_KEY, LOCAL_WRITE]) expect(text, `${value} in ${file}`).to.not.include(value);
+      }
+    });
+
+    it('refuses a seed after the remote store is loaded', async () => {
+      for (const memory of [false, true]) {
+        const root = path.join(tmp, `seed-${memory}`);
+        fs.mkdirSync(root, { recursive: true });
+        const kv = await openLocalKv({ root, org: 'acme', project: 'site', stores: STORES, ledgers: [], remote: 'sessions', memory });
+        await kv.seed();
+        await kv.loadRemote(snapshot());
+        const error = await failure(kv.seed());
+        expect(error.message).to.equal('The --kv-remote store is loaded: the seed must run before it.');
+      }
+    });
   });
 
   it('needs the portal organisation and project', () => {

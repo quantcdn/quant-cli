@@ -485,7 +485,7 @@ async function localKv(options, { log, print, portal }) {
 // environment; the org and project are the serve identity.
 async function pulledProject(options, { env = process.env, fetchImpl } = {}) {
   if (!options.pullRules) return null;
-  const { customer, project, token, base } = portalOptions({ clientid: options.org, project: options.project }, env);
+  const { customer, project, token, base } = portalOptions({ clientid: options.org, project: options.project }, env, '--pull-rules');
   const client = createPortalClient({ base, token, ...(fetchImpl ? { fetchImpl } : {}) });
   return pullProject(client, { customer, project });
 }

@@ -87,6 +87,7 @@ describe('remote KV read', () => {
       expect(pages.map(c => c.query.cursor)).to.deep.equal([undefined, '1000', '2000']);
       expect(pages[0].query.limit).to.equal('1000');
       expect(result.truncated).to.equal(false);
+      expect(result.stoppedBy).to.equal(null);
     });
 
     it('batches values at 100 keys per call', async () => {
@@ -131,6 +132,7 @@ describe('remote KV read', () => {
       const result = await readStore(client, CTX, 'abc', { maxKeys: 1500 });
       expect(result.entries).to.have.length(1500);
       expect(result.truncated).to.equal(true);
+      expect(result.stoppedBy).to.equal('keys');
     });
 
     it('stops at maxRequests and sets truncated', async () => {
@@ -139,6 +141,7 @@ describe('remote KV read', () => {
       expect(calls).to.have.length(4);
       expect(result.requests).to.equal(4);
       expect(result.truncated).to.equal(true);
+      expect(result.stoppedBy).to.equal('requests');
     });
 
     it('reports not linked on 404 from a store route', async () => {
@@ -162,10 +165,12 @@ describe('remote KV read', () => {
       const cut = await readStore(more.client, CTX, 'abc', { maxKeys: 1000 });
       expect(cut.entries).to.have.length(1000);
       expect(cut.truncated).to.equal(true);
+      expect(cut.stoppedBy).to.equal('keys');
       expect(more.calls.filter(c => c.route === '/abc/keys')).to.have.length(1);
       const exact = await readStore(portal({ total: 1000 }).client, CTX, 'abc', { maxKeys: 1000 });
       expect(exact.entries).to.have.length(1000);
       expect(exact.truncated).to.equal(false);
+      expect(exact.stoppedBy).to.equal(null);
     });
 
     // A fake portal with one fixed keys page: `page` is the keys reply.
@@ -187,6 +192,7 @@ describe('remote KV read', () => {
         const result = await readStore(client, CTX, 'abc');
         expect(result.entries).to.have.length(1);
         expect(result.truncated).to.equal(true);
+        expect(result.stoppedBy).to.equal('cursor');
         expect(calls.filter(route => route === '/abc/keys')).to.have.length(1);
       }
     });
@@ -197,6 +203,7 @@ describe('remote KV read', () => {
       expect(calls).to.have.length(9);
       expect(result.requests).to.equal(9);
       expect(result.truncated).to.equal(true);
+      expect(result.stoppedBy).to.equal('requests');
     });
 
     it('counts 429 retries in requests and in the cap through onRequest', async () => {

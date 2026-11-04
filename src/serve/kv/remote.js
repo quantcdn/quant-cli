@@ -10,6 +10,7 @@ import { createPortalClient, portalOptions } from '../portal/client.js';
 import { findStore, readStore } from '../portal/kv-remote.js';
 
 export const REMOTE_MAX_KEYS = 10000;
+export const REMOTE_MAX_REQUESTS = 200;
 const MASKED = '[ENCRYPTED]';
 // Portal index states that do not serve queries: they are not declared.
 const UNUSED_STATES = ['FAILED', 'DROPPING'];
@@ -20,6 +21,7 @@ const UNUSED_STATES = ['FAILED', 'DROPPING'];
  * error, conflicts, job) are dropped.
  */
 export function toLocalIndex(def) {
+  if (def === null || typeof def !== 'object' || Array.isArray(def)) return null;
   const out = {
     name: def.name,
     collection: def.collection,
@@ -37,14 +39,14 @@ export function toLocalIndex(def) {
  * A PortalError stops the start-up with its one-line message.
  */
 export async function readRemoteStore({ name, org, project }, { env = process.env, fetchImpl } = {}) {
-  const ids = portalOptions({ clientid: org, project }, env);
+  const ids = portalOptions({ clientid: org, project }, env, '--kv-remote');
   const counter = { count: 0 };
   const client = createPortalClient({
     base: ids.base, token: ids.token, onRequest: () => { counter.count += 1; }, ...(fetchImpl ? { fetchImpl } : {})
   });
   const ctx = { customer: ids.customer, project: ids.project, name };
   const store = await findStore(client, ctx);
-  const snapshot = await readStore(client, { ...ctx, counter }, store.id, { maxKeys: REMOTE_MAX_KEYS });
+  const snapshot = await readStore(client, { ...ctx, counter }, store.id, { maxKeys: REMOTE_MAX_KEYS, maxRequests: REMOTE_MAX_REQUESTS });
   return { name, format: store.format ?? 2, ...snapshot };
 }
 
@@ -57,12 +59,16 @@ function putOptions(metadata, nowMs) {
   return ttl > 0 ? { ...options, ttl } : null;
 }
 
-// A ledger entry, or an entry with no value, is not copied.
-const copyable = (entry) => entry.value !== undefined && entry.metadata?.ledger === undefined;
+const isLedgerRow = (entry) => entry.metadata?.ledger !== undefined;
 
+// A ledger entry (counted), an entry with no value, or an expired entry is not copied.
 async function writeEntry(backend, id, entry, result) {
+  if (isLedgerRow(entry)) {
+    result.ledgerRows += 1;
+    return;
+  }
   const options = putOptions(entry.metadata || {}, backend.now());
-  if (!copyable(entry) || options === null) return;
+  if (entry.value === undefined || options === null) return;
   try {
     await backend.put(id, entry.key, JSON.stringify(entry.value), options);
     result.copied += 1;
@@ -72,14 +78,20 @@ async function writeEntry(backend, id, entry, result) {
   }
 }
 
+const notDeclared = (store, index, code) => `KV store ${store}: index ${index} from the portal could not be declared locally (${code}).`;
+
 async function declareIndexes(backend, id, { name, indexes }, { building, warnings }) {
   for (const def of indexes.filter((item) => !UNUSED_STATES.includes(String(item?.state).toUpperCase()))) {
     const local = toLocalIndex(def);
+    if (!local) {
+      warnings.push(notDeclared(name, '?', 'VALIDATION'));
+      continue;
+    }
     try {
       await backend.declareIndex(id, local);
       if (building) await backend.setIndexState(id, local.name, 'BUILDING');
     } catch (err) {
-      warnings.push(`KV store ${name}: index ${local.name} from the portal could not be declared locally (${err.code || err.message}).`);
+      warnings.push(notDeclared(name, local.name, err.code || err.message));
     }
   }
 }
@@ -89,7 +101,7 @@ async function declareIndexes(backend, id, { name, indexes }, { building, warnin
  * backend in memory that starts from `base` (the keys and clock offset of
  * the local backend) with no stores: the index definitions first, then each
  * entry with its metadata (secret, ttl).
- * @returns {Promise<{ data: Object, copied: number, masked: number, warnings: string[] }>}
+ * @returns {Promise<{ data: Object, copied: number, masked: number, ledgerRows: number, warnings: string[] }>}
  */
 export async function buildRemoteStore({ base, id, snapshot, backendOptions, building = false }) {
   const { backend } = createLocalKv({ ...backendOptions, storage: undefined });
@@ -97,20 +109,32 @@ export async function buildRemoteStore({ base, id, snapshot, backendOptions, bui
   await backend.createStore({ id, format: snapshot.format });
   const warnings = [];
   await declareIndexes(backend, id, snapshot, { building, warnings });
-  const result = { copied: 0, masked: 0, failed: new Set() };
+  const result = { copied: 0, masked: 0, ledgerRows: 0, failed: new Set() };
   for (const entry of snapshot.entries) await writeEntry(backend, id, entry, result);
   if (result.failed.size > 0) {
     warnings.push(`KV store ${snapshot.name}: some keys from the portal could not be copied locally (${[...result.failed].join(', ')}).`);
   }
   const data = backend.snapshot().stores.find((store) => store.id === id);
-  return { data, copied: result.copied, masked: result.masked, warnings };
+  return { data, copied: result.copied, masked: result.masked, ledgerRows: result.ledgerRows, warnings };
+}
+
+// The cap that stopped a truncated read, in the start-up line.
+const STOPPED = {
+  keys: `limit ${REMOTE_MAX_KEYS}`,
+  requests: `request limit ${REMOTE_MAX_REQUESTS}`,
+  cursor: 'the portal ended the list early'
+};
+
+function copiedLine({ name, truncated, stoppedBy }, { copied, masked, ledgerRows = 0 }) {
+  const ledger = ledgerRows > 0 ? ` (${ledgerRows} ledger entries not copied)` : '';
+  if (!truncated) return `KV store ${name}: copied ${copied} keys from the portal (${masked} encrypted values masked)${ledger}.`;
+  return `KV store ${name}: copied the first ${copied} keys only (${STOPPED[stoppedBy] || STOPPED.keys})${ledger}. Writes stay local.`;
 }
 
 /** The start-up lines of the remote store. */
-export function remoteLines({ name, truncated }, { copied, masked }, ledgers) {
-  const lines = [truncated
-    ? `KV store ${name}: copied the first ${copied} keys only (limit ${REMOTE_MAX_KEYS}). Writes stay local.`
-    : `KV store ${name}: copied ${copied} keys from the portal (${masked} encrypted values masked).`];
+export function remoteLines(snapshot, built, ledgers) {
+  const { name } = snapshot;
+  const lines = [copiedLine(snapshot, built)];
   const declared = ledgers.some((entry) => entry.store === name && entry.defs.length > 0);
   if (declared) lines.push(`Ledgers of ${name} are not copied from the portal; declare local ledgers in quant/kv-ledgers.json.`);
   return lines;
@@ -137,12 +161,17 @@ export function remoteOverlay(storage, id) {
     storage: {
       load: () => withRemote(storage.load()),
       changed: () => storage.changed(),
-      transaction: (run) => storage.transaction(async (fresh) => {
-        const disk = fresh ? fresh.stores.find((store) => store.id === id) ?? null : null;
-        const next = await run(withRemote(fresh));
-        if (remote) remote = next.stores.find((store) => store.id === id) ?? remote;
-        return splice(next, id, disk);
-      })
+      // The new remote state is kept only after the save: a failed save rolls it back too.
+      transaction: async (run) => {
+        let after = remote;
+        await storage.transaction(async (fresh) => {
+          const disk = fresh ? fresh.stores.find((store) => store.id === id) ?? null : null;
+          const next = await run(withRemote(fresh));
+          if (remote) after = next.stores.find((store) => store.id === id) ?? remote;
+          return splice(next, id, disk);
+        });
+        remote = after;
+      }
     },
     setRemote: (data) => { remote = data; }
   };
