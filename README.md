@@ -266,7 +266,7 @@ Flags:
 - `--meta` - Template metadata with the KV stores (default: `meta` in `quant/serve.json`, then `quant/meta.json`).
 - `--fixtures` - Directory of KV fixtures (default: `quant/kv-fixtures`).
 - `--org` - Organisation (default: `org` in `quant/serve.json`, the `quant.json` clientid, then `local`).
-- `--project` - Project (default: the `quant.json` project, then `dev`).
+- `--project` - Project (default: `project` in `quant/serve.json`, the `quant.json` project, then `dev`). `quant serve` has no `--project` option of its own: it uses the global `--project` option of the CLI, so `quant serve --help` lists it with the global options.
 - `--domain` - Host for the domain match of rules (default: the Host of the request).
 - `--user-name` - Value for `{user_name}` in KV seed values (default: `git config user.name`, then `Owner`).
 - `--build` - Command to run once before the server starts.
@@ -311,7 +311,7 @@ Flags:
 - `--index` - `list`: index name.
 - `--equals` - `list`: `field=value` for the index. Repeat the flag for more fields.
 - `--if-version` - `set`: write only if the key has this version.
-- `--secret` - `set`: store the value encrypted, as `set(key, value, { secret: true })` in a function does. A function reads the value as usual. `list` shows `encrypted: true` and the value `[ENCRYPTED]`. `get --local` shows the value, because the local store is yours. A key in an indexed collection cannot hold a secret (`INDEX_FIELD_ENCRYPTED`). The local store uses local keys only: do not put production secrets in it.
+- `--secret` - `set`: store the value encrypted, as `set(key, value, { secret: true })` in a function does. A function reads the value as usual. `list` shows `encrypted: true` and the value `[ENCRYPTED]`. `set` prints the entry with the value `[ENCRYPTED]`, so the value does not go into the terminal output or CI logs. `get --local` shows the value, because the local store is yours. The value is a command argument, so it goes into your shell history; the interactive menu asks for a secret value with hidden input. With `get`, `list` or `delete`, `--secret` is ignored and the command prints one notice. A key in an indexed collection cannot hold a secret (`INDEX_FIELD_ENCRYPTED`). The local store uses local keys only: do not put production secrets in it.
 - `--org` - Organisation (default: `org` in `quant/serve.json`, the `quant.json` clientid, then `local`).
 - `--project` - Project (default: `project` in `quant/serve.json`, the `quant.json` project, then `dev`).
 - `--meta` - Template metadata with the KV stores (default: `meta` in `quant/serve.json`, then `quant/meta.json`).
@@ -455,13 +455,15 @@ Each field is optional.
 
 For `org`, `project` and `meta`, the order is: the flag, then `quant/serve.json`, then `quant.json` (org and project only), then the default (`local`, `dev`, `quant/meta.json`). `quant serve` reads these three fields only at start-up, also with `--watch`. If `quant/serve.json` and `quant.json` set a different org (or project) and no flag chooses, `quant serve` and `quant kv --local` print one warning line that names the value they use.
 
+The local store ids contain the org and the project (for example `local-dev-orbit`). If you add or change `org` or `project` in `quant/serve.json`, the store ids change (for example to `acme-dev-orbit`), and the local data that you wrote before seems to be missing. The data is still in `.quant/kv/`. Set the old values again to see it.
+
 ```json
 { "org": "acme", "project": "marketing-site" }
 ```
 
 The order is the order of the edge: global headers, basic authentication, rules, the trailing-slash redirect, then static content.
 
-`quant/serve.json` is local only. No deploy command reads it, and `quant deploy` never uploads it. `quant serve` never prints the password. Do not put a production password in the file. A file with the wrong shape stops `quant serve` at start-up, with a message that names the field. With `--watch`, `quant serve` reads the file again when it changes. If the new file has the wrong shape, `quant serve` prints the message and keeps the last valid settings.
+`quant/serve.json` is local only. No deploy command reads it, and `quant deploy` never uploads it. `quant serve` never prints the password. Do not put a production password in the file. A file with the wrong shape stops `quant serve` at start-up, with a message that names the field. It also stops `quant kv --local` (exit code 1), because that command reads the `org`, `project` and `meta` defaults from the same file. With `--watch`, `quant serve` reads the file again when it changes. If the new file has the wrong shape, `quant serve` prints the message and keeps the last valid settings.
 
 ## Edge libraries in quant serve
 
