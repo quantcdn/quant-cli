@@ -91,13 +91,21 @@ function need(value, label) {
   return value;
 }
 
+// The set options: ifVersion, and secret (the value is stored encrypted, as
+// with `secret: true` in a function: a function reads it, a list shows it masked).
+function setOptions(args) {
+  const options = {};
+  if (args['if-version'] !== undefined) options.ifVersion = args['if-version'];
+  if (args.secret === true) options.secret = true;
+  return Object.keys(options).length > 0 ? options : undefined;
+}
+
 const OPERATIONS = {
   list: (store, args) => listAll(store, args),
   get: (store, args) => store.getEntry(need(args.key, 'The key')),
   async set(store, args) {
     const value = parseJson(need(args.value, 'The JSON value'));
-    const ifVersion = args['if-version'];
-    await store.set(need(args.key, 'The key'), value, ifVersion === undefined ? undefined : { ifVersion });
+    await store.set(need(args.key, 'The key'), value, setOptions(args));
     return store.getEntry(args.key);
   },
   async delete(store, args) {
@@ -172,6 +180,7 @@ export default {
     .option('index', { type: 'string', describe: 'list: index name' })
     .option('equals', { type: 'string', array: true, describe: 'list: field=value for the index (repeat)' })
     .option('if-version', { type: 'string', describe: 'set: write only if the key has this version' })
+    .option('secret', { type: 'boolean', describe: 'set: store the value encrypted (a list shows it masked)' })
     .option('org', { type: 'string', describe: 'Organisation (default: quant.json clientid, then local)' })
     .option('project', { type: 'string', describe: 'Project (default: quant.json project, then dev)' })
     .option('meta', { type: 'string', default: DEFAULT_FILES.meta, describe: 'Template metadata with KV stores' }),

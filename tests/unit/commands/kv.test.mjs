@@ -107,6 +107,57 @@ describe('kv command', () => {
     expect(lastJson().map((item) => item.key)).to.deep.equal(['workspace:w1:project:p1']);
   });
 
+  describe('set --secret', () => {
+    it('stores the value encrypted: get reads it, list masks it, the state file does not hold it', async () => {
+      expect(await run(['--local', 'set', 'orbit', 'api:token', '"s3cr3t-value"', '--secret'])).to.equal(0);
+      expect(lastJson()).to.include({ key: 'api:token', value: 's3cr3t-value', encrypted: true });
+      expect(await run(['--local', 'list', 'orbit', '--prefix', 'api:'])).to.equal(0);
+      expect(lastJson()).to.have.length(1);
+      expect(lastJson()[0]).to.include({ key: 'api:token', encrypted: true, value: '[ENCRYPTED]' });
+      const state = fs.readFileSync(path.join(root, '.quant', 'kv', 'state.json'), 'utf8');
+      expect(state).not.to.include('s3cr3t-value');
+    });
+
+    it('stores a plain value without --secret', async () => {
+      expect(await run(['--local', 'set', 'orbit', 'plain', '1'])).to.equal(0);
+      expect(lastJson().encrypted).to.equal(false);
+    });
+
+    it('works with --if-version', async () => {
+      await run(['--local', 'set', 'orbit', 'a', '1']);
+      const { version } = lastJson();
+      expect(await run(['--local', 'set', 'orbit', 'a', '2', '--secret', '--if-version', version])).to.equal(0);
+      expect(lastJson()).to.include({ value: 2, encrypted: true });
+    });
+
+    it('refuses a secret in an indexed collection', async () => {
+      const { stores } = loadProject({ root });
+      await openLocalKv({ root, org: 'local', project: 'dev', stores, indexState: 'active' });
+      expect(await run(['--local', 'set', 'orbit', 'workspace:w1:project:p1', '{"workspace":"w1"}', '--secret'])).to.equal(1);
+      expect(err[err.length - 1]).to.match(/^INDEX_FIELD_ENCRYPTED: /);
+    });
+
+    it('a function on a running server reads the secret value', async () => {
+      let stop;
+      const stopped = new Promise((resolve) => { stop = resolve; });
+      let url;
+      const options = resolveOptions({ dir: 'dist', port: 0 }, { root, gitUserName: () => null });
+      const running = runServe(options, { stop: stopped, print: () => {}, log: () => {}, onListening: (server) => { url = server.url; } });
+      await new Promise((resolve) => {
+        const check = () => (url ? resolve() : setTimeout(check, 20));
+        check();
+      });
+      try {
+        expect(await run(['--local', 'set', 'orbit', 'workspace:studio:settings', '{"name":"Secret name"}', '--secret'])).to.equal(0);
+        const res = await fetch(`${url}/api/workspace`);
+        expect((await res.json()).settings.name).to.equal('Secret name');
+      } finally {
+        stop();
+        await running;
+      }
+    });
+  });
+
   it('refuses an undeclared store', async () => {
     expect(await run(['--local', 'get', 'ghost', 'a'])).to.equal(1);
     expect(err).to.deep.equal(['FORBIDDEN: Access to KV store local-dev-ghost is not allowed']);

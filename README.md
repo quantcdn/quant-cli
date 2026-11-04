@@ -299,6 +299,7 @@ quant kv list notes --local --index by_author --equals author=ana
 quant kv get notes post:1 --local
 quant kv set notes post:1 '{"title":"Hello"}' --local
 quant kv set notes post:1 '{"title":"New"}' --local --if-version 3
+quant kv set notes api:token '"abc123"' --local --secret
 quant kv delete notes post:1 --local
 ```
 
@@ -310,6 +311,7 @@ Flags:
 - `--index` - `list`: index name.
 - `--equals` - `list`: `field=value` for the index. Repeat the flag for more fields.
 - `--if-version` - `set`: write only if the key has this version.
+- `--secret` - `set`: store the value encrypted, as `set(key, value, { secret: true })` in a function does. A function reads the value as usual. `list` shows `encrypted: true` and the value `[ENCRYPTED]`. `get --local` shows the value, because the local store is yours. A key in an indexed collection cannot hold a secret (`INDEX_FIELD_ENCRYPTED`). The local store uses local keys only: do not put production secrets in it.
 - `--org` - Organisation (default: the `quant.json` clientid, then `local`).
 - `--project` - Project (default: the `quant.json` project, then `dev`).
 - `--meta` - Template metadata with the KV stores (default: `quant/meta.json`).
