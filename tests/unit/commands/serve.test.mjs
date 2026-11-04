@@ -11,6 +11,7 @@ import serve, {
   runServe,
   startupLines,
   stopRun,
+  runExitLine,
   versionInfo,
   STOP_SIGNALS
 } from '../../../src/commands/serve.js';
@@ -445,6 +446,28 @@ describe('serve command', () => {
         if (pid === null && fs.existsSync(pidFile)) pid = Number(fs.readFileSync(pidFile, 'utf8'));
         if (pid) process.kill(pid, 'SIGKILL');
       }
+    });
+
+    it('stops the wait for the --proxy URL at once when it is aborted', async () => {
+      const port = await freePort();
+      const abort = new AbortController();
+      const started = Date.now();
+      setTimeout(() => abort.abort(), 100);
+      const line = await runExitLine({ pid: 999999 }, { code: 0, signal: null, proxy: `http://127.0.0.1:${port}`, waitMs: 5000, abort: abort.signal });
+      expect(Date.now() - started).to.be.below(1000);
+      expect(line).to.equal('The --run command stopped (exit code 0).');
+    });
+
+    it('aborts the wait for the --proxy URL when quant serve stops', async function () {
+      if (process.platform === 'win32') this.skip();
+      const port = await freePort();
+      const served = serveWith(`${JSON.stringify(process.execPath)} -e "process.exit(0)"`, `http://127.0.0.1:${port}`);
+      await new Promise((resolve) => setTimeout(resolve, 400));
+      const started = Date.now();
+      await served.stop();
+      await new Promise((resolve) => setTimeout(resolve, 100));
+      expect(Date.now() - started).to.be.below(1500);
+      expect(served.lines.filter((line) => line.startsWith('The --run command'))).to.deep.equal([]);
     });
 
     it('reports a failed command as before', async () => {

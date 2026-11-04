@@ -257,9 +257,11 @@ function startRun(command, root, print, proxy) {
     stdio: POSIX ? ['ignore', 'inherit', 'inherit'] : 'inherit'
   });
   child.on('error', (err) => print(`The --run command could not start: ${err.message}`));
+  // stopRun aborts the wait for the --proxy URL, so that it never keeps Node alive.
+  child.runAbort = new AbortController();
   child.on('exit', (code, signal) => {
     if (child.stopping) return;
-    runExitLine(child, { code, signal, proxy }).then((line) => {
+    runExitLine(child, { code, signal, proxy, abort: child.runAbort.signal }).then((line) => {
       if (!child.stopping) print(line);
     });
   });
@@ -276,23 +278,43 @@ function groupAlive(pid) {
   }
 }
 
-async function answers(url) {
+function requestSignal(abort) {
+  const timeout = AbortSignal.timeout(500);
+  return abort && AbortSignal.any ? AbortSignal.any([timeout, abort]) : timeout;
+}
+
+async function answers(url, abort) {
   try {
-    await fetch(url, { redirect: 'manual', signal: AbortSignal.timeout(500) });
+    await fetch(url, { redirect: 'manual', signal: requestSignal(abort) });
     return true;
   } catch (_err) {
     return false;
   }
 }
 
+// A delay that ends at once when abort fires.
+function pause(ms, abort) {
+  return new Promise((resolve) => {
+    const timer = setTimeout(done, ms);
+    function done() {
+      clearTimeout(timer);
+      if (abort) abort.removeEventListener('abort', done);
+      resolve();
+    }
+    if (abort) abort.addEventListener('abort', done, { once: true });
+  });
+}
+
 // True when the dev server answers within waitMs (it can still be starting).
-async function reachable(url, waitMs) {
+// False at once when abort fires.
+async function reachable(url, waitMs, abort) {
   const deadline = Date.now() + waitMs;
-  for (;;) {
-    if (await answers(url)) return true;
+  while (!(abort && abort.aborted)) {
+    if (await answers(url, abort)) return true;
     if (Date.now() >= deadline) return false;
-    await new Promise((resolve) => setTimeout(resolve, 200));
+    await pause(200, abort);
   }
+  return false;
 }
 
 /**
@@ -302,13 +324,13 @@ async function reachable(url, waitMs) {
  * URL still answers (the dev server left the group, or on Windows), quant
  * serve cannot stop it.
  */
-export async function runExitLine(child, { code, signal, proxy, waitMs = RUN_BACKGROUND_WAIT_MS }) {
+export async function runExitLine(child, { code, signal, proxy, waitMs = RUN_BACKGROUND_WAIT_MS, abort }) {
   const stopped = `The --run command stopped (${signal || `exit code ${code}`}).`;
   if (signal || code !== 0) return stopped;
   if (groupAlive(child.pid)) {
     return 'The --run command moved to the background (exit code 0). quant serve keeps serving and stops its process group when quant serve stops.';
   }
-  if (proxy && await reachable(proxy, waitMs)) {
+  if (proxy && await reachable(proxy, waitMs, abort)) {
     return `The --run command exited (exit code 0), but the dev server at ${proxy} still answers. quant serve keeps serving, but it cannot stop that dev server. Stop it yourself.`;
   }
   return stopped;
@@ -335,11 +357,16 @@ async function waitForGroupEnd(pid, graceMs) {
   return !groupAlive(pid);
 }
 
+function abortExitWait(child) {
+  if (child && child.runAbort) child.runAbort.abort();
+}
+
 /**
  * Stop the --run command: SIGTERM to its process group, then SIGKILL when
  * the group is still alive after the grace period.
  */
 export async function stopRun(child, { graceMs = RUN_GRACE_MS } = {}) {
+  abortExitWait(child);
   if (!child || !child.pid || (!POSIX && !running(child))) return;
   child.stopping = true;
   signalGroup(child, 'SIGTERM');
