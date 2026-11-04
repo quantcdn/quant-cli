@@ -453,7 +453,7 @@ Each field is optional.
 - `org`, `project` - The organisation and the project for the local KV store ids, for `quant serve` and `quant kv --local`. Use them when the project has no `quant.json`. Each value is 1 to 100 letters, digits, `.`, `_` or `-`.
 - `meta` - The template metadata file with the KV stores (default: `quant/meta.json`). The path is relative to the project directory and must stay in it.
 
-For `org`, `project` and `meta`, the order is: the flag, then `quant/serve.json`, then `quant.json` (org and project only), then the default (`local`, `dev`, `quant/meta.json`). `quant serve` reads these three fields only at start-up, also with `--watch`.
+For `org`, `project` and `meta`, the order is: the flag, then `quant/serve.json`, then `quant.json` (org and project only), then the default (`local`, `dev`, `quant/meta.json`). `quant serve` reads these three fields only at start-up, also with `--watch`. If `quant/serve.json` and `quant.json` set a different org (or project) and no flag chooses, `quant serve` and `quant kv --local` print one warning line that names the value they use.
 
 ```json
 { "org": "acme", "project": "marketing-site" }

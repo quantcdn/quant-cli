@@ -111,9 +111,24 @@ function siteOptions(args, local) {
   };
 }
 
+// A warning for each of org and project that quant/serve.json and quant.json
+// set to different values, when no flag chooses: quant/serve.json wins.
+function precedenceWarnings(args, local, saved) {
+  const fields = [
+    { name: 'org', flag: first([args.org, args.clientid], undefined), saved: saved.clientid, field: 'clientid' },
+    { name: 'project', flag: first([args.project], undefined), saved: saved.project, field: 'project' }
+  ];
+  return fields
+    .filter((item) => item.flag === undefined && local[item.name] !== undefined && first([item.saved], undefined) !== undefined &&
+      String(item.saved) !== local[item.name])
+    .map((item) => `quant/serve.json ${item.name} "${local[item.name]}" is used, not quant.json ${item.field} "${item.saved}": ` +
+      `quant/serve.json wins over quant.json. Pass --${item.name} to choose.`);
+}
+
 function identityOptions(args, root, gitUserName, local) {
   const saved = readQuantJson(root);
   return {
+    configWarnings: precedenceWarnings(args, local, saved),
     org: first([args.org, args.clientid, local.org, saved.clientid], DEFAULTS.org),
     project: first([args.project, local.project, saved.project], DEFAULTS.project),
     domain: first([args.domain], undefined),
@@ -448,7 +463,8 @@ export async function runServe(options, { stop, print = console.log, log, kvStor
   if (options.build) runBuild(options.build, options.root);
   const kv = await kvFor(options, kvStore, log, print);
   const server = await startOrShowKeys(serverOptions(options, { kvStore: kv.kvStore, backend: kv.backend, log }, print), kv, print);
-  const lines = startupLines({ url: server.url, host: options.host, clock: options.clock, ...startupSummary(server.summary, kv) });
+  const summary = { ...server.summary, warnings: [...(options.configWarnings || []), ...server.summary.warnings] };
+  const lines = startupLines({ url: server.url, host: options.host, clock: options.clock, ...startupSummary(summary, kv) });
   for (const line of lines) print(line);
   const child = options.run ? startRun(options.run, options.root, print, options.proxy) : null;
   watchRun(server, child);

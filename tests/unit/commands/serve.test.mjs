@@ -129,6 +129,37 @@ describe('serve command', () => {
       expect(resolveOptions(parse([]), { root: tmp, gitUserName: noGit })).to.include({ org: 'acme', project: 'saved-project' });
     });
 
+    it('warns when quant/serve.json and quant.json set a different org or project', () => {
+      fs.writeFileSync(path.join(tmp, 'quant.json'), JSON.stringify({ clientid: 'saved', project: 'saved-project' }));
+      serveJson({ org: 'acme', project: 'saved-project' });
+      expect(resolveOptions(parse([]), { root: tmp, gitUserName: noGit }).configWarnings).to.deep.equal([
+        'quant/serve.json org "acme" is used, not quant.json clientid "saved": quant/serve.json wins over quant.json. Pass --org to choose.'
+      ]);
+      serveJson({ project: 'site' });
+      expect(resolveOptions(parse([]), { root: tmp, gitUserName: noGit }).configWarnings).to.deep.equal([
+        'quant/serve.json project "site" is used, not quant.json project "saved-project": quant/serve.json wins over quant.json. Pass --project to choose.'
+      ]);
+    });
+
+    it('does not warn when a flag chooses, or when the values are the same', () => {
+      fs.writeFileSync(path.join(tmp, 'quant.json'), JSON.stringify({ clientid: 'saved', project: 'p' }));
+      serveJson({ org: 'acme', project: 'p' });
+      expect(resolveOptions(parse(['--org', 'x']), { root: tmp, gitUserName: noGit }).configWarnings).to.deep.equal([]);
+      serveJson({ org: 'saved' });
+      expect(resolveOptions(parse([]), { root: tmp, gitUserName: noGit }).configWarnings).to.deep.equal([]);
+    });
+
+    it('prints the warning in the start-up output', async () => {
+      const root = path.join(tmp, 'project');
+      fs.cpSync(ORBIT, root, { recursive: true, filter: (src) => !src.includes(`${path.sep}.quant`) });
+      fs.writeFileSync(path.join(root, 'quant.json'), JSON.stringify({ clientid: 'saved' }));
+      fs.writeFileSync(path.join(root, 'quant', 'serve.json'), JSON.stringify({ org: 'acme' }));
+      const opts = resolveOptions({ dir: 'dist', port: 0, memory: true }, { root, gitUserName: noGit });
+      await runServe(opts, { stop: Promise.resolve(), print: (line) => output.push(line), log: () => {} });
+      const warnings = output.filter((line) => line.includes('wins over quant.json'));
+      expect(warnings).to.have.length(1);
+    });
+
     it('refuses an invalid value', () => {
       serveJson({ org: 'a b' });
       expect(() => resolveOptions(parse([]), { root: tmp, gitUserName: noGit })).to.throw('quant/serve.json: org must be');

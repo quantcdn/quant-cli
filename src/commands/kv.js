@@ -128,7 +128,8 @@ async function execute(args, root, error) {
   const stores = readStores(root, options.meta).map((store) => ({ ...store, indexes: [] }));
   const local = await openLocalKv({ root, org: options.org, project: options.project, stores });
   // The warnings come before the operation, so a failed operation keeps them.
-  for (const warning of [...local.warnings, ...pendingLedgerWarnings(local.backend, local.backend.storeIds())]) error(warning);
+  const warnings = [...options.configWarnings, ...local.warnings, ...pendingLedgerWarnings(local.backend, local.backend.storeIds())];
+  for (const warning of warnings) error(warning);
   return OPERATIONS[args.action](local.kvStore.open(id), args);
 }
 

@@ -187,6 +187,14 @@ describe('kv command', () => {
       expect(state()).to.include('other-web-orbit').and.not.to.include('acme-site-orbit');
     });
 
+    it('warns once when quant/serve.json and quant.json name a different org', async () => {
+      fs.writeFileSync(path.join(root, 'quant.json'), JSON.stringify({ clientid: 'saved', project: 'dev' }));
+      serveJson({ org: 'acme' });
+      expect(await run(['--local', 'set', 'orbit', 'a', '1'])).to.equal(0);
+      expect(err).to.deep.equal(['quant/serve.json org "acme" is used, not quant.json clientid "saved": quant/serve.json wins over quant.json. Pass --org to choose.']);
+      expect(state()).to.include('acme-dev-orbit');
+    });
+
     it('refuses an invalid quant/serve.json', async () => {
       serveJson({ project: '' });
       expect(await run(['--local', 'get', 'orbit', 'a'])).to.equal(1);
