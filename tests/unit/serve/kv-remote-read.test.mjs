@@ -54,6 +54,11 @@ describe('remote KV read', () => {
       expect(calls[0].route).to.equal('/');
     });
 
+    it('passes the store format through when the list reports 1 or 2', async () => {
+      expect(await findStore(portal({ stores: [{ id: 'abc', name: 'sessions', format: 1 }] }).client, CTX)).to.deep.equal({ id: 'abc', name: 'sessions', format: 1 });
+      expect(await findStore(portal({ stores: [{ id: 'abc', name: 'sessions', format: 'x' }] }).client, CTX)).to.deep.equal({ id: 'abc', name: 'sessions' });
+    });
+
     it('fails when the store is not linked', async () => {
       const { client } = portal({ stores: [{ id: 'z', name: 'other' }] });
       const error = await rejection(findStore(client, CTX));

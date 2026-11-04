@@ -283,7 +283,7 @@ Flags:
 - `--clock` - `real` or `manual` (default: `real`). With `manual`, the time of the local KV stops at the start time and, in a session, moves only with `POST /_quant_serve/clock`. See [Local ledgers](#local-ledgers).
 - `--version-info` - Print the versions of the CLI and its KV and test packages, then exit.
 - `--pull-rules` - Read the rules of the portal project one time at start, and run them with the rules of `quant/edge-rules.json`. See [Portal rules](#portal-rules---pull-rules).
-- `--kv-remote` - Not available yet. The command stops with a message.
+- `--kv-remote <name>` - Read the KV store `<name>` of the portal project one time at start (at most 10,000 keys) and serve it from memory. Writes stay local for the session, and a restart reads the portal again. The snapshot is never written to `.quant/`. Secret values read `[ENCRYPTED]`. The store must be in `quant/meta.json`, and the command needs `QUANT_API_TOKEN` and `QUANT_BASE_URL`.
 
 A key that `initial_values` reveals once is shown in a box when the store is first seeded. Save the key then. Quant serve also writes it to a file under `.quant/kv/`.
 

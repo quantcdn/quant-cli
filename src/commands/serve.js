@@ -17,10 +17,13 @@ import { LEDGERS_FILE, readLedgerFile } from '../serve/kv/ledgers.js';
 import { readServeConfig } from '../serve/project-config.js';
 import { createPortalClient, portalOptions } from '../serve/portal/client.js';
 import { pullProject } from '../serve/portal/pull-rules.js';
+import { readRemoteStore, remoteLines } from '../serve/kv/remote.js';
 
 const DEFAULTS = Object.freeze({ dir: 'dist', port: 8787, host: '127.0.0.1', org: 'local', project: 'dev', userName: 'Owner' });
-const LATER_RELEASE = ['kv-remote'];
-const PULL_IDENTITY = '--pull-rules needs the portal organisation and project: pass --org and --project, or set them in quant/serve.json or quant.json.';
+const LATER_RELEASE = [];
+const IDENTITY_HELP = 'pass --org and --project, or set them in quant/serve.json or quant.json.';
+const PULL_IDENTITY = `--pull-rules needs the portal organisation and project: ${IDENTITY_HELP}`;
+const REMOTE_IDENTITY = `--kv-remote needs the portal organisation and project: ${IDENTITY_HELP}`;
 const CLOCKS = ['real', 'manual'];
 const LOOPBACK_HOSTS = ['127.0.0.1', '::1', 'localhost'];
 const POSIX = process.platform !== 'win32';
@@ -139,15 +142,29 @@ function identityOptions(args, root, gitUserName, local) {
   };
 }
 
-// --pull-rules reads the rules of a real project, so the org and project
-// must be named (the local defaults are not a portal project).
-function pullOptions(args, root, local) {
-  if (args['pull-rules'] !== true) return { pullRules: false };
+// True when the org and project are named (the local defaults are not a portal project).
+function portalIdentity(args, root, local) {
   const saved = readQuantJson(root);
   const org = first([args.org, args.clientid, local.org, saved.clientid], undefined);
   const project = first([args.project, local.project, saved.project], undefined);
-  if (org === undefined || project === undefined) throw new Error(PULL_IDENTITY);
+  return org !== undefined && project !== undefined;
+}
+
+// --pull-rules reads the rules of a real project, so the org and project
+// must be named.
+function pullOptions(args, root, local) {
+  if (args['pull-rules'] !== true) return { pullRules: false };
+  if (!portalIdentity(args, root, local)) throw new Error(PULL_IDENTITY);
   return { pullRules: true };
+}
+
+// --kv-remote <name> reads one store of a real project.
+function remoteOptions(args, root, local) {
+  const name = args['kv-remote'];
+  if (name === undefined || name === null || name === false) return { kvRemote: undefined };
+  if (typeof name !== 'string' || name === '') throw new Error('--kv-remote needs the name of a KV store in quant/meta.json.');
+  if (!portalIdentity(args, root, local)) throw new Error(REMOTE_IDENTITY);
+  return { kvRemote: name };
 }
 
 function kvOptions(args) {
@@ -187,6 +204,7 @@ export function resolveOptions(args, { root = process.cwd(), gitUserName = readG
     ...siteOptions(args, local),
     ...identityOptions(args, root, gitUserName, local),
     ...pullOptions(args, root, local),
+    ...remoteOptions(args, root, local),
     ...kvOptions(args),
     ...devOptions(args)
   };
@@ -236,12 +254,13 @@ function clockLines(clock) {
  * rules, the edge libraries from the project, the warnings, then the
  * revealed keys in a box.
  */
-export function startupLines({ url, host, summary, keys = [], ledgers = [], clock = 'real', pull = null }) {
+export function startupLines({ url, host, summary, keys = [], ledgers = [], clock = 'real', pull = null, remote = [] }) {
   const libraries = summary.libraries.length > 0 ? summary.libraries.join(', ') : 'none';
   return [
     `quant serve is running at ${url}`,
     ...pullLines(pull),
     ...section('KV stores:', summary.stores.map((store) => `${store.name} → ${store.location || store.id}`)),
+    ...remote,
     ...ledgerLines(ledgers, clock),
     ...clockLines(clock),
     ...section('Rules:', summary.rules.map((rule) => `${rule.id} ${rule.type} ${rule.urls.join(' ')}`)),
@@ -415,15 +434,32 @@ function backendClock(mode) {
   return mode === 'manual' ? { clock: createVirtualClock(Date.now()) } : {};
 }
 
+// --kv-remote: the store must be in meta.json (so functions may open it).
+// The portal is read before the local state is opened.
+async function remoteSnapshot(options, stores, portal) {
+  const name = options.kvRemote;
+  if (!name) return null;
+  if (!stores.some((store) => store.name === name)) throw new Error(`--kv-remote ${name} is not a KV store in quant/meta.json.`);
+  return readRemoteStore({ name, org: options.org, project: options.project }, portal);
+}
+
+// The start-up lines of the remote store, after it is in the local KV.
+async function loadRemote(kv, snapshot, ledgers) {
+  if (!snapshot) return null;
+  const built = await kv.loadRemote(snapshot);
+  return { name: snapshot.name, lines: remoteLines(snapshot, built, ledgers) };
+}
+
 // The local KV of the project (unless the caller gives a kvStore): open the
 // state, declare the meta.json stores and indexes and the local ledgers,
-// then seed new stores.
-async function localKv(options, log, print) {
+// then seed new stores, then put the --kv-remote snapshot in memory.
+async function localKv(options, { log, print, portal }) {
   const files = { root: options.root, functions: options.functions, rules: options.rules, meta: options.meta, fixtures: options.fixtures };
   const { stores, fixtures } = loadProject(files);
   const ledgers = readLedgerFile({ root: options.root, stores, meta: options.meta });
+  const snapshot = await remoteSnapshot(options, stores, portal);
   const kv = await openLocalKv({
-    root: options.root, org: options.org, project: options.project, stores, ledgers,
+    root: options.root, org: options.org, project: options.project, stores, ledgers, remote: options.kvRemote,
     memory: options.memory, reset: options.reset, lagMs: options.kvLag, indexState: options.indexes,
     warn: log, ledgerWait: options.clock !== 'manual', realTime: options.clock === 'real', ...backendClock(options.clock)
   });
@@ -437,9 +473,10 @@ async function localKv(options, log, print) {
     throw err;
   }
   const keys = withFile(seeded.revealed);
+  const remote = await loadRemote(kv, snapshot, ledgers);
   return {
     kvStore: kv.kvStore, backend: kv.backend, ledgers, keys, warnings: kv.warnings,
-    location: kv.paths ? kv.paths.file : 'memory'
+    location: kv.paths ? kv.paths.file : 'memory', remote
   };
 }
 
@@ -477,8 +514,14 @@ function stderrLine(line) {
 }
 
 // The kvStore that the caller gives, else the local KV.
-async function kvFor(options, kvStore, log, print) {
-  return kvStore ? { kvStore, given: true } : localKv(options, log || stderrLine, print);
+async function kvFor(options, { kvStore, log, print, portal }) {
+  return kvStore ? { kvStore, given: true } : localKv(options, { log: log || stderrLine, print, portal });
+}
+
+// The KV state location of a store in the start-up lines.
+function storeLocation(store, kv) {
+  if (kv.remote && store.name === kv.remote.name) return `${store.id} in memory (snapshot from the portal)`;
+  return `${store.id} in ${kv.location}`;
 }
 
 // The start-up summary and keys, with the KV state location, warnings, ledgers and revealed keys.
@@ -486,9 +529,10 @@ function startupSummary(summary, kv) {
   if (kv.given) return { summary, keys: [] };
   return {
     ledgers: kv.ledgers,
+    remote: kv.remote ? kv.remote.lines : [],
     summary: {
       ...summary,
-      stores: summary.stores.map((store) => ({ ...store, location: `${store.id} in ${kv.location}` })),
+      stores: summary.stores.map((store) => ({ ...store, location: storeLocation(store, kv) })),
       warnings: [...summary.warnings, ...kv.warnings]
     },
     keys: kv.keys
@@ -524,12 +568,12 @@ function watchRun(server, child) {
  * (default: SIGINT, SIGTERM or SIGHUP).
  * @param {Object} options From resolveOptions().
  * @param {Object} [deps] stop, print, log, kvStore (replaces the local KV), onListening,
- *   env (QUANT_API_TOKEN and QUANT_BASE_URL for --pull-rules) and fetchImpl (the portal fetch).
+ *   env (QUANT_API_TOKEN and QUANT_BASE_URL for --pull-rules and --kv-remote) and fetchImpl (the portal fetch).
  */
 export async function runServe(options, { stop, print = console.log, log, kvStore, onListening, env, fetchImpl } = {}) {
   if (options.build) runBuild(options.build, options.root);
   const pulled = await pulledProject(options, { env, fetchImpl });
-  const kv = await kvFor(options, kvStore, log, print);
+  const kv = await kvFor(options, { kvStore, log, print, portal: { env, fetchImpl } });
   const server = await startOrShowKeys(serverOptions(withPull(options, pulled), { kvStore: kv.kvStore, backend: kv.backend, log }, print), kv, print);
   const pullWarnings = pulled ? pulled.warnings : [];
   const summary = { ...server.summary, warnings: [...(options.configWarnings || []), ...pullWarnings, ...server.summary.warnings] };
@@ -619,7 +663,7 @@ export default {
     .option('run', { type: 'string', describe: 'Long-running command (a dev server) to start beside the server' })
     .option('proxy', { type: 'string', describe: 'Dev server URL for requests that no rule ends' })
     .option('pull-rules', { type: 'boolean', describe: 'Read the portal rules at start and run them with the local rules (needs QUANT_API_TOKEN and QUANT_BASE_URL)' })
-    .option('kv-remote', { type: 'string', describe: 'Read-only remote KV store (a later release)' })
+    .option('kv-remote', { type: 'string', describe: 'Serve one portal KV store from a snapshot read at start; writes stay local (needs QUANT_API_TOKEN and QUANT_BASE_URL)' })
     .option('version-info', { type: 'boolean', describe: 'Print the versions and exit' }),
   promptArgs: async () => {
     const dir = await text({ message: 'Directory of the built site', placeholder: DEFAULTS.dir, defaultValue: DEFAULTS.dir });

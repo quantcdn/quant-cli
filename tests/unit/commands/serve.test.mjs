@@ -197,12 +197,13 @@ describe('serve command', () => {
     expect(() => resolveOptions({ clock: 'fast' }, { root: tmp, gitUserName: noGit })).to.throw('--clock must be real or manual');
   });
 
-  for (const flag of [['--kv-remote', 'orbit']]) {
-    it(`stops for ${flag[0]}, which is available in a later release`, () => {
-      expect(() => resolveOptions(parse(flag), { root: tmp, gitUserName: noGit }))
-        .to.throw(`${flag[0]} is available in a later release`);
-    });
-  }
+  it('takes --kv-remote with the portal org and project, and refuses it without them', () => {
+    const flags = ['--kv-remote', 'orbit', '--org', 'acme', '--project', 'site'];
+    expect(resolveOptions(parse(flags), { root: tmp, gitUserName: noGit }).kvRemote).to.equal('orbit');
+    expect(resolveOptions(parse([]), { root: tmp, gitUserName: noGit }).kvRemote).to.equal(undefined);
+    expect(() => resolveOptions(parse(['--kv-remote', 'orbit']), { root: tmp, gitUserName: noGit }))
+      .to.throw('--kv-remote needs the portal organisation and project');
+  });
 
   it('refuses --kv-lag that is not a whole number of milliseconds', () => {
     expect(() => resolveOptions(parse(['--kv-lag', '1.5']), { root: tmp, gitUserName: noGit })).to.throw('--kv-lag');

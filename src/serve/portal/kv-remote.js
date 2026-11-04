@@ -16,7 +16,7 @@ export async function findStore(client, { customer, project, name }) {
   const stores = status === 404 || !Array.isArray(body) ? [] : body;
   const found = stores.find(store => store && store.name === name);
   if (!found) throw notLinked(name);
-  return { id: found.id, name: found.name };
+  return { id: found.id, name: found.name, ...([1, 2].includes(found.format) ? { format: found.format } : {}) };
 }
 
 // Counts every request. With a counter (the onRequest hook of the client:
