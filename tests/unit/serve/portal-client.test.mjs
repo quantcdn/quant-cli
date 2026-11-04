@@ -222,4 +222,33 @@ describe('portal client', () => {
       }
     });
   });
+
+  describe('post', () => {
+    it('sends a JSON body with the bearer token', async () => {
+      const { calls, client } = setup([reply(200, { items: [] })]);
+      const result = await client.post('/x/batch-get', { keys: ['a'] }, { scope: 'kv:read', what: 'KV' });
+      expect(result).to.deep.equal({ status: 200, body: { items: [] } });
+      expect(calls[0].init.method).to.equal('POST');
+      expect(calls[0].init.body).to.equal('{"keys":["a"]}');
+      expect(calls[0].init.headers['Content-Type']).to.equal('application/json');
+      expect(calls[0].init.headers.Authorization).to.equal(`Bearer ${TOKEN}`);
+      expect(calls[0].init.redirect).to.equal('manual');
+    });
+
+    it('retries a 429, names the scope on 403 and returns 404', async () => {
+      const retry = setup([reply(429, {}, { 'retry-after': '1' }), reply(200, {})]);
+      await retry.client.post('/x', {});
+      expect(retry.waits).to.deep.equal([1000]);
+      const denied = await failure(setup([reply(403, {})]).client.post('/x', {}, { scope: 'kv:read', what: 'KV store a' }));
+      expect(denied.message).to.equal('QUANT_API_TOKEN lacks the kv:read scope for KV store a.');
+      expect(await setup([reply(404, {})]).client.post('/x', {})).to.deep.equal({ status: 404 });
+    });
+
+    it('redacts the token and hides network errors', async () => {
+      const leaked = await failure(setup([reply(500, { message: `bad ${TOKEN}` })]).client.post('/x', {}));
+      expect(leaked.message).to.not.include(TOKEN);
+      const down = await failure(setup([new Error(`boom ${TOKEN}`)]).client.post('/x', {}));
+      expect(down.message).to.not.include(TOKEN);
+    });
+  });
 });

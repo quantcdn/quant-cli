@@ -85,11 +85,14 @@ function refusal(status, scopeInfo) {
   return new PortalError(`QUANT_API_TOKEN lacks the ${scope} scope for ${what}.`, 403);
 }
 
-async function send({ base, token, fetchImpl }, path, query) {
+async function send({ base, token, fetchImpl }, { method, path, query, body }) {
+  const headers = { Authorization: `Bearer ${token}`, Accept: 'application/json' };
+  if (body !== undefined) headers['Content-Type'] = 'application/json';
   try {
     return await fetchImpl(buildUrl(base, path, query), {
-      method: 'GET',
-      headers: { Authorization: `Bearer ${token}`, Accept: 'application/json' },
+      method,
+      headers,
+      ...(body === undefined ? {} : { body: JSON.stringify(body) }),
       redirect: 'manual',
       signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS)
     });
@@ -111,10 +114,10 @@ async function settle(context, response, scopeInfo) {
 
 export function createPortalClient({ base, token, fetchImpl = fetch, sleep = ms => new Promise(resolve => setTimeout(resolve, ms)) }) {
   const context = { base, token, fetchImpl };
-  async function get(path, query, scopeInfo) {
+  async function request(call, scopeInfo) {
     let waited = 0;
     for (;;) {
-      const response = await send(context, path, query);
+      const response = await send(context, call);
       if (response.status !== 429) return settle(context, response, scopeInfo);
       const delay = retryDelayMs(response);
       if (waited + delay > MAX_WAIT_MS) throw new PortalError('The portal rate limit (429) did not clear in 30 seconds. Try again later.', 429);
@@ -122,5 +125,8 @@ export function createPortalClient({ base, token, fetchImpl = fetch, sleep = ms 
       await sleep(delay);
     }
   }
-  return { get };
+  return {
+    get: (path, query, scopeInfo) => request({ method: 'GET', path, query }, scopeInfo),
+    post: (path, body, scopeInfo) => request({ method: 'POST', path, body }, scopeInfo)
+  };
 }
