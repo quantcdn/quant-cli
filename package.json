@@ -55,7 +55,7 @@
     "html-entities": "^2.6.0",
     "md5-file": "^5.0.0",
     "mime-types": "^3.0.0",
-    "papaparse": "^5.5.0",
+    "papaparse": "^5.7.1",
     "picocolors": "^1.0.0",
     "yargs": "^18.0.0"
   },
